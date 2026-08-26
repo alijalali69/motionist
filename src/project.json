@@ -1,0 +1,36 @@
+{
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "projectId": "proj_mt8w0ncc6paz",
+  "name": "test 2",
+  "createdAt": "2026-08-25T16:36:45.228Z",
+  "updatedAt": "2026-08-25T16:49:27.569Z",
+  "template": {
+    "layers": []
+  },
+  "logo": null,
+  "bg": null,
+  "title": null,
+  "loader": {
+    "left": 54,
+    "top": 1862,
+    "width": 972,
+    "height": 10
+  },
+  "subtitle": {
+    "left": 86,
+    "top": 1613,
+    "width": 907,
+    "height": 173
+  },
+  "subtitleStyle": {
+    "fontFamily": "Arial, sans-serif",
+    "fontSize": 42,
+    "color": "#ffffff",
+    "background": "rgba(0,0,0,0.55)",
+    "align": "center"
+  },
+  "captions": [],
+  "pages": []
+}

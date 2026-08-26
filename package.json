@@ -1,0 +1,40 @@
+{
+  "name": "motionist",
+  "version": "1.0.0",
+  "description": "Animate layered PSD posters as vertical reels (Remotion).",
+  "scripts": {
+    "app": "concurrently -n server,app -c cyan,magenta \"node server/index.mjs\" \"vite\"",
+    "server": "node server/index.mjs",
+    "ui": "vite",
+    "studio": "remotion studio",
+    "render": "remotion render Reel out/reel.mp4 --props=src/project.json",
+    "still": "remotion still Reel out/frame.png --props=src/project.json",
+    "build:project": "node tools/build_project.mjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.516",
+    "@remotion/gif": "^4.0.516",
+    "@remotion/lottie": "^4.0.516",
+    "@remotion/player": "^4.0.516",
+    "@remotion/transitions": "^4.0.516",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "image-size": "^1.1.1",
+    "lottie-web": "^5.13.0",
+    "multer": "^1.4.5-lts.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.516"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "typescript": "5.9.3",
+    "vite": "^5.4.11"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "esbuild@0.21.5": true
+  }
+}

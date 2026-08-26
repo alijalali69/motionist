@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1080 1920">
+  <defs>
+    <style>
+      .cls-1 {
+        mask: url(#mask);
+      }
+
+      .cls-2 {
+        fill: #eeeae8;
+      }
+    </style>
+    <mask id="mask" x="-5.33" y="-27.78" width="1088.91" height="2045.02" maskUnits="userSpaceOnUse"/>
+  </defs>
+  <g id="Background">
+    <g class="cls-1">
+      <rect class="cls-2" width="1080" height="1920"/>
+    </g>
+  </g>
+</svg>

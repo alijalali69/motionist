@@ -1,0 +1,7 @@
+node_modules/
+out/
+*.log
+data/
+public/
+.uploads/
+Motionist_for_assistant.zip
