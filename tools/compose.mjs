@@ -103,7 +103,11 @@ export function routePage(projectId, pageDir, manifest) {
     id: pageDir,
     durationInFrames: FPS * PAGE_SECONDS,
     ambient: "none",
-    transition: { type: "none", durationInFrames: 0 },
+    // durationInFrames must be >=1 — @remotion/transitions' interpolate()
+    // needs a strictly increasing range; 0 collapses it to [x,x] and crashes
+    // the whole player the moment a SECOND page exists (any transition type,
+    // "none" included, still runs through that machinery).
+    transition: { type: "none", durationInFrames: 1 },
     layers: content,
     subtitle: "",
   };

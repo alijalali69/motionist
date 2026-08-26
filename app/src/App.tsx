@@ -42,7 +42,10 @@ function pageFromImage(
     // No preset motion — same "start at none" default as everywhere else;
     // the user opts into ambient/entrance/transition per element instead.
     ambient: "none",
-    transition: { type: "none" as any, durationInFrames: 0 },
+    // durationInFrames must be >=1 — 0 crashes @remotion/transitions the
+    // moment a second page exists (its interpolate() needs a strictly
+    // increasing range; 0 collapses to [x,x]).
+    transition: { type: "none" as any, durationInFrames: 1 },
     layers: [
       {
         index: -Date.now(),
@@ -358,7 +361,10 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         name: "Text page",
         durationInFrames: 150,
         ambient: "none",
-        transition: { type: "none" as any, durationInFrames: 0 },
+        // durationInFrames must be >=1 — 0 crashes @remotion/transitions the
+    // moment a second page exists (its interpolate() needs a strictly
+    // increasing range; 0 collapses to [x,x]).
+    transition: { type: "none" as any, durationInFrames: 1 },
         layers: [],
         bgColor: p.bgColor ?? "#e8e4dd",
       });
@@ -1050,7 +1056,10 @@ const ElementMotion: React.FC<{
             onChange={(e) => onChange((l) => { l.delay = toFr(e.target.value); })} /></div>
         <div><label>in dur (s)</label>
           <input type="number" step={0.1} min={0.1} value={sec(layer.inDuration, 26)}
-            onChange={(e) => onChange((l) => { l.inDuration = toFr(e.target.value); })} /></div>
+            // spring() throws outright at durationInFrames 0 (unlike delay/out
+            // dur, which are safe at 0) — floor at 1 frame so this field can't
+            // crash the whole player.
+            onChange={(e) => onChange((l) => { l.inDuration = Math.max(1, toFr(e.target.value)); })} /></div>
         <div><label>out dur (s)</label>
           <input type="number" step={0.1} min={0.1} value={sec(layer.outDuration, 24)}
             disabled={(layer.exit ?? "none") === "none"}
@@ -1080,7 +1089,12 @@ const PageInspector: React.FC<{
       <label>Duration (seconds)</label>
       <input type="number" min={1} step={0.5}
         value={+(page.durationInFrames / 30).toFixed(2)}
-        onChange={(e) => onChange((pg) => { pg.durationInFrames = Math.round(parseFloat(e.target.value || "1") * 30); })} />
+        onChange={(e) => onChange((pg) => {
+          // Remotion's <TransitionSeries.Sequence> throws outright at 0 (and
+          // presumably chokes on negative) — clamp to at least 1 frame so a
+          // stray "0" in this field can't crash the whole player.
+          pg.durationInFrames = Math.max(1, Math.round(parseFloat(e.target.value || "1") * 30));
+        })} />
 
       <div className="row between" style={{ alignItems: "center" }}>
         <label style={{ margin: 0 }}>Background color (this page only — empty follows the project's)</label>
