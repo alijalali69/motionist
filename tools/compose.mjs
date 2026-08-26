@@ -27,12 +27,16 @@ export function roleOf(layer, cw, ch) {
   return "photo";
 }
 
+// No preset motion by default — a freshly ingested page shouldn't presume
+// any particular animation; the user opts into an entrance/ambient/transition
+// per element instead of having to first notice and clear one they didn't
+// choose. Delay stays as a stagger hint for whenever an entrance IS picked.
 export const ROLE_DEFAULT = {
-  bg: { entrance: "fade", delay: 0 },
-  photo: { entrance: "pop", delay: 18 },
-  accent: { entrance: "fade", delay: 12 },
-  title: { entrance: "slideRight", delay: 30 },
-  subtitle: { entrance: "slideRight", delay: 46 },
+  bg: { entrance: "none", delay: 0 },
+  photo: { entrance: "none", delay: 18 },
+  accent: { entrance: "none", delay: 12 },
+  title: { entrance: "none", delay: 30 },
+  subtitle: { entrance: "none", delay: 46 },
 };
 
 export function assetPath(projectId, pageDir, file) {
@@ -98,8 +102,8 @@ export function routePage(projectId, pageDir, manifest) {
   const page = {
     id: pageDir,
     durationInFrames: FPS * PAGE_SECONDS,
-    ambient: "kenburns",
-    transition: { type: "fade", durationInFrames: 18 },
+    ambient: "none",
+    transition: { type: "none", durationInFrames: 0 },
     layers: content,
     subtitle: "",
   };

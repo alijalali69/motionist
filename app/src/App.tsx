@@ -39,8 +39,10 @@ function pageFromImage(
     id,
     name: niceName(name),
     durationInFrames: 150, // 5s @ 30fps — matches the default template-page length
-    ambient: "kenburnsIn",
-    transition: { type: "fade" as any, durationInFrames: 18 },
+    // No preset motion — same "start at none" default as everywhere else;
+    // the user opts into ambient/entrance/transition per element instead.
+    ambient: "none",
+    transition: { type: "none" as any, durationInFrames: 0 },
     layers: [
       {
         index: -Date.now(),
@@ -48,7 +50,7 @@ function pageFromImage(
         role: "photo",
         left: 0, top: 0, width: project.width, height: project.height,
         opacity: 1,
-        entrance: "fade",
+        entrance: "none",
         delay: 0,
         assetKind: upload.kind === "video" || upload.kind === "gif" ? upload.kind : "image",
         fit: "cover",
@@ -337,7 +339,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         file: "", role: "text",
         left: Math.round((p.width - w) / 2), top: Math.round(p.height * 0.4),
         width: w, height: h, opacity: 1,
-        entrance: "fade", delay: 0, inDuration: 26,
+        entrance: "none", delay: 0, inDuration: 26,
         assetKind: "text", text: "", fontSize: 48, textColor: "#1a1a1a", textAlign: "right",
       } as any);
     });
