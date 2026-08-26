@@ -128,6 +128,67 @@ function summarize(project) {
   };
 }
 
+// --- Global font library: uploaded once from the Dashboard, then reusable by
+// every project — instead of the old per-project-only upload. Each entry is
+// one weight/style variant (a Regular and a Bold of the same family are two
+// separate entries sharing a `family` name); `cssFamily` is a unique internal
+// @font-face name so the browser never confuses two different uploaded files
+// that happen to share a display name.
+const FONTS_JSON = path.join(ROOT, "data", "fonts.json");
+const FONTS_DIR = path.join(PUBLIC, "fonts");
+fs.mkdirSync(FONTS_DIR, { recursive: true });
+
+function readFonts() {
+  if (!fs.existsSync(FONTS_JSON)) return [];
+  try { return JSON.parse(fs.readFileSync(FONTS_JSON, "utf-8")); } catch { return []; }
+}
+function writeFonts(list) {
+  fs.writeFileSync(FONTS_JSON, JSON.stringify(list, null, 2), "utf-8");
+}
+
+app.get("/api/fonts", (_req, res) => res.json(readFonts()));
+
+app.post("/api/fonts", upload.single("font"), (req, res) => {
+  try {
+    const family = (req.body.family || "").trim();
+    const style = (req.body.style || "Regular").trim();
+    if (!family) return res.status(400).json({ error: "family name required" });
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    if (![".ttf", ".otf", ".woff", ".woff2"].includes(ext)) {
+      return res.status(400).json({ error: "font must be .ttf/.otf/.woff/.woff2" });
+    }
+    const id = "font_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const fileName = `${id}${ext}`;
+    fs.renameSync(req.file.path, path.join(FONTS_DIR, fileName));
+    const entry = {
+      id,
+      family,
+      style,
+      cssFamily: id, // unique per uploaded file — never re-derived, never shared
+      file: `fonts/${fileName}`,
+      originalName: req.file.originalname,
+      createdAt: new Date().toISOString(),
+    };
+    const list = readFonts();
+    list.push(entry);
+    writeFonts(list);
+    res.json(entry);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.delete("/api/fonts/:id", (req, res) => {
+  const list = readFonts();
+  const entry = list.find((f) => f.id === req.params.id);
+  if (entry) {
+    const p = path.join(PUBLIC, entry.file);
+    if (fs.existsSync(p)) fs.rmSync(p, { force: true });
+  }
+  writeFonts(list.filter((f) => f.id !== req.params.id));
+  res.json({ ok: true });
+});
+
 // --- Dashboard: list / create / delete projects -------------------------------
 app.get("/api/projects", (_req, res) => {
   const files = fs.readdirSync(DATA_DIR).filter((f) => f.endsWith(".json"));

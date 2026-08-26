@@ -88,7 +88,7 @@ export type LogoConfig = {
 
 export type Caption = { fromFrame: number; toFrame: number; text: string };
 
-export type LoaderStyle = "bar" | "segmented" | "dots";
+export type LoaderStyle = "bar" | "segmented" | "dots" | "folio";
 
 export type SubtitleStyle = {
   fontFamily: string;
@@ -112,6 +112,7 @@ export type Project = {
   title?: LogoConfig | null; // global title, rendered as a locked overlay
   loader: Box;
   loaderStyle?: LoaderStyle; // default "bar"
+  loaderVisible?: boolean;   // default true (absent = shown, for old projects)
   subtitle: Box;
   subtitleStyle?: SubtitleStyle;
   captions?: Caption[]; // timed captions (from SRT); optional, overrides per-page text when present

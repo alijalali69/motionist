@@ -86,7 +86,9 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean }> = ({
       <AssetSlot slot={project.logo} defaultFit="contain" />
 
       {/* Reel-wide progress bar (or per-page segments/dots, per loaderStyle). */}
-      <Loader box={project.loader} style={project.loaderStyle} segments={loaderSegments} />
+      {(project.loaderVisible ?? true) && (
+        <Loader box={project.loader} style={project.loaderStyle} segments={loaderSegments} />
+      )}
 
       {/* English captions in the reserved zone (per-page text or SRT). */}
       <Subtitles

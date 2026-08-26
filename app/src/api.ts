@@ -95,6 +95,38 @@ export async function uploadAsset(file: File, slot: string, projectId: string): 
   return r.json();
 }
 
+// --- Global font library: uploaded once (from the Dashboard), reused by any
+// project afterward — a "family" groups its variants (Regular/Bold/…),
+// distinguished by `style`; `cssFamily` is what actually gets loaded/rendered.
+export type FontEntry = {
+  id: string;
+  family: string;
+  style: string;
+  cssFamily: string;
+  file: string;
+  originalName: string;
+  createdAt: string;
+};
+
+export async function listFonts(): Promise<FontEntry[]> {
+  const r = await fetch("/api/fonts");
+  return r.json();
+}
+
+export async function uploadFontToLibrary(file: File, family: string, style: string): Promise<FontEntry> {
+  const fd = new FormData();
+  fd.append("font", file);
+  fd.append("family", family);
+  fd.append("style", style);
+  const r = await fetch("/api/fonts", { method: "POST", body: fd });
+  if (!r.ok) throw new Error((await r.json()).error || "font upload failed");
+  return r.json();
+}
+
+export async function deleteFont(id: string): Promise<void> {
+  await fetch(`/api/fonts/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export async function renderReel(project: Project): Promise<string> {
   const r = await fetch("/api/render", {
     method: "POST",

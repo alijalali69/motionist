@@ -39,6 +39,31 @@ export const Loader: React.FC<{
     );
   }
 
+  // Magazine-style folio mark — "03 — 12" in a small serif numeral, sitting
+  // wherever the loader box is placed. Unlike the other styles this isn't a
+  // filling shape: it's a page COUNT, so it only needs to know which segment
+  // `frame` currently falls in (current page) out of how many (total pages).
+  // Font size is fixed (editorial numerals don't stretch to fill a box) —
+  // the box only anchors position, same drag handle as the other styles.
+  if (style === "folio" && segments && segments.length > 0) {
+    let idx = segments.findIndex((s) => frame < s.end);
+    if (idx === -1) idx = segments.length - 1;
+    const current = String(idx + 1).padStart(2, "0");
+    const total = String(segments.length).padStart(2, "0");
+    return (
+      <div
+        style={{
+          position: "absolute", left: box.left, top: box.top,
+          fontFamily: "Georgia, 'Times New Roman', serif",
+          fontSize: 30, letterSpacing: 1.5, color: fill,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {current} &mdash; {total}
+      </div>
+    );
+  }
+
   if (style === "dots" && segments && segments.length > 0) {
     const gap = 8;
     const n = segments.length;
