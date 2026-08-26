@@ -147,7 +147,9 @@ a.dl { color: var(--accent2); }
   justify-content: space-between;
   margin-bottom: 40px;
 }
-.dash-title { font-size: 26px; margin: 0 0 4px; letter-spacing: 0.2px; }
+.brand-lockup { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.brand-icon { height: 30px; width: auto; display: block; }
+.dash-title { font-size: 26px; margin: 0; letter-spacing: 0.2px; }
 .dash-sub { color: var(--muted); font-size: 14px; margin: 0; }
 .dash-header .btn { width: auto; padding: 10px 18px; font-size: 14px; }
 

@@ -201,8 +201,11 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
     <div className="dash">
       <div className="dash-header">
         <div>
-          <h1 className="dash-title">Motionist</h1>
-          <p className="dash-sub">Your reel projects</p>
+          <div className="brand-lockup">
+            <img src="/brand/motionist-icon.svg" alt="" className="brand-icon" />
+            <h1 className="dash-title">Motionist</h1>
+          </div>
+          <p className="dash-sub">Motion with freedom &middot; your reel projects</p>
         </div>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn" onClick={() => setManagingFonts(true)}>🔤 Fonts</button>

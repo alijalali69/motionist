@@ -2,6 +2,14 @@ node_modules/
 out/
 *.log
 data/
-public/
+# public/ holds real app assets (public/brand/) alongside per-instance user
+# content (projects/, fonts/) — ignore only the latter, not the whole folder.
+public/projects/
+public/fonts/
+# Leftover top-level uploads from before the per-project structure existed —
+# current code always writes under public/projects/<id>/, never here.
+public/assets/
+public/logos/
+public/_test_handle_asset.png
 .uploads/
 Motionist_for_assistant.zip
