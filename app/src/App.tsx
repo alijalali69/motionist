@@ -365,6 +365,26 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     });
   };
 
+  // Adds an empty photo slot to ANY page — including one that started blank
+  // (text/color only) or has never had a photo — instead of a photo being
+  // something only a fresh page can start with. Placed at the BACK of the
+  // stack (unlike text, which defaults to front): a photo is usually meant
+  // as the backdrop for whatever's already on the page, not covering it.
+  // No file yet — the layer's own "Upload photo/video" button (already
+  // shown for any role:"photo" layer) is how it actually gets filled in.
+  const onAddPhotoLayer = (pageIndex: number) => {
+    if (!project) return;
+    update((p) => {
+      const page = p.pages[pageIndex];
+      page.layers.unshift({
+        index: -Date.now(),
+        file: "", role: "photo",
+        left: 0, top: 0, width: p.width, height: p.height,
+        opacity: 1, entrance: "none", delay: 0, fit: "cover",
+      });
+    });
+  };
+
   // Assigns an already-uploaded library font (or clears back to the system
   // default when entry is null) to one text layer.
   const onSelectFont = (pageIndex: number, layerIndex: number, entry: FontEntry | null) => {
@@ -597,7 +617,12 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         </div>
         {renderUrl && <p className="hint">Done → <a className="dl" href={renderUrl} target="_blank" rel="noreferrer">download reel</a></p>}
         {busy && <p className="spin">{busy}</p>}
-        {err && <p className="err">{err}</p>}
+        {err && (
+          <p className="err row between" style={{ alignItems: "center", gap: 8 }}>
+            <span>{err}</span>
+            <button className="btn small" title="Dismiss" onClick={() => setErr(null)}>✕</button>
+          </p>
+        )}
       </div>
 
       {/* CENTER: live preview */}
@@ -676,6 +701,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             onChange={(fn) => update((p) => fn(p.pages[sel]))}
             onUploadPhoto={(li, file) => onUploadPhoto(sel, li, file)}
             onAddText={() => onAddTextLayer(sel)}
+            onAddPhoto={() => onAddPhotoLayer(sel)}
             fonts={fonts}
             onSelectFont={(li, entry) => onSelectFont(sel, li, entry)}
             onUploadNewFont={(li, file, family, style) => onUploadNewFont(sel, li, file, family, style)}
@@ -1042,10 +1068,11 @@ const PageInspector: React.FC<{
   onChange: (fn: (pg: PageT) => void) => void;
   onUploadPhoto: (layerIndex: number, file: File) => void;
   onAddText: () => void;
+  onAddPhoto: () => void;
   fonts: FontEntry[];
   onSelectFont: (layerIndex: number, entry: FontEntry | null) => void;
   onUploadNewFont: (layerIndex: number, file: File, family: string, style: string) => void;
-}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onAddText, fonts, onSelectFont, onUploadNewFont }) => {
+}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onAddText, onAddPhoto, fonts, onSelectFont, onUploadNewFont }) => {
   return (
     <div>
       <h1 title={page.id}>Page: {page.name ?? page.id}</h1>
@@ -1089,9 +1116,10 @@ const PageInspector: React.FC<{
           Paste to all
         </button>
       </div>
-      <button className="btn small" style={{ width: "100%", marginBottom: 8 }} onClick={onAddText}>
-        + Add Farsi text
-      </button>
+      <div className="row" style={{ gap: 6, marginBottom: 8 }}>
+        <button className="btn small" style={{ flex: 1 }} onClick={onAddPhoto}>+ Add photo</button>
+        <button className="btn small" style={{ flex: 1 }} onClick={onAddText}>+ Add Farsi text</button>
+      </div>
       <p className="hint" style={{ marginTop: -4 }}>Stacking order: the list runs back-to-front — the LAST card is what's on top, in front of everything above it here.</p>
       {page.layers.map((l, li) => (
         <ElementMotion key={l.index} layer={l} clip={clip} onCopy={onCopyClip}
