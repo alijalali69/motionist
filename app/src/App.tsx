@@ -1204,7 +1204,17 @@ const ElementMotion: React.FC<{
         <div><label>out dur (s)</label>
           <input type="number" step={0.1} min={0.1} value={sec(layer.outDuration, 24)}
             disabled={(layer.exit ?? "none") === "none"}
-            onChange={(e) => onChange((l) => { l.outDuration = toFr(e.target.value); })} /></div>
+            // Same interpolate()-needs-a-real-range crash as in dur — with an
+            // explicit out delay this boundary is now always reachable
+            // mid-page, not just coincidentally safe at 0 like before.
+            onChange={(e) => onChange((l) => { l.outDuration = Math.max(1, toFr(e.target.value)); })} /></div>
+        <div><label>out at (s) &mdash; blank = end of page</label>
+          <input type="number" step={0.1} min={0} value={layer.outDelay != null ? sec(layer.outDelay) : ""}
+            placeholder="auto"
+            disabled={(layer.exit ?? "none") === "none"}
+            onChange={(e) => onChange((l) => {
+              l.outDelay = e.target.value === "" ? undefined : toFr(e.target.value);
+            })} /></div>
       </div>
     </div>
   );

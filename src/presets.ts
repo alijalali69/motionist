@@ -17,6 +17,7 @@ export type EntranceName =
   | "riseIn"
   | "blurIn"
   | "rotateIn"
+  | "flipIn"
   | "floatIn"
   | "wipeLeftToRight"
   | "wipeRightToLeft"
@@ -32,7 +33,7 @@ export type EntranceName =
 export const ENTRANCE_NAMES: EntranceName[] = [
   "none", "fade", "slideRight", "slideLeft", "slideUp", "slideDown",
   "pop", "zoomIn", "zoomOut", "growIn", "dropIn", "riseIn",
-  "blurIn", "rotateIn", "floatIn",
+  "blurIn", "rotateIn", "flipIn", "floatIn",
   "wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop", "circleReveal",
 ];
 
@@ -74,6 +75,7 @@ export type ExitName =
   | "dropOut"
   | "riseOut"
   | "rotateOut"
+  | "flipOut"
   | "wipeOutLeftToRight"
   | "wipeOutRightToLeft"
   | "wipeOutTopToBottom"
@@ -82,7 +84,7 @@ export type ExitName =
 
 export const EXIT_NAMES: ExitName[] = [
   "none", "fadeOut", "slideOutLeft", "slideOutRight", "slideOutUp", "slideOutDown",
-  "shrinkOut", "zoomOut", "popOut", "blurOut", "dropOut", "riseOut", "rotateOut",
+  "shrinkOut", "zoomOut", "popOut", "blurOut", "dropOut", "riseOut", "rotateOut", "flipOut",
   "wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide",
 ];
 
@@ -112,10 +114,11 @@ export type LayerMotion = {
   scale: number;
   blur: number;
   rotate: number;
+  rotateY: number; // 3D flip around the vertical axis — 0 = flat/facing forward
   clipPath?: string; // reveal/hide mask, applied on top of the other transforms
 };
 
-const BASE: LayerMotion = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0 };
+const BASE: LayerMotion = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, rotateY: 0 };
 
 // Spring feel per entrance — bouncy ones overshoot, the rest settle smoothly.
 export function entranceSpring(name: EntranceName) {
@@ -156,6 +159,8 @@ export function entranceMotion(name: EntranceName, p: number): LayerMotion {
       return { ...BASE, opacity: p, blur: interpolate(p, [0, 1], [16, 0]) };
     case "rotateIn":
       return { ...BASE, opacity: p, rotate: (1 - p) * -10, scale: interpolate(p, [0, 1], [0.96, 1]) };
+    case "flipIn": // 3D card-flip around the vertical axis, settling face-on
+      return { ...BASE, opacity: p, rotateY: (1 - p) * -100 };
     case "floatIn":
       return { ...BASE, opacity: p, ty: (1 - p) * 30 };
     // Reveal masks: the layer stays fully opaque; a clip-path shape grows to
@@ -204,6 +209,8 @@ export function exitMotion(name: ExitName, q: number): LayerMotion {
       return { ...BASE, opacity: 1 - q, ty: -q * 160 };
     case "rotateOut":
       return { ...BASE, opacity: 1 - q, rotate: q * 10, scale: interpolate(q, [0, 1], [1, 0.96]) };
+    case "flipOut": // turns away around the vertical axis as it fades
+      return { ...BASE, opacity: 1 - q, rotateY: q * 100 };
     // Reveal masks in reverse: the layer stays fully opaque; a clip-path shape
     // shrinks/sweeps to cover it up, instead of fading/sliding/scaling out.
     case "wipeOutLeftToRight":

@@ -54,7 +54,7 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
   const inDuration = layer.inDuration ?? 26;
   const outDuration = layer.outDuration ?? 24;
   const exit = layer.exit ?? "none";
-  const outStart = pageDuration - outDuration;
+  const outStart = layer.outDelay ?? (pageDuration - outDuration);
   const inExitPhase = exit !== "none" && frame >= outStart;
   const isStagger = layer.entrance === "wordReveal" || layer.entrance === "lineReveal";
 
@@ -90,7 +90,7 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
     left: layer.left, top: layer.top, width: layer.width, height: layer.height,
     opacity: m.opacity * layer.opacity,
     filter: m.blur ? `blur(${m.blur}px)` : undefined,
-    transform: `translate(${m.tx}px, ${m.ty}px) scale(${m.scale}) rotate(${m.rotate}deg)`,
+    transform: `perspective(900px) translate(${m.tx}px, ${m.ty}px) scale(${m.scale}) rotate(${m.rotate}deg) rotateY(${m.rotateY}deg)`,
     transformOrigin: "center center",
     clipPath: m.clipPath,
     overflow: "visible", // text isn't a mask — don't silently clip slightly-oversized content
@@ -140,7 +140,7 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
   const inDuration = layer.inDuration ?? 26;
   const outDuration = layer.outDuration ?? 24;
   const exit = layer.exit ?? "none";
-  const outStart = pageDuration - outDuration;
+  const outStart = layer.outDelay ?? (pageDuration - outDuration);
 
   // Entrance progress (spring). Exit progress (eased) over the page's last frames.
   const inP = spring({
@@ -205,7 +205,7 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
         height: layer.height,
         opacity,
         filter: m.blur ? `blur(${m.blur}px)` : undefined,
-        transform: `translate(${m.tx}px, ${m.ty}px) scale(${m.scale}) rotate(${m.rotate}deg)`,
+        transform: `perspective(900px) translate(${m.tx}px, ${m.ty}px) scale(${m.scale}) rotate(${m.rotate}deg) rotateY(${m.rotateY}deg)`,
         transformOrigin: "center center",
         clipPath: m.clipPath, // reveal/hide mask (wipe, circle) — undefined = no mask
         overflow: "hidden", // the box IS the mask — anything inside gets cropped to its shape

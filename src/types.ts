@@ -18,9 +18,13 @@ export type ContentLayer = {
   entrance: EntranceName;
   delay: number;         // in-delay (frames) before the entrance starts
   inDuration?: number;   // entrance length (frames), default 26
-  // OUT effect (plays over the last outDuration frames of the page)
+  // OUT effect — by default plays over the last outDuration frames of the
+  // page (anchored to the page's END); set outDelay to instead anchor it to
+  // an exact time from the page's START (e.g. "exit at 4.5s"), independent
+  // of how long the page is.
   exit?: ExitName;       // default "none"
   outDuration?: number;  // exit length (frames), default 24
+  outDelay?: number;     // exit START (frames from page start) — unset = old "anchored to page end" behavior
   // Optional uploaded replacement asset (BG/Title "like the logo"). When kind is
   // video/gif/lottie the layer plays that asset in place of the static image,
   // keeping its box + motion. Absent => render `file` as a still image.
