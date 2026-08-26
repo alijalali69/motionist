@@ -345,6 +345,26 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     });
   };
 
+  // A page with no photo/PSD at all — just a solid color (defaults to the
+  // project's own backdrop color so it's visible immediately) to drop text
+  // onto. Covers the "I just want text on a color" case that otherwise
+  // requires a photo to create a page in the first place.
+  const onAddBlankPage = () => {
+    if (!project) return;
+    update((p) => {
+      const id = "p" + Date.now().toString(36) + Math.round(Math.random() * 1e4).toString(36);
+      p.pages.push({
+        id,
+        name: "Text page",
+        durationInFrames: 150,
+        ambient: "none",
+        transition: { type: "none" as any, durationInFrames: 0 },
+        layers: [],
+        bgColor: p.bgColor ?? "#e8e4dd",
+      });
+    });
+  };
+
   // Assigns an already-uploaded library font (or clears back to the system
   // default when entry is null) to one text layer.
   const onSelectFont = (pageIndex: number, layerIndex: number, entry: FontEntry | null) => {
@@ -487,6 +507,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         <input ref={psdInput} className="hidden-file" type="file" accept=".psd,.svg,.png,.jpg,.jpeg,.webp,.gif" multiple
           onChange={(e) => { if (e.target.files) onAddPages(e.target.files); e.target.value = ""; }} />
         <p className="hint">PSD/SVG extract their layers; a plain photo becomes a simple full-frame page. Select multiple at once, or drop below — added in filename order.</p>
+        <button className="btn" style={{ width: "100%", marginTop: 6 }} onClick={onAddBlankPage}>+ Add blank page (color + text only)</button>
 
         <h2>Pages</h2>
         <div
@@ -1033,6 +1054,18 @@ const PageInspector: React.FC<{
       <input type="number" min={1} step={0.5}
         value={+(page.durationInFrames / 30).toFixed(2)}
         onChange={(e) => onChange((pg) => { pg.durationInFrames = Math.round(parseFloat(e.target.value || "1") * 30); })} />
+
+      <div className="row between" style={{ alignItems: "center" }}>
+        <label style={{ margin: 0 }}>Background color (this page only — empty follows the project's)</label>
+        <div className="row" style={{ gap: 4 }}>
+          <input type="color" value={page.bgColor ?? "#e8e4dd"} style={{ width: 36, height: 28, padding: 2 }}
+            onChange={(e) => onChange((pg) => { pg.bgColor = e.target.value; })} />
+          {page.bgColor && (
+            <button className="btn small" title="Clear — follow the project's backdrop color instead"
+              onClick={() => onChange((pg) => { pg.bgColor = undefined; })}>✕</button>
+          )}
+        </div>
+      </div>
 
       <label>Ambient motion</label>
       <select value={page.ambient} onChange={(e) => onChange((pg) => { pg.ambient = e.target.value as any; })}>

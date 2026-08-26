@@ -59,7 +59,7 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean }> = ({
               key={`seq-${page.id}`}
               durationInFrames={page.durationInFrames}
             >
-              <PageScene page={page} />
+              <PageScene page={page} background={page.bgColor} />
             </TransitionSeries.Sequence>
           );
           if (i === pages.length - 1) return [seq];

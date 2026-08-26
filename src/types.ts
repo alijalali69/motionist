@@ -72,6 +72,7 @@ export type Page = {
   transition: Transition;
   layers: ContentLayer[];
   subtitle?: string; // per-page English caption; empty/absent => nothing shows
+  bgColor?: string;  // per-page solid backdrop (e.g. a text-only page with no photo) — falls back to the project's bgColor when unset
 };
 
 // Pre-animated logo. `file` is the uploaded animation; `fallback` is the static
