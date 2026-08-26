@@ -5,7 +5,7 @@ import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type
 import { ENTRANCE_NAMES, TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, EXIT_NAMES, TRANSITIONS } from "../../src/presets";
 import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, renderReel,
-  listFonts, uploadFontToLibrary, type IngestResult, type FontEntry,
+  listFonts, uploadFontToLibrary, deleteProjectFiles, type IngestResult, type FontEntry,
 } from "./api";
 import { Dashboard } from "./Dashboard";
 import { CanvasHandles, type Handle } from "./CanvasHandles";
@@ -204,6 +204,20 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const playerRef = React.useRef<PlayerRef>(null);
   const playerWrapRef = React.useRef<HTMLDivElement>(null);
 
+  // Undo/redo history. Kept as refs (not state) since they change on nearly
+  // every edit and don't need to trigger a re-render themselves — forceTick
+  // bumps a counter just so the Undo/Redo buttons' disabled state stays in
+  // sync. Snapshots are coalesced: a burst of rapid updates (dragging a
+  // handle, typing in a textarea) within 500ms of each other only pushes ONE
+  // history entry (from before the burst started), so undo reverts a whole
+  // drag/typing sweep at once instead of one pixel/keystroke at a time.
+  const historyRef = React.useRef<Project[]>([]);
+  const futureRef = React.useRef<Project[]>([]);
+  const lastPushRef = React.useRef(0);
+  const [, forceTick] = React.useReducer((c: number) => c + 1, 0);
+  const HISTORY_LIMIT = 50;
+  const COALESCE_MS = 500;
+
   // Click a page -> show its inspector AND jump the player to that page's start.
   const selectPage = (i: number) => {
     setSel(i);
@@ -218,28 +232,90 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     setProject(null);
     setSel(0);
     setRenderUrl(null);
+    // A fresh project (or reload of the same one) starts a clean slate —
+    // undoing across a project switch into a DIFFERENT project's old state
+    // would be a real correctness bug, not just a UX quirk.
+    historyRef.current = [];
+    futureRef.current = [];
     loadProject(projectId).then(setProject).catch(() => {});
   }, [projectId]);
 
-  // Spacebar play/pause — but only when nothing else would want it (typing in
-  // a text field, a select/button focused, etc.), so it never hijacks normal
-  // typing or steals space from, say, a focused dropdown.
+  // Ref mutations happen HERE, in plain synchronous handler code — never
+  // inside a setState updater function. React.StrictMode double-invokes
+  // updater functions in dev to catch impure ones; a ref push/pop living
+  // inside one runs twice per call and silently corrupts the stack. (This
+  // bit me during testing — undo worked once, redo then landed on garbage.)
+  const undo = () => {
+    if (!project || historyRef.current.length === 0) return;
+    const prior = historyRef.current[historyRef.current.length - 1];
+    historyRef.current = historyRef.current.slice(0, -1);
+    futureRef.current = [...futureRef.current, project];
+    lastPushRef.current = 0;
+    setProject(prior);
+    forceTick();
+  };
+
+  const redo = () => {
+    if (!project || futureRef.current.length === 0) return;
+    const next = futureRef.current[futureRef.current.length - 1];
+    futureRef.current = futureRef.current.slice(0, -1);
+    historyRef.current = [...historyRef.current, project];
+    lastPushRef.current = 0;
+    setProject(next);
+    forceTick();
+  };
+
+  // Spacebar play/pause, Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z (or Ctrl+Y) redo —
+  // all guarded the same way: skip while a text field/select has focus, so
+  // this never hijacks normal typing (a textarea's OWN native undo should
+  // win while you're actively editing text in it) or steals space from a
+  // focused dropdown.
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code !== "Space") return;
       const el = document.activeElement as HTMLElement | null;
       const tag = el?.tagName;
       const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable;
       if (typing) return;
-      e.preventDefault();
-      playerRef.current?.toggle();
+
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo(); else undo();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        redo();
+        return;
+      }
+      if (e.code === "Space") {
+        e.preventDefault();
+        playerRef.current?.toggle();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+    // Re-attached whenever `project` changes so undo/redo always act on the
+    // current project, not whatever was current when the listener was first
+    // attached (playerRef itself is a stable ref, so the spacebar branch
+    // doesn't actually need this — but the undo/redo branches do).
+  }, [project]);
 
   const update = (fn: (p: Project) => void) => {
-    setProject((prev) => { if (!prev) return prev; const next = clone(prev); fn(next); return next; });
+    if (project) {
+      const now = Date.now();
+      if (now - lastPushRef.current > COALESCE_MS) {
+        historyRef.current = [...historyRef.current, project].slice(-HISTORY_LIMIT);
+        futureRef.current = [];
+        forceTick();
+      }
+      lastPushRef.current = now;
+    }
+    setProject((prev) => {
+      if (!prev) return prev;
+      const next = clone(prev);
+      fn(next);
+      return next;
+    });
   };
 
   // Accepts one or many files (batch upload). Server ingests one PSD/SVG at a
@@ -285,6 +361,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
 
   const onSlotUpload = async (slotKey: "logo" | "bg" | "title", file: File) => {
     setBusy(`Uploading ${slotKey}…`); setErr(null);
+    const oldFile = project?.[slotKey]?.file ?? null;
     try {
       const { file: f, kind, width, height } = slotKey === "logo"
         ? await uploadLogo(file, projectId)
@@ -295,6 +372,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         // shouldn't be force-fit into the old box.
         p[slotKey] = defaultSlot(slotKey, p.width, p.height, f, kind, width, height);
       });
+      if (oldFile) deleteProjectFiles(projectId, [oldFile]);
     } catch (e: any) { setErr(String(e.message || e)); }
     finally { setBusy(null); }
   };
@@ -306,6 +384,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const onUploadPhoto = async (pageIndex: number, layerIndex: number, file: File) => {
     if (!project) return;
     const pageId = project.pages[pageIndex].id;
+    const oldFile = project.pages[pageIndex].layers[layerIndex]?.file || null;
     setBusy("Uploading photo…"); setErr(null);
     try {
       const { file: f, kind, width, height } = await uploadAsset(file, `photo_${pageId}_${layerIndex}`, projectId);
@@ -322,6 +401,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         layer.photoPanY = 50;
         layer.photoZoom = 1;
       });
+      if (oldFile) deleteProjectFiles(projectId, [oldFile]);
     } catch (e: any) { setErr(String(e.message || e)); }
     finally { setBusy(null); }
   };
@@ -391,6 +471,13 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     });
   };
 
+  const onDeleteLayer = (pageIndex: number, layerIndex: number) => {
+    if (!project) return;
+    const file = project.pages[pageIndex]?.layers[layerIndex]?.file;
+    update((p) => { p.pages[pageIndex].layers.splice(layerIndex, 1); });
+    if (file) deleteProjectFiles(projectId, [file]);
+  };
+
   // Assigns an already-uploaded library font (or clears back to the system
   // default when entry is null) to one text layer.
   const onSelectFont = (pageIndex: number, layerIndex: number, entry: FontEntry | null) => {
@@ -443,8 +530,17 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   };
 
   const delPage = (i: number) => {
+    const page = project?.pages[i];
     update((p) => { p.pages.splice(i, 1); });
     setSel((s) => Math.max(0, s - (i <= s ? 1 : 0)));
+    if (page) {
+      // Every layer's own uploaded file (photo/blank pages), PLUS the whole
+      // extracted folder for a PSD/SVG-sourced page (manifest.json + its raw
+      // layer exports) — passing both is harmless, whichever doesn't apply
+      // to this page just no-ops server-side.
+      const files = page.layers.map((l) => l.file).filter(Boolean);
+      deleteProjectFiles(projectId, [...files, `projects/${projectId}/${page.id}`]);
+    }
   };
 
   // Draggable/resizable canvas handles: global logo/title + every photo-role
@@ -519,6 +615,10 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       <div className="col">
         <div className="editor-header">
           <button className="btn back-btn" onClick={onBack}>← Dashboard</button>
+          <div className="row" style={{ gap: 4 }}>
+            <button className="btn small" title="Undo (Ctrl+Z)" disabled={historyRef.current.length === 0} onClick={undo}>↶</button>
+            <button className="btn small" title="Redo (Ctrl+Shift+Z)" disabled={futureRef.current.length === 0} onClick={redo}>↷</button>
+          </div>
         </div>
         <input
           className="project-name-input"
@@ -708,6 +808,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             onUploadPhoto={(li, file) => onUploadPhoto(sel, li, file)}
             onAddText={() => onAddTextLayer(sel)}
             onAddPhoto={() => onAddPhotoLayer(sel)}
+            onDeleteLayer={(li) => onDeleteLayer(sel, li)}
             fonts={fonts}
             onSelectFont={(li, entry) => onSelectFont(sel, li, entry)}
             onUploadNewFont={(li, file, family, style) => onUploadNewFont(sel, li, file, family, style)}
@@ -1078,10 +1179,11 @@ const PageInspector: React.FC<{
   onUploadPhoto: (layerIndex: number, file: File) => void;
   onAddText: () => void;
   onAddPhoto: () => void;
+  onDeleteLayer: (layerIndex: number) => void;
   fonts: FontEntry[];
   onSelectFont: (layerIndex: number, entry: FontEntry | null) => void;
   onUploadNewFont: (layerIndex: number, file: File, family: string, style: string) => void;
-}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onAddText, onAddPhoto, fonts, onSelectFont, onUploadNewFont }) => {
+}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onAddText, onAddPhoto, onDeleteLayer, fonts, onSelectFont, onUploadNewFont }) => {
   return (
     <div>
       <h1 title={page.id}>Page: {page.name ?? page.id}</h1>
@@ -1134,7 +1236,10 @@ const PageInspector: React.FC<{
         <button className="btn small" style={{ flex: 1 }} onClick={onAddPhoto}>+ Add photo</button>
         <button className="btn small" style={{ flex: 1 }} onClick={onAddText}>+ Add Farsi text</button>
       </div>
-      <p className="hint" style={{ marginTop: -4 }}>Stacking order: the list runs back-to-front — the LAST card is what's on top, in front of everything above it here.</p>
+      {/* Rendered top-to-bottom = front-to-back (Photoshop/Figma convention)
+          — reverses the DISPLAY order only; `li` stays the real array index
+          so every callback still targets the right layer regardless of
+          where it's drawn in this list. */}
       {page.layers.map((l, li) => (
         <ElementMotion key={l.index} layer={l} clip={clip} onCopy={onCopyClip}
           onChange={(fn) => onChange((pg) => fn(pg.layers[li]))}
@@ -1149,8 +1254,8 @@ const PageInspector: React.FC<{
           fonts={fonts}
           onSelectFont={(entry) => onSelectFont(li, entry)}
           onUploadNewFont={(file, family, style) => onUploadNewFont(li, file, family, style)}
-          onDelete={() => onChange((pg) => { pg.layers.splice(li, 1); })} />
-      ))}
+          onDelete={() => onDeleteLayer(li)} />
+      )).reverse()}
       <p className="hint">Fixed chrome, logo, loader and the subtitle zone are not listed — they are handled separately and don't get page motion.</p>
     </div>
   );

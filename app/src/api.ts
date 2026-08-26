@@ -81,7 +81,7 @@ export async function uploadLogo(file: File, projectId: string): Promise<Uploade
   fd.append("logo", file);
   fd.append("projectId", projectId);
   const r = await fetch("/api/logo", { method: "POST", body: fd });
-  if (!r.ok) throw new Error("logo upload failed");
+  if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || "logo upload failed");
   return r.json();
 }
 
@@ -91,7 +91,7 @@ export async function uploadAsset(file: File, slot: string, projectId: string): 
   fd.append("slot", slot);
   fd.append("projectId", projectId);
   const r = await fetch("/api/asset", { method: "POST", body: fd });
-  if (!r.ok) throw new Error("asset upload failed");
+  if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || "asset upload failed");
   return r.json();
 }
 
@@ -125,6 +125,21 @@ export async function uploadFontToLibrary(file: File, family: string, style: str
 
 export async function deleteFont(id: string): Promise<void> {
   await fetch(`/api/fonts/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+// Cleans up an uploaded asset (or a whole PSD/SVG-extracted page folder)
+// once nothing references it any more — a deleted layer, a deleted page, or
+// the old file an upload just replaced. Fire-and-forget from the caller's
+// point of view: never blocks the UI action on it, and never worth failing
+// the whole operation over (worst case a file just isn't cleaned up yet).
+export function deleteProjectFiles(projectId: string, paths: string[]): void {
+  const real = paths.filter((p) => !!p);
+  if (!real.length) return;
+  fetch(`/api/projects/${encodeURIComponent(projectId)}/delete-files`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paths: real }),
+  }).catch(() => {});
 }
 
 export async function renderReel(project: Project): Promise<string> {

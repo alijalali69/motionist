@@ -250,7 +250,7 @@ a.dl { color: var(--accent2); }
 /* --- Editor header (back to dashboard) --------------------------------- */
 
 .editor-header {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
   margin-bottom: 4px;
 }
 .back-btn {

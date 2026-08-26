@@ -155,8 +155,10 @@ app.post("/api/fonts", upload.single("font"), (req, res) => {
     if (!family) return res.status(400).json({ error: "family name required" });
     const ext = path.extname(req.file.originalname).toLowerCase();
     if (![".ttf", ".otf", ".woff", ".woff2"].includes(ext)) {
+      fs.rmSync(req.file.path, { force: true });
       return res.status(400).json({ error: "font must be .ttf/.otf/.woff/.woff2" });
     }
+    assertRealFile(req.file);
     const id = "font_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     const fileName = `${id}${ext}`;
     fs.renameSync(req.file.path, path.join(FONTS_DIR, fileName));
@@ -296,6 +298,59 @@ async function probeDimensions(absPath, kind) {
   return { width: null, height: null };
 }
 
+// Peeks at a file's actual bytes and returns a rough content family —
+// "image" | "video" | "font" | "svg" | "json" | null (unrecognized) — so an
+// upload can be checked against what its extension CLAIMS to be, instead of
+// trusting the extension alone. A renamed .txt (or anything else) sailing
+// through as a silently-broken "photo" layer is the failure mode this closes.
+function sniffKind(buf) {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image"; // jpeg
+  if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "image"; // png
+  if (buf.length >= 6 && buf.toString("ascii", 0, 3) === "GIF") return "image"; // gif
+  if (buf.length >= 12 && buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP") return "image"; // webp
+  if (buf.length >= 12 && buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 11) === "AVI") return "video"; // avi
+  if (buf.length >= 8 && buf.toString("ascii", 4, 8) === "ftyp") return "video"; // mp4/mov/m4v (ISO base media)
+  if (buf.length >= 4 && buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return "video"; // webm/mkv (EBML)
+  if (buf.length >= 4 && buf[0] === 0x00 && buf[1] === 0x01 && buf[2] === 0x00 && buf[3] === 0x00) return "font"; // ttf
+  if (buf.length >= 4 && buf.toString("ascii", 0, 4) === "OTTO") return "font"; // otf
+  if (buf.length >= 4 && buf.toString("ascii", 0, 4) === "true") return "font"; // ttf (mac variant)
+  if (buf.length >= 4 && buf.toString("ascii", 0, 4) === "wOFF") return "font"; // woff
+  if (buf.length >= 4 && buf.toString("ascii", 0, 4) === "wOF2") return "font"; // woff2
+  const head = buf.toString("utf-8", 0, Math.min(buf.length, 200)).trimStart();
+  // Real SVGs sometimes lead with a doctype/comment before the <svg> tag
+  // itself, so this checks "does it appear at all in the head", not "is it
+  // the very first thing".
+  if (head.startsWith("<?xml") || head.includes("<svg")) return "svg";
+  if (head.startsWith("{") || head.startsWith("[")) return "json";
+  return null;
+}
+
+const EXPECTED_KIND = {
+  ".png": "image", ".jpg": "image", ".jpeg": "image", ".gif": "image", ".webp": "image",
+  ".svg": "svg",
+  ".mp4": "video", ".mov": "video", ".webm": "video", ".mkv": "video", ".avi": "video", ".m4v": "video",
+  ".ttf": "font", ".otf": "font", ".woff": "font", ".woff2": "font",
+  ".json": "json",
+};
+
+// Throws (with the temp upload already cleaned up) if the file's actual bytes
+// don't match what its extension claims. Returns quietly for extensions we
+// don't have a rule for (nothing to check against).
+function assertRealFile(file) {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const expected = EXPECTED_KIND[ext];
+  if (!expected) return;
+  const fd = fs.openSync(file.path, "r");
+  const buf = Buffer.alloc(256);
+  const n = fs.readSync(fd, buf, 0, 256, 0);
+  fs.closeSync(fd);
+  const actual = sniffKind(buf.subarray(0, n));
+  if (actual !== expected) {
+    fs.rmSync(file.path, { force: true });
+    throw new Error(`"${file.originalname}" doesn't look like a real ${ext} file — upload rejected.`);
+  }
+}
+
 // Save an uploaded media asset into public/projects/<projectId>/<subdir>,
 // converting any video to WebM VP9 with alpha (browsers can't decode .mov
 // qtrle/ProRes). Scoped per-project so deleting a project cleans up its assets.
@@ -303,6 +358,7 @@ async function probeDimensions(absPath, kind) {
 // exported pixel size (null if undetectable), so the client can size the
 // on-canvas box to match instead of guessing.
 async function saveMedia(file, projectId, subdir, prefix) {
+  assertRealFile(file);
   const ext = path.extname(file.originalname).toLowerCase();
   const dir = path.join(PUBLIC, "projects", projectId, subdir);
   fs.mkdirSync(dir, { recursive: true });
@@ -342,6 +398,33 @@ async function saveMedia(file, projectId, subdir, prefix) {
   const { width, height } = await probeDimensions(result.abs, result.kind);
   return { file: result.file, kind: result.kind, width, height };
 }
+
+// Deletes one or more per-project asset files (or, for a PSD/SVG-ingested
+// page, its whole extracted folder) when the client removes a layer/page or
+// replaces an asset — otherwise the old file just sits on disk forever,
+// since nothing else ever cleaned those up (only deleting the WHOLE project
+// did). Every path is required to resolve inside this project's own public
+// folder — no reaching into other projects or the shared font library.
+app.post("/api/projects/:id/delete-files", (req, res) => {
+  const projectId = req.params.id;
+  const paths = Array.isArray(req.body?.paths) ? req.body.paths : [];
+  const root = path.join(PUBLIC, "projects", projectId);
+  let deleted = 0;
+  for (const p of paths) {
+    if (!p || typeof p !== "string") continue;
+    const abs = path.resolve(PUBLIC, p);
+    if (abs !== root && !abs.startsWith(root + path.sep)) continue; // outside this project — refuse
+    try {
+      if (fs.existsSync(abs)) {
+        fs.rmSync(abs, { recursive: true, force: true });
+        deleted++;
+      }
+    } catch (e) {
+      console.warn("delete-files failed for", p, e.message);
+    }
+  }
+  res.json({ deleted });
+});
 
 // --- Upload a pre-animated logo ----------------------------------------------
 app.post("/api/logo", upload.single("logo"), async (req, res) => {
