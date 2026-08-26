@@ -82,25 +82,13 @@ function emptyProject(id, name) {
   };
 }
 
-// One-time migration: fold the old single-project src/project.json (from
-// before multi-project support existed) into the new per-project store, so
-// in-progress work isn't lost.
-(function migrateLegacyProject() {
-  if (fs.existsSync(DATA_DIR) && fs.readdirSync(DATA_DIR).length > 0) return;
-  if (!fs.existsSync(LEGACY_PROJECT_JSON)) return;
-  try {
-    const legacy = JSON.parse(fs.readFileSync(LEGACY_PROJECT_JSON, "utf-8"));
-    if (!legacy || !legacy.projectId) return;
-    const now = new Date().toISOString();
-    legacy.name = legacy.name || "My First Project";
-    legacy.createdAt = legacy.createdAt || now;
-    legacy.updatedAt = now;
-    fs.writeFileSync(projectPath(legacy.projectId), JSON.stringify(legacy, null, 2), "utf-8");
-    console.log(`Migrated legacy project.json -> data/projects/${legacy.projectId}.json`);
-  } catch (e) {
-    console.warn("Legacy project migration skipped:", e.message);
-  }
-})();
+// Note: src/project.json is NOT a real project — it's a scratch file the
+// render route below overwrites on every render (Remotion Studio and the
+// CLI render/still scripts read it as their default props). An old one-time
+// migration used to fold it into data/projects/ whenever that folder was
+// empty, which meant deleting all your projects would silently resurrect
+// whatever this scratch file last happened to hold. Removed — that
+// transitional need (pre-multi-project) is long past.
 
 // A small representative thumbnail for the dashboard: first content layer's
 // image on the first page, else the global bg, else null (dashboard shows a

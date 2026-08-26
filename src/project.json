@@ -2,10 +2,8 @@
   "fps": 30,
   "width": 1080,
   "height": 1920,
-  "projectId": "proj_mt8w0ncc6paz",
-  "name": "test 2",
-  "createdAt": "2026-08-25T16:36:45.228Z",
-  "updatedAt": "2026-08-25T16:49:27.569Z",
+  "projectId": "scratch",
+  "name": "Studio scratch file — overwritten on every render, not a real project",
   "template": {
     "layers": []
   },
