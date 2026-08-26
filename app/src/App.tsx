@@ -8,6 +8,7 @@ import {
   listFonts, uploadFontToLibrary, deleteProjectFiles, type IngestResult, type FontEntry,
 } from "./api";
 import { Dashboard } from "./Dashboard";
+import { StoryboardStrip } from "./StoryboardStrip";
 import { CanvasHandles, type Handle } from "./CanvasHandles";
 import { PhotoPanHandles, type PhotoPanTarget } from "./PhotoPanHandles";
 import { SafeZoneOverlay } from "./SafeZoneOverlay";
@@ -569,6 +570,26 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     setSel((s) => Math.min(Math.max(s + dir, 0), (project?.pages.length ?? 1) - 1));
   };
 
+  // General move-to-any-position (the storyboard strip's drag-reorder) —
+  // movePage above only swaps adjacent neighbors, which is fine for the ↑/↓
+  // buttons but not for dropping a page directly at an arbitrary spot.
+  const reorderPages = (from: number, to: number) => {
+    if (from === to) return;
+    update((p) => {
+      const [moved] = p.pages.splice(from, 1);
+      p.pages.splice(to, 0, moved);
+    });
+    // Keep tracking the SAME page across the move, not just the same index —
+    // standard array-move index math (only shifts what sits between the two
+    // positions, everything else stays put).
+    setSel((s) => {
+      if (s === from) return to;
+      if (from < s && s <= to) return s - 1;
+      if (to <= s && s < from) return s + 1;
+      return s;
+    });
+  };
+
   const delPage = (i: number) => {
     const page = project?.pages[i];
     update((p) => { p.pages.splice(i, 1); });
@@ -773,12 +794,20 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
 
       {/* CENTER: live preview */}
       <div className="center">
+        {project && project.pages.length > 0 && (
+          <StoryboardStrip
+            project={project}
+            selected={sel}
+            onSelect={selectPage}
+            onReorder={reorderPages}
+          />
+        )}
         {project ? (
           <div
             ref={playerWrapRef}
             style={{
               position: "relative",
-              height: "80vh",
+              height: project.pages.length > 0 ? "66vh" : "80vh",
               aspectRatio: `${project.width} / ${project.height}`,
             }}
           >
