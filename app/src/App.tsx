@@ -329,7 +329,10 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       const page = p.pages[pageIndex];
       const w = Math.round(p.width * 0.8);
       const h = Math.round(p.height * 0.14);
-      page.layers.unshift({
+      // push (not unshift) — layers later in the array paint on top in
+      // PageScene, so a freshly added text layer defaults to sitting ON TOP
+      // of whatever's already on the page (e.g. a photo), not hidden behind it.
+      page.layers.push({
         index: -Date.now(),
         file: "", role: "text",
         left: Math.round((p.width - w) / 2), top: Math.round(p.height * 0.4),
@@ -818,7 +821,10 @@ const ElementMotion: React.FC<{
   onSelectFont?: (entry: FontEntry | null) => void;
   onUploadNewFont?: (file: File, family: string, style: string) => void;
   onDelete: () => void;
-}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onUploadNewFont, onDelete }) => {
+  onMove?: (dir: -1 | 1) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onUploadNewFont, onDelete, onMove, canMoveUp, canMoveDown }) => {
   const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
   const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
   const photoInput = React.useRef<HTMLInputElement>(null);
@@ -849,6 +855,10 @@ const ElementMotion: React.FC<{
           {layer.name ? layer.name : layer.role} <span className="tag">({layer.role})</span>
         </span>
         <div className="row" style={{ gap: 4 }}>
+          <button className="btn small" title="Bring forward (on top of the layer above)"
+            disabled={!canMoveUp} onClick={() => onMove?.(1)}>↑</button>
+          <button className="btn small" title="Send backward (behind the layer below)"
+            disabled={!canMoveDown} onClick={() => onMove?.(-1)}>↓</button>
           <button className="btn small" title="Copy this element's motion"
             onClick={() => onCopy(clipFromLayer(layer))}>Copy</button>
           <button className="btn small" title="Paste copied motion onto this element"
@@ -941,17 +951,27 @@ const ElementMotion: React.FC<{
             accept=".png,.jpg,.jpeg,.webp,.svg,.gif,.webm,.mov,.mp4"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadPhoto(f); e.target.value = ""; }} />
           {layer.assetKind && (
-            <div className="row between mini" style={{ marginTop: 4 }}>
-              <span style={{ color: "var(--muted)" }}>Zoom {(layer.photoZoom ?? 1).toFixed(2)}×</span>
-              <div className="row" style={{ gap: 4 }}>
-                <button className="btn small" title="Zoom out"
-                  onClick={() => onChange((l) => { l.photoZoom = Math.max(1, +((l.photoZoom ?? 1) - 0.1).toFixed(2)); })}>−</button>
-                <button className="btn small" title="Zoom in"
-                  onClick={() => onChange((l) => { l.photoZoom = Math.min(3, +((l.photoZoom ?? 1) + 0.1).toFixed(2)); })}>＋</button>
-                <button className="btn small" title="Reset crop to centered"
-                  onClick={() => onChange((l) => { l.photoZoom = 1; l.photoPanX = 50; l.photoPanY = 50; })}>Reset</button>
+            <>
+              <div className="row between mini" style={{ marginTop: 4 }}>
+                <span style={{ color: "var(--muted)" }}>Zoom {(layer.photoZoom ?? 1).toFixed(2)}×</span>
+                <div className="row" style={{ gap: 4 }}>
+                  <button className="btn small" title="Zoom out"
+                    onClick={() => onChange((l) => { l.photoZoom = Math.max(1, +((l.photoZoom ?? 1) - 0.1).toFixed(2)); })}>−</button>
+                  <button className="btn small" title="Zoom in"
+                    onClick={() => onChange((l) => { l.photoZoom = Math.min(3, +((l.photoZoom ?? 1) + 0.1).toFixed(2)); })}>＋</button>
+                  <button className="btn small" title="Reset crop to centered"
+                    onClick={() => onChange((l) => { l.photoZoom = 1; l.photoPanX = 50; l.photoPanY = 50; })}>Reset</button>
+                </div>
               </div>
-            </div>
+              <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+                <span style={{ color: "var(--muted)" }} title="Cover fills the frame (crops mismatched aspect ratios); contain shows the whole photo (may letterbox).">Fit</span>
+                <select value={layer.fit ?? "cover"} style={{ width: "auto" }}
+                  onChange={(e) => onChange((l) => { l.fit = e.target.value as any; })}>
+                  <option value="cover">cover (fill, may crop)</option>
+                  <option value="contain">contain (whole photo, may letterbox)</option>
+                </select>
+              </div>
+            </>
           )}
           <div className="mini" style={{ marginTop: 4 }}>
             <label>Photo motion (inside the frame)</label>
@@ -1037,9 +1057,17 @@ const PageInspector: React.FC<{
       <button className="btn small" style={{ width: "100%", marginBottom: 8 }} onClick={onAddText}>
         + Add Farsi text
       </button>
+      <p className="hint" style={{ marginTop: -4 }}>Stacking order: the list runs back-to-front — the LAST card is what's on top, in front of everything above it here.</p>
       {page.layers.map((l, li) => (
         <ElementMotion key={l.index} layer={l} clip={clip} onCopy={onCopyClip}
           onChange={(fn) => onChange((pg) => fn(pg.layers[li]))}
+          onMove={(dir) => onChange((pg) => {
+            const j = li + dir;
+            if (j < 0 || j >= pg.layers.length) return;
+            [pg.layers[li], pg.layers[j]] = [pg.layers[j], pg.layers[li]];
+          })}
+          canMoveUp={li < page.layers.length - 1}
+          canMoveDown={li > 0}
           onUploadPhoto={(file) => onUploadPhoto(li, file)}
           fonts={fonts}
           onSelectFont={(entry) => onSelectFont(li, entry)}

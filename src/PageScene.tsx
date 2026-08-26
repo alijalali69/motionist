@@ -19,18 +19,21 @@ import type { Page, ContentLayer } from "./types";
 export type { Page } from "./types";
 
 // Loads an uploaded custom font (if any) before the frame is captured — same
-// delayRender/continueRender pattern used for the Lottie logo. No-op (no
-// handle held open) when the layer has no uploaded font file.
+// delayRender/continueRender pattern used for the Lottie logo. Re-runs
+// whenever fontFile/family actually change (not just on mount) — a text
+// layer is created font-less and gets a font picked afterward from the
+// dropdown, which is a prop change on an already-mounted layer, not a fresh
+// mount; keying this to [] like the Lottie logo (which never changes after
+// upload) silently skipped loading the font in that — the common — case.
 function useLayerFont(fontFile: string | undefined, family: string | undefined) {
-  const [handle] = React.useState(() => (fontFile ? delayRender(`font: ${family}`) : null));
   React.useEffect(() => {
-    if (!fontFile || handle == null) return;
+    if (!fontFile) return;
+    const handle = delayRender(`font: ${family}`);
     const face = new FontFace(family || "CustomFont", `url(${staticFile(fontFile)})`);
     face.load()
       .then((loaded) => { document.fonts.add(loaded); continueRender(handle); })
       .catch((e) => { console.error("font load failed:", e); continueRender(handle); });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fontFile, family]);
 }
 
 // A live-typed text layer (Farsi input + optional uploaded font) — distinct
