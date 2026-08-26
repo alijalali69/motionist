@@ -109,6 +109,7 @@ export type Project = {
   template: { layers: TemplateLayer[] };
   logo: LogoConfig | null;
   bg?: LogoConfig | null;    // global background, rendered behind all pages
+  bgColor?: string;          // solid backdrop color, shows wherever bg/pages don't fully cover (default "#e8e4dd")
   title?: LogoConfig | null; // global title, rendered as a locked overlay
   loader: Box;
   loaderStyle?: LoaderStyle; // default "bar"

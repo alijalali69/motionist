@@ -32,7 +32,7 @@ const IMAGE_PAGE_EXTS = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
 function pageFromImage(
   project: Project,
   name: string,
-  upload: { file: string; kind: "image" | "video" | "gif" | "lottie" }
+  upload: { file: string; kind: "image" | "video" | "gif" | "lottie"; width: number | null; height: number | null }
 ): Project["pages"][number] {
   const id = "p" + Date.now().toString(36) + Math.round(Math.random() * 1e4).toString(36);
   return {
@@ -52,6 +52,12 @@ function pageFromImage(
         delay: 0,
         assetKind: upload.kind === "video" || upload.kind === "gif" ? upload.kind : "image",
         fit: "cover",
+        // Required for the pan/zoom drag handle to show up at all (it needs
+        // the real pixel size to compute how far the crop can be dragged) —
+        // this was missing before, which silently made a fresh photo page
+        // un-repositionable.
+        naturalWidth: upload.width,
+        naturalHeight: upload.height,
       },
     ],
   };
@@ -519,6 +525,11 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               <AssetControls slot={project.bg} label="BG" canvas={[project.width, project.height]}
                 onChange={(fn) => update((p) => { if (p.bg) fn(p.bg); })} />
             )}
+            <div className="row between" style={{ marginTop: 8, alignItems: "center" }}>
+              <span className="hint" style={{ margin: 0 }}>Backdrop color (shows through gaps/transparency)</span>
+              <input type="color" value={project.bgColor ?? "#e8e4dd"} style={{ width: 36, height: 28, padding: 2 }}
+                onChange={(e) => update((p) => { p.bgColor = e.target.value; })} />
+            </div>
 
             {/* TITLE */}
             <button className={"btn upload" + (project.title?.file ? " filled" : "")} style={{ marginTop: 8 }} onClick={() => titleInput.current?.click()}>

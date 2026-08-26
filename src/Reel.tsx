@@ -47,7 +47,7 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean }> = ({
   const loaderSegments = pages.map((p, i) => ({ start: starts[i], end: starts[i] + p.durationInFrames }));
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "#e8e4dd" }}>
+    <AbsoluteFill style={{ backgroundColor: project.bgColor ?? "#e8e4dd" }}>
       {/* Global background — fills the backdrop behind all pages. */}
       <AssetSlot slot={project.bg ?? null} defaultFit="cover" />
 

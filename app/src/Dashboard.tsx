@@ -9,6 +9,37 @@ const FONT_STYLES = [
   "Thin", "ExtraLight", "Light", "Medium", "SemiBold", "ExtraBold", "Black",
 ];
 
+// Guesses a variant's style from its filename — e.g. "Vazirmatn-Bold.ttf" ->
+// "Bold" — so selecting a whole family's files at once (Regular + Bold +
+// Italic + …) doesn't need one upload round-trip per file with the style
+// picked by hand each time.
+function guessStyleFromName(fileName: string): string {
+  const n = fileName.toLowerCase();
+  const has = (s: string) => n.includes(s);
+  if (has("bold") && (has("italic") || has("oblique"))) return "Bold Italic";
+  if (has("extrabold") || has("extra bold") || has("extra-bold")) return "ExtraBold";
+  if (has("semibold") || has("semi bold") || has("semi-bold")) return "SemiBold";
+  if (has("extralight") || has("extra light") || has("extra-light")) return "ExtraLight";
+  if (has("black") || has("heavy")) return "Black";
+  if (has("bold")) return "Bold";
+  if (has("italic") || has("oblique")) return "Italic";
+  if (has("light")) return "Light";
+  if (has("medium")) return "Medium";
+  if (has("thin") || has("hairline")) return "Thin";
+  return "Regular";
+}
+
+// Strips recognized style words out of a filename to guess the shared family
+// name for a batch, e.g. "Vazirmatn-Bold.ttf" -> "Vazirmatn".
+function guessFamilyFromName(fileName: string): string {
+  const base = fileName.replace(/\.[^.]+$/, "");
+  const cleaned = base
+    .replace(/extra[\s-]?bold|semi[\s-]?bold|extra[\s-]?light|bold[\s-]?italic|regular|bold|italic|oblique|light|medium|black|heavy|thin|hairline/gi, "")
+    .replace(/[-_]+/g, " ")
+    .trim();
+  return cleaned || base;
+}
+
 // Uploaded once here, reusable by every project afterward — a text layer in
 // the editor picks [family] then [style] from whatever's been added here,
 // instead of re-uploading the same font file per project.
@@ -27,11 +58,20 @@ const FontManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const onPick = () => fileRef.current?.click();
 
-  const onFile = async (file: File) => {
-    const guess = family.trim() || file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ");
+  // One file -> uses the Style dropdown as-is (you're adding a single
+  // variant). Multiple files at once -> treated as a whole family: every
+  // file shares the same family name, and each one's style is guessed from
+  // its own filename instead of the shared dropdown.
+  const onFiles = async (files: FileList) => {
+    const arr = Array.from(files);
+    const isBatch = arr.length > 1;
+    const fam = family.trim() || guessFamilyFromName(arr[0].name);
     setBusy(true); setErr(null);
     try {
-      await uploadFontToLibrary(file, guess, style);
+      for (const file of arr) {
+        const st = isBatch ? guessStyleFromName(file.name) : style;
+        await uploadFontToLibrary(file, fam, st);
+      }
       setFamily("");
       refresh();
     } catch (e: any) {
@@ -71,10 +111,13 @@ const FontManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             </select>
           </div>
         </div>
-        <input ref={fileRef} className="hidden-file" type="file" accept=".ttf,.otf,.woff,.woff2"
-          onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+        <p className="hint" style={{ marginTop: 4 }}>
+          Style above is only used for a single file — select several files at once to upload a whole family, and each variant's style is guessed from its filename (e.g. "…-Bold.ttf").
+        </p>
+        <input ref={fileRef} className="hidden-file" type="file" accept=".ttf,.otf,.woff,.woff2" multiple
+          onChange={(e) => e.target.files?.length && onFiles(e.target.files)} />
         <button className="btn upload" style={{ width: "100%", marginTop: 8 }} disabled={busy} onClick={onPick}>
-          {busy ? "Uploading…" : "+ Upload font file (.ttf/.otf/.woff/.woff2)"}
+          {busy ? "Uploading…" : "+ Upload font file(s) (.ttf/.otf/.woff/.woff2)"}
         </button>
         {err && <p className="err">{err}</p>}
 
