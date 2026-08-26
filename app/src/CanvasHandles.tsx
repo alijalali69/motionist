@@ -204,6 +204,12 @@ const DragBox: React.FC<{
   };
 
   const dragging = busy !== null;
+  const [hovering, setHovering] = React.useState(false);
+  // A thin loader bar (or a small folio numeral) is easily overpowered by an
+  // always-on 2px dashed outline — so the outline/fill only shows up on
+  // hover or while actively dragging; at rest it's just the small label,
+  // same idea as Illustrator guides only appearing when you're using them.
+  const active = dragging || hovering;
 
   return (
     <div
@@ -212,6 +218,8 @@ const DragBox: React.FC<{
       onPointerDown={onMoveDown}
       onPointerMove={onMoveMove}
       onPointerUp={onMoveUp}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
       onKeyDown={onKeyDown}
       title={`Drag to move ${handle.label.toLowerCase()} — arrow keys to nudge (Shift = 10px)`}
       className="canvas-handle"
@@ -221,7 +229,7 @@ const DragBox: React.FC<{
         top: box.top * scale,
         width: box.width * scale,
         height: box.height * scale,
-        border: `2px ${dragging ? "solid" : "dashed"} ${handle.color}`,
+        border: active ? `2px ${dragging ? "solid" : "dashed"} ${handle.color}` : "2px solid transparent",
         background: dragging ? `${handle.color}22` : "transparent",
         cursor: "move",
         pointerEvents: "auto",
@@ -236,12 +244,14 @@ const DragBox: React.FC<{
           color: "#0e1013", background: handle.color,
           padding: "2px 6px", borderRadius: 4, whiteSpace: "nowrap",
           maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis",
+          opacity: active ? 1 : 0.55,
         }}
       >
         {handle.label} · {Math.round(box.left)},{Math.round(box.top)}
       </span>
-      {/* Resize grip — bottom-right corner */}
-      <div
+      {/* Resize grip — bottom-right corner, only worth showing once you're
+          already interacting with this handle (hover/drag) */}
+      {active && <div
         onPointerDown={onResizeDown}
         onPointerMove={onResizeMove}
         onPointerUp={onResizeUp}
@@ -256,7 +266,7 @@ const DragBox: React.FC<{
           cursor: "nwse-resize",
           pointerEvents: "auto",
         }}
-      />
+      />}
     </div>
   );
 };
