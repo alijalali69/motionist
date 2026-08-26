@@ -19,6 +19,40 @@ function clone<T>(x: T): T {
   return JSON.parse(JSON.stringify(x));
 }
 
+// A color swatch (native picker, for dragging around a color wheel) plus a
+// hex text field (for pasting/typing an exact value) — the native <input
+// type="color"> alone has no visible hex entry in most browsers. Local text
+// state so a partial/invalid hex while typing doesn't get stomped on every
+// keystroke; commits (and validates) on blur or Enter.
+const ColorField: React.FC<{
+  value: string;
+  onChange: (hex: string) => void;
+  swatchStyle?: React.CSSProperties;
+}> = ({ value, onChange, swatchStyle }) => {
+  const [text, setText] = React.useState(value);
+  React.useEffect(() => { setText(value); }, [value]);
+
+  const commit = () => {
+    let hex = text.trim();
+    if (!hex.startsWith("#")) hex = "#" + hex;
+    if (/^#[0-9a-fA-F]{6}$/.test(hex)) onChange(hex);
+    else setText(value); // invalid — snap back to the last real value
+  };
+
+  return (
+    <div className="row" style={{ gap: 4 }}>
+      <input type="color" value={value}
+        style={{ width: 36, height: 28, padding: 2, ...swatchStyle }}
+        onChange={(e) => onChange(e.target.value)} />
+      <input type="text" value={text} maxLength={7} placeholder="#rrggbb"
+        style={{ width: 78, fontFamily: "var(--mono, monospace)", fontSize: 12, textTransform: "uppercase" }}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+    </div>
+  );
+};
+
 function niceName(fileName: string): string {
   return fileName.replace(/\.[^.]+$/, ""); // strip extension
 }
@@ -442,11 +476,17 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         durationInFrames: 150,
         ambient: "none",
         // durationInFrames must be >=1 — 0 crashes @remotion/transitions the
-    // moment a second page exists (its interpolate() needs a strictly
-    // increasing range; 0 collapses to [x,x]).
-    transition: { type: "none" as any, durationInFrames: 1 },
+        // moment a second page exists (its interpolate() needs a strictly
+        // increasing range; 0 collapses to [x,x]).
+        transition: { type: "none" as any, durationInFrames: 1 },
         layers: [],
-        bgColor: p.bgColor ?? "#e8e4dd",
+        // No bgColor here on purpose — undefined means "follow the
+        // project's", same promise the picker's own label makes. Setting an
+        // explicit color at creation (the old behavior) permanently shadowed
+        // the project-level "Backdrop color" picker for this page, since the
+        // page's own fill is opaque and sits on top — so changing the
+        // project color visibly did nothing, which is exactly the bug
+        // report this fixes.
       });
     });
   };
@@ -679,8 +719,8 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             )}
             <div className="row between" style={{ marginTop: 8, alignItems: "center" }}>
               <span className="hint" style={{ margin: 0 }}>Backdrop color (shows through gaps/transparency)</span>
-              <input type="color" value={project.bgColor ?? "#e8e4dd"} style={{ width: 36, height: 28, padding: 2 }}
-                onChange={(e) => update((p) => { p.bgColor = e.target.value; })} />
+              <ColorField value={project.bgColor ?? "#e8e4dd"}
+                onChange={(hex) => update((p) => { p.bgColor = hex; })} />
             </div>
 
             {/* TITLE */}
@@ -1083,9 +1123,9 @@ const ElementMotion: React.FC<{
             <div><label>Size</label>
               <input type="number" min={8} value={layer.fontSize ?? 48}
                 onChange={(e) => onChange((l) => { l.fontSize = Math.max(8, Math.round(parseFloat(e.target.value || "48"))); })} /></div>
-            <div><label>Color</label>
-              <input type="color" value={layer.textColor ?? "#1a1a1a"} style={{ padding: 2, height: 30 }}
-                onChange={(e) => onChange((l) => { l.textColor = e.target.value; })} /></div>
+            <div style={{ gridColumn: "span 2" }}><label>Color</label>
+              <ColorField value={layer.textColor ?? "#1a1a1a"}
+                onChange={(hex) => onChange((l) => { l.textColor = hex; })} /></div>
             <div><label>Align</label>
               <select value={layer.textAlign ?? "right"}
                 onChange={(e) => onChange((l) => { l.textAlign = e.target.value as any; })}>
@@ -1201,8 +1241,8 @@ const PageInspector: React.FC<{
       <div className="row between" style={{ alignItems: "center" }}>
         <label style={{ margin: 0 }}>Background color (this page only — empty follows the project's)</label>
         <div className="row" style={{ gap: 4 }}>
-          <input type="color" value={page.bgColor ?? "#e8e4dd"} style={{ width: 36, height: 28, padding: 2 }}
-            onChange={(e) => onChange((pg) => { pg.bgColor = e.target.value; })} />
+          <ColorField value={page.bgColor ?? "#e8e4dd"}
+            onChange={(hex) => onChange((pg) => { pg.bgColor = hex; })} />
           {page.bgColor && (
             <button className="btn small" title="Clear — follow the project's backdrop color instead"
               onClick={() => onChange((pg) => { pg.bgColor = undefined; })}>✕</button>
