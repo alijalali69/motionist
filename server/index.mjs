@@ -66,9 +66,8 @@ function newProjectId() {
   return "proj_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-function emptyProject(id, name) {
+function emptyProject(id, name, w = 1080, h = 1920) {
   const now = new Date().toISOString();
-  const w = 1080, h = 1920;
   return {
     fps: FPS, width: w, height: h, projectId: id, name,
     createdAt: now, updatedAt: now,
@@ -195,7 +194,15 @@ app.get("/api/projects", (_req, res) => {
 app.post("/api/projects", (req, res) => {
   const name = (req.body?.name || "").trim() || "Untitled reel";
   const id = newProjectId();
-  const project = emptyProject(id, name);
+  // Sane bounds so a stray/garbage value can't hand Remotion a broken
+  // composition size — clamp instead of trusting the client outright.
+  const clampDim = (v, dflt) => {
+    const n = Math.round(Number(v));
+    return Number.isFinite(n) && n >= 16 && n <= 8192 ? n : dflt;
+  };
+  const width = clampDim(req.body?.width, 1080);
+  const height = clampDim(req.body?.height, 1920);
+  const project = emptyProject(id, name, width, height);
   writeProject(project);
   res.json(project);
 });

@@ -9,6 +9,16 @@ const FONT_STYLES = [
   "Thin", "ExtraLight", "Light", "Medium", "SemiBold", "ExtraBold", "Black",
 ];
 
+// Canvas-size presets for the "New project" dialog. Pixel dimensions match
+// each platform's own published spec, not a guess.
+const SIZE_PRESETS: { label: string; w: number; h: number }[] = [
+  { label: "Instagram / TikTok Reels, Stories (9:16)", w: 1080, h: 1920 },
+  { label: "YouTube Shorts (9:16)", w: 1080, h: 1920 },
+  { label: "Instagram feed, square (1:1)", w: 1080, h: 1080 },
+  { label: "Instagram feed, portrait (4:5)", w: 1080, h: 1350 },
+  { label: "YouTube standard, landscape (16:9)", w: 1920, h: 1080 },
+];
+
 // Guesses a variant's style from its filename — e.g. "Vazirmatn-Bold.ttf" ->
 // "Bold" — so selecting a whole family's files at once (Regular + Bold +
 // Italic + …) doesn't need one upload round-trip per file with the style
@@ -167,6 +177,9 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
   const [err, setErr] = React.useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState<string | null>(null);
   const [managingFonts, setManagingFonts] = React.useState(false);
+  const [sizeIdx, setSizeIdx] = React.useState(0); // index into SIZE_PRESETS, or -1 for custom
+  const [customW, setCustomW] = React.useState(1080);
+  const [customH, setCustomH] = React.useState(1920);
   const nameInputRef = React.useRef<HTMLInputElement>(null);
 
   const refresh = React.useCallback(() => {
@@ -178,9 +191,12 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
 
   const submitCreate = async () => {
     const name = newName.trim() || "Untitled reel";
+    const preset = SIZE_PRESETS[sizeIdx];
+    const width = preset ? preset.w : customW;
+    const height = preset ? preset.h : customH;
     setBusy(true); setErr(null);
     try {
-      const project = await createProject(name);
+      const project = await createProject(name, width, height);
       setCreating(false);
       setNewName("");
       onOpen(project.projectId);
@@ -276,6 +292,21 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submitCreate(); if (e.key === "Escape") setCreating(false); }}
             />
+            <label style={{ marginTop: 10 }}>Size</label>
+            <select value={sizeIdx} onChange={(e) => setSizeIdx(Number(e.target.value))}>
+              {SIZE_PRESETS.map((s, i) => <option key={i} value={i}>{s.label} — {s.w}×{s.h}</option>)}
+              <option value={-1}>Custom…</option>
+            </select>
+            {sizeIdx === -1 && (
+              <div className="grid2 mini" style={{ marginTop: 6 }}>
+                <div><label>Width</label>
+                  <input type="number" min={16} max={8192} value={customW}
+                    onChange={(e) => setCustomW(Math.round(Number(e.target.value) || 1080))} /></div>
+                <div><label>Height</label>
+                  <input type="number" min={16} max={8192} value={customH}
+                    onChange={(e) => setCustomH(Math.round(Number(e.target.value) || 1920))} /></div>
+              </div>
+            )}
             {err && <p className="err">{err}</p>}
             <div className="row" style={{ gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
               <button className="btn" disabled={busy} onClick={() => setCreating(false)}>Cancel</button>

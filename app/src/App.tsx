@@ -838,13 +838,16 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               canvas={[project.width, project.height]}
               targets={photoPanTargets}
             />
-            {showSafeZone && <SafeZoneOverlay canvas={[project.width, project.height]} />}
+            {showSafeZone && project.height > project.width && <SafeZoneOverlay canvas={[project.width, project.height]} />}
           </div>
         ) : <p className="sub">Loading…</p>}
         {project && (
           <PlayerControls playerRef={playerRef} durationInFrames={reelDuration(project)} fps={project.fps} />
         )}
-        {project && (
+        {/* Meta's published Reels/Stories safe margins only mean anything on
+            a portrait canvas — showing them over a landscape/square project
+            would just be wrong, not merely irrelevant. */}
+        {project && project.height > project.width && (
           <label className="row" style={{ gap: 6, fontSize: 12, color: "var(--muted)", cursor: "pointer" }}>
             <input type="checkbox" checked={showSafeZone}
               onChange={(e) => setShowSafeZone(e.target.checked)}

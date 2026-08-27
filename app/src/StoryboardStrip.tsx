@@ -3,8 +3,7 @@ import { Thumbnail } from "@remotion/player";
 import { PageThumb } from "../../src/PageThumb";
 import type { Project } from "../../src/types";
 
-const CARD_W = 44;
-const CARD_H = 78; // 44 * (1920/1080), matches the reel's own aspect ratio
+const CARD_W = 44; // fixed — this is what the carousel's horizontal math (VIEW_W, GAP, clamping) is built around
 const GAP = 6;
 const VIEW_W = 270;
 
@@ -15,12 +14,13 @@ const VIEW_W = 270;
 const PageCard: React.FC<{
   project: Project;
   page: Project["pages"][number];
+  cardH: number;
   selected: boolean;
   onClick: () => void;
   onDragStart: () => void;
   onDragOver: () => void;
   onDragEnd: () => void;
-}> = ({ project, page, selected, onClick, onDragStart, onDragOver, onDragEnd }) => {
+}> = ({ project, page, cardH, selected, onClick, onDragStart, onDragOver, onDragEnd }) => {
   return (
     <div
       draggable
@@ -30,7 +30,7 @@ const PageCard: React.FC<{
       onDragEnd={onDragEnd}
       title={page.name ?? page.id}
       style={{
-        width: CARD_W, height: CARD_H, flexShrink: 0, borderRadius: 4, cursor: "grab",
+        width: CARD_W, height: cardH, flexShrink: 0, borderRadius: 4, cursor: "grab",
         border: `2px solid ${selected ? "#d9694f" : "transparent"}`,
         boxSizing: "border-box", overflow: "hidden", opacity: selected ? 1 : 0.75,
         transition: "opacity 0.15s",
@@ -66,6 +66,11 @@ export const StoryboardStrip: React.FC<{
   showAllRef.current = showAll;
 
   const pages = project.pages;
+  // Height follows the PROJECT's own aspect ratio — a landscape (16:9)
+  // project gets short-wide cards, a square one gets square cards, etc.
+  // Width stays fixed since that's what the horizontal carousel math below
+  // is built around.
+  const cardH = Math.round(CARD_W * (project.height / project.width));
   const maxOffset = Math.max(0, pages.length * (CARD_W + GAP) - GAP - VIEW_W);
   // Clamp AT the state update, not just at render — clamping only the
   // rendered value while letting `offset` itself drift past the bound means
@@ -138,7 +143,7 @@ export const StoryboardStrip: React.FC<{
       </div>
       <div className="row" style={{ gap: 6, alignItems: "center" }}>
         {!showAll && (
-          <button className="btn small" style={{ height: 70, flexShrink: 0 }}
+          <button className="btn small" style={{ height: cardH, flexShrink: 0 }}
             onClick={() => setOffset((o) => clampOffset(o - VIEW_W * 0.7))}>‹</button>
         )}
         <div ref={viewportRef} style={{ width: VIEW_W, overflow: "hidden" }}>
@@ -153,7 +158,7 @@ export const StoryboardStrip: React.FC<{
             {pages.map((page, i) => (
               <div key={page.id} data-page-id={page.id}>
                 <PageCard
-                  project={project} page={page} selected={i === selected}
+                  project={project} page={page} cardH={cardH} selected={i === selected}
                   onClick={() => onSelect(i)}
                   onDragStart={() => { dragFromRef.current = i; }}
                   onDragOver={() => onCardDragOver(i)}
@@ -164,7 +169,7 @@ export const StoryboardStrip: React.FC<{
           </div>
         </div>
         {!showAll && (
-          <button className="btn small" style={{ height: 70, flexShrink: 0 }}
+          <button className="btn small" style={{ height: cardH, flexShrink: 0 }}
             onClick={() => setOffset((o) => clampOffset(o + VIEW_W * 0.7))}>›</button>
         )}
       </div>
