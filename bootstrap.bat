@@ -17,20 +17,10 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [1/6] Node.js...
-winget install --id OpenJS.NodeJS.LTS -e --accept-package-agreements --accept-source-agreements --silent
-
-echo.
-echo [2/6] Git...
-winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements --silent
-
-echo.
-echo [3/6] Python...
-winget install --id Python.Python.3.12 -e --accept-package-agreements --accept-source-agreements --silent
-
-echo.
-echo [4/6] ffmpeg...
-winget install --id Gyan.FFmpeg -e --accept-package-agreements --accept-source-agreements --silent
+call :install OpenJS.NodeJS.LTS "Node.js" 1
+call :install Git.Git "Git" 2
+call :install Python.Python.3.12 "Python" 3
+call :install Gyan.FFmpeg "ffmpeg" 4
 
 echo.
 echo (If Windows asked "Do you want to allow this app to make changes?"
@@ -46,11 +36,27 @@ set "PATH=%SYS_PATH%;%USER_PATH%;%PATH%"
 
 echo.
 echo [5/6] Python packages (psd-tools, svgelements, aggdraw)...
+where python >nul 2>nul
+if errorlevel 1 (
+  echo Python isn't on PATH in this window yet.
+  echo Close this window, reopen it, and double-click bootstrap.bat again -
+  echo it'll pick up right where it left off.
+  pause
+  exit /b 1
+)
 python -m pip install --upgrade pip
 python -m pip install psd-tools svgelements aggdraw
 
 echo.
 echo [6/6] Getting Motionist...
+where git >nul 2>nul
+if errorlevel 1 (
+  echo Git isn't on PATH in this window yet.
+  echo Close this window, reopen it, and double-click bootstrap.bat again -
+  echo it'll pick up right where it left off.
+  pause
+  exit /b 1
+)
 set "DEST=%USERPROFILE%\motionist"
 if exist "%DEST%\.git" (
   echo Already cloned - pulling the latest instead.
@@ -74,6 +80,14 @@ if exist "%DEST%\.git" (
 )
 
 echo.
+where npm >nul 2>nul
+if errorlevel 1 (
+  echo npm isn't on PATH in this window yet.
+  echo Close this window, reopen it, and double-click bootstrap.bat again -
+  echo it'll pick up right where it left off.
+  pause
+  exit /b 1
+)
 echo Installing app dependencies (a few minutes the first time)...
 call npm install
 
@@ -82,3 +96,19 @@ echo ================================================
 echo   Done. Starting Motionist...
 echo ================================================
 call start.bat
+exit /b 0
+
+:install
+set "PKG_ID=%~1"
+set "PKG_LABEL=%~2"
+set "STEP=%~3"
+echo [%STEP%/6] %PKG_LABEL%...
+winget install --id %PKG_ID% -e --source winget --accept-package-agreements --accept-source-agreements --silent
+if errorlevel 1 (
+  echo.
+  echo %PKG_LABEL% install failed. This script will keep going and check
+  echo again below - if it stops you there, install %PKG_LABEL% manually
+  echo from its website and double-click this file again.
+)
+echo.
+exit /b 0
