@@ -12,14 +12,16 @@ Workflow Integration Plugins) and Motionist's own server/app already running
 
 ## Install
 
-Copy the `com.motionist.reelpanel` folder into Resolve's plugin directory:
+Double-click **`install_resolve_plugin.bat`** (repo root) — copies this
+folder into Resolve's plugin directory for you:
 
 ```
 %PROGRAMDATA%\Blackmagic Design\DaVinci Resolve\Support\Workflow Integration Plugins\
 ```
 
 Restart Resolve. It'll show up under **Workspace → Workflow Integrations →
-Motionist**.
+Motionist**. Re-run the .bat any time this plugin folder changes (an update
+just overwrites it).
 
 ## How the Media Pool hand-off works
 

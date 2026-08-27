@@ -23,6 +23,9 @@ To have it start automatically every time you log into Windows, run
 **`setup_autostart.bat`** once (creates a Startup-folder shortcut, silent/no
 window). **`stop.bat`** kills both if a port ever gets stuck.
 
+To use it inside DaVinci Resolve Studio instead of a browser tab, run
+**`install_resolve_plugin.bat`** once — see `resolve-plugin/README.md`.
+
 Requires: Node.js, Python 3 (with `psd-tools`, `svgelements`, `aggdraw`), and
 ffmpeg/ffprobe on PATH.
 
