@@ -4,6 +4,16 @@ Turns a layered PSD/SVG poster design (or a plain photo, or nothing at all) into
 animated vertical (1080×1920) Instagram Reel / YouTube Short — a local dashboard
 app for building multiple reel projects, built on Remotion.
 
+## Setting it up on a new machine
+
+Send that person just **`bootstrap.bat`** (nothing else — it clones the rest
+itself). Double-click it: it installs Node.js, Git, Python, ffmpeg (via
+`winget`), the required Python packages, clones this repo, runs
+`npm install`, and starts the app. Needs a GitHub account already invited as
+a collaborator on this repo — it'll prompt a login if not already signed in.
+Safe to re-run any time (e.g. to update: it'll `git pull` instead of
+re-cloning).
+
 ## Running it
 
 Double-click **`start.bat`** — starts the server (port 3001) and the app
