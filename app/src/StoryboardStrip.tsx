@@ -65,7 +65,16 @@ export const StoryboardStrip: React.FC<{
 }> = ({ project, selected, onSelect, onReorder }) => {
   const [offset, setOffset] = React.useState(0);
   const [showAll, setShowAll] = React.useState(false);
-  const dragFromRef = React.useRef<number | null>(null);
+  // Live drag state lives ENTIRELY in refs, never in project state — onReorder
+  // (App.tsx's reorderPages) deep-clones the whole project and re-renders the
+  // whole editor on every call, which is fine for one commit but was being
+  // called on every dragover tick (dragover fires as fast as mousemove).
+  // Local reordering during the drag is instant; the real project only gets
+  // touched ONCE, at drag-end, with the net from -> to move.
+  const draggedIdRef = React.useRef<string | null>(null);
+  const dragStartIndexRef = React.useRef<number | null>(null);
+  const localIdsRef = React.useRef<string[] | null>(null);
+  const [, forceTick] = React.useReducer((c: number) => c + 1, 0);
   const stripRef = React.useRef<HTMLDivElement>(null);
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const rectsRef = React.useRef<Map<string, DOMRect>>(new Map());
@@ -73,6 +82,18 @@ export const StoryboardStrip: React.FC<{
   showAllRef.current = showAll;
 
   const pages = project.pages;
+  // Display order — the real project order, unless a drag is actively
+  // reordering things locally (see the drag handlers below). Plain
+  // computation, not useMemo — a ref mutation wouldn't reliably invalidate a
+  // memo anyway, and mapping a handful of ids is cheap enough not to matter.
+  const localIds = localIdsRef.current;
+  const displayPages = localIds
+    ? (() => {
+        const byId = new Map(pages.map((p) => [p.id, p]));
+        return localIds.map((id) => byId.get(id)).filter((p): p is Project["pages"][number] => !!p);
+      })()
+    : pages;
+  const selectedId = pages[selected]?.id;
   // Height follows the PROJECT's own aspect ratio — a landscape (16:9)
   // project gets short-wide cards, a square one gets square cards, etc.
   // Width stays fixed since that's what the horizontal carousel math below
@@ -124,14 +145,49 @@ export const StoryboardStrip: React.FC<{
     rectsRef.current = new Map(); // consumed — back to the fast path until the next reorder
   });
 
-  const handleDragStart = React.useCallback((i: number) => { dragFromRef.current = i; }, []);
-  const handleDragEnd = React.useCallback(() => { dragFromRef.current = null; }, []);
+  // All three read/write only refs (never React state) so they stay 100%
+  // stable references — required for PageCard's memoization to actually
+  // hold during a drag, the same way it now holds during a scroll.
+  const handleDragStart = React.useCallback((i: number) => {
+    // Display order always equals the real page order at the moment a NEW
+    // drag starts (handleDragEnd resets localIdsRef to null before this can
+    // ever fire again) — reads `pages` directly, not `displayPages`, so this
+    // stays stable across an active drag instead of changing identity on
+    // every dragover-driven re-render.
+    draggedIdRef.current = pages[i]?.id ?? null;
+    dragStartIndexRef.current = i;
+    localIdsRef.current = pages.map((p) => p.id);
+  }, [pages]);
+
   const handleCardDragOver = React.useCallback((overIndex: number) => {
-    const from = dragFromRef.current;
-    if (from === null || from === overIndex) return;
+    const draggedId = draggedIdRef.current;
+    const ids = localIdsRef.current;
+    if (!draggedId || !ids) return;
+    const from = ids.indexOf(draggedId);
+    if (from === -1 || from === overIndex) return;
     captureRects();
-    onReorder(from, overIndex);
-    dragFromRef.current = overIndex;
+    const next = [...ids];
+    const [moved] = next.splice(from, 1);
+    next.splice(overIndex, 0, moved);
+    localIdsRef.current = next;
+    forceTick();
+  }, []);
+
+  const handleDragEnd = React.useCallback(() => {
+    const draggedId = draggedIdRef.current;
+    const startIndex = dragStartIndexRef.current;
+    const ids = localIdsRef.current;
+    if (draggedId && startIndex !== null && ids) {
+      const finalIndex = ids.indexOf(draggedId);
+      // The ONE point this whole deferred approach exists for — the real
+      // project only gets touched once per drag, with the net move, instead
+      // of once per dragover tick.
+      if (finalIndex !== -1 && finalIndex !== startIndex) onReorder(startIndex, finalIndex);
+    }
+    draggedIdRef.current = null;
+    dragStartIndexRef.current = null;
+    localIdsRef.current = null;
+    forceTick();
   }, [onReorder]);
 
   // React's onWheel is attached passive by default, so e.preventDefault()
@@ -183,10 +239,11 @@ export const StoryboardStrip: React.FC<{
             transform: showAll ? "none" : `translateX(-${offset}px)`,
             transition: showAll || wheeling ? "none" : "transform 0.25s ease",
           }}>
-            {pages.map((page, i) => (
+            {displayPages.map((page, i) => (
               <div key={page.id} data-page-id={page.id}>
                 <PageCard
-                  project={project} page={page} index={i} cardH={cardH} selected={i === selected}
+                  project={project} page={page} index={i} cardH={cardH}
+                  selected={page.id === selectedId}
                   onSelect={onSelect}
                   onDragStart={handleDragStart}
                   onDragOver={handleCardDragOver}
