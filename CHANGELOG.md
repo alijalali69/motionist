@@ -36,4 +36,27 @@ First tagged version. Everything up to here, in one place:
 
 ---
 
+## v1.1.0 — 2026-08-27
+
+**Storyboard**
+- New storyboard strip above the player: live-content page thumbnails,
+  click to select, drag to reorder (FLIP-animated).
+- Carousel view (arrow buttons + mouse-wheel horizontal scroll) or one-button
+  toggle to a show-all wrapped grid.
+- Fixed three real causes of scroll/drag lag (unmemoized thumbnails re-running
+  on every tick, an unguarded layout-reflow effect, and a full project
+  deep-clone firing on every drag tick instead of once at drag-end).
+
+**Project setup**
+- Canvas-size presets on New Project: Instagram/TikTok Reels & Stories,
+  YouTube Shorts, Instagram feed square/portrait, YouTube landscape, or
+  custom — with server-side dimension clamping.
+
+**Delivery**
+- Alpha (transparent-background) export: a checkbox renders to a real
+  transparent WebM (vp8 + yuva420p) instead of an opaque MP4, for
+  compositing the reel over other footage.
+
+---
+
 <!-- Add new entries above this line as versions ship. -->
