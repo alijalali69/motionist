@@ -11,22 +11,29 @@ const VIEW_W = 620; // scaled up with CARD_W so roughly the same number of cards
 // running Player), cheap enough to have many on screen. Falls back to a
 // plain placeholder if the page has no layers yet (Thumbnail still renders
 // fine for that, this is just for a slightly nicer empty state).
-const PageCard: React.FC<{
+// Memoized so a card only re-renders when ITS OWN props actually change —
+// without this, every scroll tick (offset changing in the parent) re-runs
+// every card's render, and each one holds a real Remotion composition
+// (Thumbnail), not a cheap <img>. That was the single biggest source of the
+// lag: N live compositions re-evaluating on every wheel tick instead of
+// just having their container's transform slide underneath them.
+const PageCard = React.memo<{
   project: Project;
   page: Project["pages"][number];
+  index: number;
   cardH: number;
   selected: boolean;
-  onClick: () => void;
-  onDragStart: () => void;
-  onDragOver: () => void;
+  onSelect: (i: number) => void;
+  onDragStart: (i: number) => void;
+  onDragOver: (i: number) => void;
   onDragEnd: () => void;
-}> = ({ project, page, cardH, selected, onClick, onDragStart, onDragOver, onDragEnd }) => {
+}>(({ project, page, index, cardH, selected, onSelect, onDragStart, onDragOver, onDragEnd }) => {
   return (
     <div
       draggable
-      onClick={onClick}
-      onDragStart={onDragStart}
-      onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
+      onClick={() => onSelect(index)}
+      onDragStart={() => onDragStart(index)}
+      onDragOver={(e) => { e.preventDefault(); onDragOver(index); }}
       onDragEnd={onDragEnd}
       title={page.name ?? page.id}
       style={{
@@ -48,7 +55,7 @@ const PageCard: React.FC<{
       />
     </div>
   );
-};
+});
 
 export const StoryboardStrip: React.FC<{
   project: Project;
@@ -93,6 +100,13 @@ export const StoryboardStrip: React.FC<{
   };
 
   React.useLayoutEffect(() => {
+    // Fast path for the vast majority of renders (every scroll tick included)
+    // — nothing was captured, so there's nothing to animate. Without this
+    // guard this ran a querySelectorAll + getBoundingClientRect (a forced
+    // synchronous layout reflow) for every card on EVERY render, which was
+    // the other big source of the lag, on top of running inside
+    // useLayoutEffect — which blocks paint until it's done.
+    if (rectsRef.current.size === 0) return;
     const els = stripRef.current?.querySelectorAll<HTMLElement>("[data-page-id]");
     els?.forEach((el) => {
       const old = rectsRef.current.get(el.dataset.pageId!);
@@ -107,26 +121,40 @@ export const StoryboardStrip: React.FC<{
         el.style.transform = "translate(0, 0)";
       });
     });
+    rectsRef.current = new Map(); // consumed — back to the fast path until the next reorder
   });
 
-  const onCardDragOver = (overIndex: number) => {
+  const handleDragStart = React.useCallback((i: number) => { dragFromRef.current = i; }, []);
+  const handleDragEnd = React.useCallback(() => { dragFromRef.current = null; }, []);
+  const handleCardDragOver = React.useCallback((overIndex: number) => {
     const from = dragFromRef.current;
     if (from === null || from === overIndex) return;
     captureRects();
     onReorder(from, overIndex);
     dragFromRef.current = overIndex;
-  };
+  }, [onReorder]);
 
   // React's onWheel is attached passive by default, so e.preventDefault()
   // inside it silently no-ops (and logs a warning) — the page would scroll
   // along with the strip. A real addEventListener with {passive:false} is
   // the only way to actually claim the wheel gesture for the strip alone.
+  // Also tracks whether a wheel gesture is actively in progress, so the
+  // strip's CSS transition (meant for the arrow buttons' discrete jumps) gets
+  // turned off during it — a 250ms eased transition re-targeted on every one
+  // of a wheel gesture's many rapid ticks reads as the strip laggily
+  // "catching up" rather than tracking the wheel directly.
+  const [wheeling, setWheeling] = React.useState(false);
+  const wheelTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   React.useEffect(() => {
     const el = viewportRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       if (showAllRef.current) return;
       e.preventDefault();
+      setWheeling(true);
+      clearTimeout(wheelTimeoutRef.current);
+      wheelTimeoutRef.current = setTimeout(() => setWheeling(false), 150);
       setOffset((o) => clampOffset(o + e.deltaY));
     };
     el.addEventListener("wheel", onWheel, { passive: false });
@@ -153,16 +181,16 @@ export const StoryboardStrip: React.FC<{
             maxHeight: showAll ? cardH * 2 + GAP : undefined, // ~2 rows before it scrolls, whatever the card height ends up being
             overflowY: showAll ? "auto" : "visible",
             transform: showAll ? "none" : `translateX(-${offset}px)`,
-            transition: showAll ? undefined : "transform 0.25s ease",
+            transition: showAll || wheeling ? "none" : "transform 0.25s ease",
           }}>
             {pages.map((page, i) => (
               <div key={page.id} data-page-id={page.id}>
                 <PageCard
-                  project={project} page={page} cardH={cardH} selected={i === selected}
-                  onClick={() => onSelect(i)}
-                  onDragStart={() => { dragFromRef.current = i; }}
-                  onDragOver={() => onCardDragOver(i)}
-                  onDragEnd={() => { dragFromRef.current = null; }}
+                  project={project} page={page} index={i} cardH={cardH} selected={i === selected}
+                  onSelect={onSelect}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleCardDragOver}
+                  onDragEnd={handleDragEnd}
                 />
               </div>
             ))}
