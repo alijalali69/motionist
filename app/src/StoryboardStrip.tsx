@@ -3,9 +3,9 @@ import { Thumbnail } from "@remotion/player";
 import { PageThumb } from "../../src/PageThumb";
 import type { Project } from "../../src/types";
 
-const CARD_W = 44; // fixed — this is what the carousel's horizontal math (VIEW_W, GAP, clamping) is built around
+const CARD_W = 100; // fixed — this is what the carousel's horizontal math (VIEW_W, GAP, clamping) is built around
 const GAP = 6;
-const VIEW_W = 270;
+const VIEW_W = 620; // scaled up with CARD_W so roughly the same number of cards stay visible at once
 
 // One page's live-content thumbnail — a single static Remotion frame (not a
 // running Player), cheap enough to have many on screen. Falls back to a
@@ -150,7 +150,7 @@ export const StoryboardStrip: React.FC<{
           <div ref={stripRef} style={{
             display: "flex", gap: GAP,
             flexWrap: showAll ? "wrap" : "nowrap",
-            maxHeight: showAll ? 172 : undefined,
+            maxHeight: showAll ? cardH * 2 + GAP : undefined, // ~2 rows before it scrolls, whatever the card height ends up being
             overflowY: showAll ? "auto" : "visible",
             transform: showAll ? "none" : `translateX(-${offset}px)`,
             transition: showAll ? undefined : "transform 0.25s ease",
