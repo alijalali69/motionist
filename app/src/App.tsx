@@ -229,6 +229,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [dragOver, setDragOver] = React.useState(false);
   const [motionClip, setMotionClip] = React.useState<MotionClip | null>(null);
   const [showSafeZone, setShowSafeZone] = React.useState(false);
+  const [transparentExport, setTransparentExport] = React.useState(false);
   const [fonts, setFonts] = React.useState<FontEntry[]>([]);
   const refreshFonts = React.useCallback(() => { listFonts().then(setFonts).catch(() => {}); }, []);
   React.useEffect(() => { refreshFonts(); }, [refreshFonts]);
@@ -555,7 +556,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     setBusy("Rendering… (this can take a while)"); setErr(null); setRenderUrl(null);
     try {
       await saveProject(project); // keep the saved copy in sync with what's rendered
-      const url = await renderReel(project);
+      const url = await renderReel(project, transparentExport);
       setRenderUrl(url);
     } catch (e: any) { setErr(String(e.message || e)); }
     finally { setBusy(null); }
@@ -778,9 +779,16 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         )}
 
         <h2>Export</h2>
+        <label className="row" style={{ gap: 6, alignItems: "center", marginBottom: 8 }}>
+          <input type="checkbox" checked={transparentExport}
+            onChange={(e) => setTransparentExport(e.target.checked)} />
+          Transparent background (alpha export, .webm)
+        </label>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn" onClick={onSave} disabled={!project}>Save</button>
-          <button className="btn primary" onClick={onRender} disabled={!project}>Render MP4</button>
+          <button className="btn primary" onClick={onRender} disabled={!project}>
+            {transparentExport ? "Render WebM (alpha)" : "Render MP4"}
+          </button>
         </div>
         {renderUrl && <p className="hint">Done → <a className="dl" href={renderUrl} target="_blank" rel="noreferrer">download reel</a></p>}
         {busy && <p className="spin">{busy}</p>}

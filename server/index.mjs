@@ -444,19 +444,29 @@ app.post("/api/asset", upload.single("asset"), async (req, res) => {
   }
 });
 
-// --- Render the reel to MP4 --------------------------------------------------
+// --- Render the reel to MP4 (or, for an alpha export, a transparent WebM) ---
 app.post("/api/render", async (req, res) => {
   try {
     const project = req.body;
+    // `transparent` is a transient flag riding on the same body, not a real
+    // Project field — never gets persisted anywhere but this scratch file.
+    const transparent = !!project.transparent;
     // Mirror into src/project.json — that's what Root.tsx's defaultProps and
     // the Remotion CLI's --props flag read from.
     fs.writeFileSync(LEGACY_PROJECT_JSON, JSON.stringify(project, null, 2), "utf-8");
     const safeName = (project.name || project.projectId || "reel").replace(/[^a-z0-9]/gi, "_");
-    const outName = `${safeName}_${Date.now()}.mp4`;
-    await run("npx", [
+    // MP4/H.264 can't carry an alpha channel at all — vp8 in a WebM container
+    // (paired with the yuva420p pixel format) is the combination Remotion
+    // supports for a real transparent-background export.
+    const outName = `${safeName}_${Date.now()}.${transparent ? "webm" : "mp4"}`;
+    const args = [
       "remotion", "render", "Reel", `out/${outName}`,
       "--props=src/project.json",
-    ]);
+    ];
+    // yuva420p needs each rendered frame captured as PNG (Remotion's default
+    // JPEG capture format has no alpha channel to carry through at all).
+    if (transparent) args.push("--codec=vp8", "--pixel-format=yuva420p", "--image-format=png");
+    await run("npx", args);
     res.json({ url: `/out/${outName}` });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });

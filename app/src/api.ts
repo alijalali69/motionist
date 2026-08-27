@@ -142,11 +142,15 @@ export function deleteProjectFiles(projectId: string, paths: string[]): void {
   }).catch(() => {});
 }
 
-export async function renderReel(project: Project): Promise<string> {
+export async function renderReel(project: Project, transparent?: boolean): Promise<string> {
+  // `transparent` rides along as an extra key on the same body, not a real
+  // Project field — the server reads it, drops an opaque backdrop, and
+  // switches to an alpha-capable codec/container. Never gets saved.
+  const body = transparent ? { ...project, transparent: true } : project;
   const r = await fetch("/api/render", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(project),
+    body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error((await r.json()).error || "render failed");
   return (await r.json()).url as string;

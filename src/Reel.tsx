@@ -26,9 +26,10 @@ function presentationFor(type: string, w: number, h: number) {
   return fade();
 }
 
-export const Reel: React.FC<{ project: Project; debugZones?: boolean }> = ({
+export const Reel: React.FC<{ project: Project; debugZones?: boolean; transparent?: boolean }> = ({
   project,
   debugZones = false,
+  transparent = false,
 }) => {
   const { pages } = project;
 
@@ -47,9 +48,11 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean }> = ({
   const loaderSegments = pages.map((p, i) => ({ start: starts[i], end: starts[i] + p.durationInFrames }));
 
   return (
-    <AbsoluteFill style={{ backgroundColor: project.bgColor ?? "#e8e4dd" }}>
-      {/* Global background — fills the backdrop behind all pages. */}
-      <AssetSlot slot={project.bg ?? null} defaultFit="cover" />
+    <AbsoluteFill style={{ backgroundColor: transparent ? "transparent" : (project.bgColor ?? "#e8e4dd") }}>
+      {/* Global background — fills the backdrop behind all pages. Skipped
+          entirely on a transparent export too — it's a fill, same as bgColor,
+          not something the user uploaded on purpose to sit under other footage. */}
+      {!transparent && <AssetSlot slot={project.bg ?? null} defaultFit="cover" />}
 
       {/* Content pages: motion + transitions live here, and ONLY here. */}
       <TransitionSeries>
@@ -59,7 +62,7 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean }> = ({
               key={`seq-${page.id}`}
               durationInFrames={page.durationInFrames}
             >
-              <PageScene page={page} background={page.bgColor} />
+              <PageScene page={page} background={transparent ? "transparent" : page.bgColor} />
             </TransitionSeries.Sequence>
           );
           if (i === pages.length - 1) return [seq];

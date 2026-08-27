@@ -10,7 +10,10 @@ export const RemotionRoot: React.FC = () => {
     <Composition
       id="Reel"
       component={Reel}
-      defaultProps={{ project: defaultProject, debugZones: false }}
+      // `transparent` isn't a real Project field — it's a transient flag the
+      // server stashes onto this scratch project.json only for an alpha
+      // export, read back here the same way `project` itself is.
+      defaultProps={{ project: defaultProject, debugZones: false, transparent: (projectJson as any).transparent ?? false }}
       // Duration and dimensions come from the project passed in props.
       calculateMetadata={({ props }) => {
         const p = props.project as Project;
