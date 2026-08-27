@@ -413,6 +413,15 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     finally { setBusy(null); }
   };
 
+  // Clears a global slot (BG/Title/Logo) entirely — back to "Upload …" with
+  // nothing in it, cleaning up its uploaded file the same way a replace does.
+  const onRemoveSlot = (slotKey: "logo" | "bg" | "title") => {
+    if (!project) return;
+    const oldFile = project[slotKey]?.file ?? null;
+    update((p) => { p[slotKey] = null; });
+    if (oldFile) deleteProjectFiles(projectId, [oldFile]);
+  };
+
   // Upload a real photo/video into a placeholder box on the CURRENT page.
   // Replaces the file + kind; the box (left/top/width/height) is left as-is
   // — cover-fit auto-crops it in, and the user can drag/resize on the canvas
@@ -605,16 +614,24 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     }
   };
 
-  // Draggable/resizable canvas handles: global logo/title + every photo-role
-  // layer on the CURRENT page (auto-detected placeholder slots — no naming
-  // convention needed). Rebuilt whenever the project or selected page changes.
-  // Only the logo/title are repositionable — they're standalone global
-  // elements. Photo/BG boxes are part of the template's fixed design and must
-  // NOT move; what's adjustable there is the photo's crop position INSIDE its
-  // locked frame (see PhotoPanHandles below), not the frame itself.
+  // Draggable/resizable canvas handles: global bg/logo/title + every
+  // photo-role layer on the CURRENT page (auto-detected placeholder slots —
+  // no naming convention needed). Rebuilt whenever the project or selected
+  // page changes. The global bg/logo/title are repositionable — they're
+  // standalone global elements, uploaded the same way, not part of any
+  // page's template. (Don't confuse this with a page's own template-derived
+  // photo/bg LAYER, which stays fixed — what's adjustable there is the
+  // photo's crop position INSIDE its locked frame, see PhotoPanHandles
+  // below, not the frame itself.) BG goes first so its handle renders
+  // underneath logo/title's — it's usually the biggest box on screen, and
+  // shouldn't steal clicks meant for the smaller ones sitting on top of it.
   const canvasHandles: Handle[] = React.useMemo(() => {
     if (!project) return [];
     const list: Handle[] = [];
+    if (project.bg) list.push({
+      id: "bg", label: "BG", color: "#7ed6a5", box: project.bg.box,
+      onChange: (b) => update((p) => { if (p.bg) p.bg.box = b; }),
+    });
     if (project.logo) list.push({
       id: "logo", label: "LOGO", color: "#5aa9ff", box: project.logo.box,
       onChange: (b) => update((p) => { if (p.logo) p.logo.box = b; }),
@@ -737,7 +754,8 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               onChange={(e) => e.target.files?.[0] && onSlotUpload("bg", e.target.files[0])} />
             {project.bg && (
               <AssetControls slot={project.bg} label="BG" canvas={[project.width, project.height]}
-                onChange={(fn) => update((p) => { if (p.bg) fn(p.bg); })} />
+                onChange={(fn) => update((p) => { if (p.bg) fn(p.bg); })}
+                onRemove={() => onRemoveSlot("bg")} />
             )}
             <div className="row between" style={{ marginTop: 8, alignItems: "center" }}>
               <span className="hint" style={{ margin: 0 }}>Backdrop color (shows through gaps/transparency)</span>
@@ -753,7 +771,8 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               onChange={(e) => e.target.files?.[0] && onSlotUpload("title", e.target.files[0])} />
             {project.title && (
               <AssetControls slot={project.title} label="Title" canvas={[project.width, project.height]}
-                onChange={(fn) => update((p) => { if (p.title) fn(p.title); })} />
+                onChange={(fn) => update((p) => { if (p.title) fn(p.title); })}
+                onRemove={() => onRemoveSlot("title")} />
             )}
 
             {/* LOGO */}
@@ -764,7 +783,8 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               onChange={(e) => e.target.files?.[0] && onSlotUpload("logo", e.target.files[0])} />
             {project.logo && (
               <AssetControls slot={project.logo} label="Logo" canvas={[project.width, project.height]}
-                onChange={(fn) => update((p) => { if (p.logo) fn(p.logo); })} />
+                onChange={(fn) => update((p) => { if (p.logo) fn(p.logo); })}
+                onRemove={() => onRemoveSlot("logo")} />
             )}
 
             {/* LOADER */}
@@ -865,7 +885,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         )}
         {canvasHandles.length > 0 && (
           <p className="hint" style={{ maxWidth: 320, textAlign: "center" }}>
-            Logo/Title — drag to reposition, corner grip to resize · arrow keys to nudge (Shift = 10px)
+            BG/Logo/Title — drag to reposition, corner grip to resize · arrow keys to nudge (Shift = 10px)
           </p>
         )}
         {photoPanTargets.length > 0 && (
@@ -904,7 +924,8 @@ const AssetControls: React.FC<{
   label: string;
   canvas: [number, number];
   onChange: (fn: (s: LogoConfig) => void) => void;
-}> = ({ slot, label, canvas, onChange }) => {
+  onRemove: () => void;
+}> = ({ slot, label, canvas, onChange, onRemove }) => {
   const [cw, ch] = canvas;
   const num = (v: string) => Math.round(parseFloat(v || "0"));
 
@@ -931,6 +952,7 @@ const AssetControls: React.FC<{
         <div className="row" style={{ gap: 4 }}>
           <button className="btn small" onClick={() => scale(0.8)}>−</button>
           <button className="btn small" onClick={() => scale(1.25)}>＋</button>
+          <button className="btn small" title={`Remove ${label}`} onClick={onRemove}>✕</button>
         </div>
       </div>
       <div className="grid2 mini" style={{ marginTop: 6 }}>
