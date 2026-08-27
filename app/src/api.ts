@@ -142,6 +142,18 @@ export function deleteProjectFiles(projectId: string, paths: string[]): void {
   }).catch(() => {});
 }
 
+// Present only when this page is loaded inside the Motionist DaVinci
+// Resolve plugin window (see resolve-plugin/), via its preload.js — plain
+// `undefined` in a regular browser tab, which is exactly what lets this run
+// unmodified in both places.
+declare global {
+  interface Window {
+    motionistResolveBridge?: {
+      onRendered: (absPath: string) => Promise<{ ok: boolean; error?: string }>;
+    };
+  }
+}
+
 export async function renderReel(project: Project, transparent?: boolean): Promise<string> {
   // `transparent` rides along as an extra key on the same body, not a real
   // Project field — the server reads it, drops an opaque backdrop, and
@@ -153,5 +165,17 @@ export async function renderReel(project: Project, transparent?: boolean): Promi
     body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error((await r.json()).error || "render failed");
-  return (await r.json()).url as string;
+  const data = await r.json();
+
+  // Hand the finished file straight to Resolve's Media Pool when running
+  // inside the plugin. Fire-and-forget — a failure here (no project open in
+  // Resolve, etc.) shouldn't fail the render itself, which already
+  // succeeded; just log it so it's visible in devtools if something's off.
+  if (window.motionistResolveBridge && data.path) {
+    window.motionistResolveBridge.onRendered(data.path)
+      .then((res) => { if (!res?.ok) console.warn("Motionist → Resolve: not added to Media Pool —", res?.error); })
+      .catch((e) => console.warn("Motionist → Resolve bridge failed:", e));
+  }
+
+  return data.url as string;
 }

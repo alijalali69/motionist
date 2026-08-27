@@ -1,0 +1,6 @@
+{
+  "name": "motionist-resolve-plugin",
+  "version": "1.0.0",
+  "description": "Loads the Motionist reel editor inside DaVinci Resolve and adds finished renders straight to the Media Pool.",
+  "main": "main.js"
+}

@@ -467,7 +467,11 @@ app.post("/api/render", async (req, res) => {
     // JPEG capture format has no alpha channel to carry through at all).
     if (transparent) args.push("--codec=vp8", "--pixel-format=yuva420p", "--image-format=png");
     await run("npx", args);
-    res.json({ url: `/out/${outName}` });
+    // `path` is the absolute filesystem path — the Resolve plugin's bridge
+    // needs a real path (not a URL) to hand the file to Resolve's Media
+    // Pool. Harmless to expose: this is a single-user local server, and the
+    // path is inside this project's own `out/` folder either way.
+    res.json({ url: `/out/${outName}`, path: path.join(ROOT, "out", outName) });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }

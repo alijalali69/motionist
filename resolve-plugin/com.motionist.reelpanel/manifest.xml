@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BlackmagicDesign>
+    <Plugin>
+        <Id>com.motionist.reelpanel</Id>
+        <Name>Motionist</Name>
+        <Version>1.0</Version>
+        <Description>Build animated reels from layered PSD/SVG designs, right inside Resolve. Finished renders land straight in a "Motionist" bin in your Media Pool.</Description>
+        <FilePath>main.js</FilePath>
+    </Plugin>
+</BlackmagicDesign>

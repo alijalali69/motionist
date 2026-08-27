@@ -37,6 +37,9 @@ src/            Remotion side: the actual reel composition (Reel.tsx,
                 the live preview (app/) and the real render (server/).
 tools/          PSD/SVG layer extraction (Python) + shared page-routing
                 logic (compose.mjs) used by both the server and the CLI.
+resolve-plugin/ DaVinci Resolve Studio plugin — loads the app inside Resolve
+                and adds finished renders straight to the Media Pool. See
+                resolve-plugin/README.md.
 data/           One JSON file per project — NOT in git (your real work).
 public/         Static files Vite/Remotion serve.
   brand/          Real app assets (logo, favicon) — tracked in git.
