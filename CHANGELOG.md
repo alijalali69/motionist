@@ -59,4 +59,26 @@ First tagged version. Everything up to here, in one place:
 
 ---
 
+## v1.2.0 — 2026-08-27
+
+**DaVinci Resolve integration**
+- New Workflow Integration Plugin (Resolve Studio only): loads Motionist
+  inside Resolve itself (Workspace → Workflow Integrations → Motionist).
+  Every finished render lands straight in a "Motionist" bin in the current
+  project's Media Pool — no manual import, drag it onto the timeline
+  directly. See `resolve-plugin/README.md`.
+
+**New-machine setup**
+- `bootstrap.bat`: one file, one double-click — installs Node.js, Git,
+  Python, ffmpeg via winget, the required Python packages, clones the repo
+  (or pulls if already cloned), runs `npm install`, and starts the app.
+
+**Fixes**
+- Global BG slot: was missing a drag/resize handle on the canvas (Logo and
+  Title had one, BG didn't) and had no way to delete it once uploaded.
+  Both fixed — BG now behaves the same as Logo/Title, and all three got a
+  "Remove" (✕) button.
+
+---
+
 <!-- Add new entries above this line as versions ship. -->
