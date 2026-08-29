@@ -805,46 +805,52 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             <h2>Global assets (all pages)</h2>
 
             {/* BG */}
-            <button className={"btn upload" + (project.bg?.file ? " filled" : "")} onClick={() => bgInput.current?.click()}>
-              {project.bg?.file ? "Replace Background" : "Upload Background"}
-            </button>
-            <input ref={bgInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.svg,.webm,.mov,.mp4,.gif"
-              onChange={(e) => e.target.files?.[0] && onSlotUpload("bg", e.target.files[0])} />
-            {project.bg && (
-              <AssetControls slot={project.bg} label="BG" canvas={[project.width, project.height]}
-                onChange={(fn) => update((p) => { if (p.bg) fn(p.bg); })}
-                onRemove={() => onRemoveSlot("bg")} />
-            )}
-            <div className="row between" style={{ marginTop: 8, alignItems: "center" }}>
-              <span className="hint" style={{ margin: 0 }}>Backdrop color (shows through gaps/transparency)</span>
-              <ColorField value={project.bgColor ?? "#e8e4dd"}
-                onChange={(hex) => update((p) => { p.bgColor = hex; })}
-                swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch} />
+            <div className="card compact">
+              <button className={"btn upload" + (project.bg?.file ? " filled" : "")} onClick={() => bgInput.current?.click()}>
+                {project.bg?.file ? "Replace Background" : "Upload Background"}
+              </button>
+              <input ref={bgInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.svg,.webm,.mov,.mp4,.gif"
+                onChange={(e) => e.target.files?.[0] && onSlotUpload("bg", e.target.files[0])} />
+              {project.bg && (
+                <AssetControls slot={project.bg} label="BG" canvas={[project.width, project.height]}
+                  onChange={(fn) => update((p) => { if (p.bg) fn(p.bg); })}
+                  onRemove={() => onRemoveSlot("bg")} />
+              )}
+              <div className="row between" style={{ marginTop: 8, alignItems: "center" }}>
+                <span className="hint" style={{ margin: 0 }}>Backdrop color (shows through gaps/transparency)</span>
+                <ColorField value={project.bgColor ?? "#e8e4dd"}
+                  onChange={(hex) => update((p) => { p.bgColor = hex; })}
+                  swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch} />
+              </div>
             </div>
 
             {/* TITLE */}
-            <button className={"btn upload" + (project.title?.file ? " filled" : "")} style={{ marginTop: 8 }} onClick={() => titleInput.current?.click()}>
-              {project.title?.file ? "Replace Title" : "Upload Title"}
-            </button>
-            <input ref={titleInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.svg,.webm,.mov,.mp4,.gif,.json"
-              onChange={(e) => e.target.files?.[0] && onSlotUpload("title", e.target.files[0])} />
-            {project.title && (
-              <AssetControls slot={project.title} label="Title" canvas={[project.width, project.height]}
-                onChange={(fn) => update((p) => { if (p.title) fn(p.title); })}
-                onRemove={() => onRemoveSlot("title")} />
-            )}
+            <div className="card compact">
+              <button className={"btn upload" + (project.title?.file ? " filled" : "")} onClick={() => titleInput.current?.click()}>
+                {project.title?.file ? "Replace Title" : "Upload Title"}
+              </button>
+              <input ref={titleInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.svg,.webm,.mov,.mp4,.gif,.json"
+                onChange={(e) => e.target.files?.[0] && onSlotUpload("title", e.target.files[0])} />
+              {project.title && (
+                <AssetControls slot={project.title} label="Title" canvas={[project.width, project.height]}
+                  onChange={(fn) => update((p) => { if (p.title) fn(p.title); })}
+                  onRemove={() => onRemoveSlot("title")} />
+              )}
+            </div>
 
             {/* LOGO */}
-            <button className={"btn upload" + (project.logo?.file ? " filled" : "")} style={{ marginTop: 8 }} onClick={() => logoInput.current?.click()}>
-              {project.logo?.file ? "Replace Logo" : "Upload Logo (top-right)"}
-            </button>
-            <input ref={logoInput} className="hidden-file" type="file" accept=".json,.webm,.mov,.mp4,.gif,.png,.svg"
-              onChange={(e) => e.target.files?.[0] && onSlotUpload("logo", e.target.files[0])} />
-            {project.logo && (
-              <AssetControls slot={project.logo} label="Logo" canvas={[project.width, project.height]}
-                onChange={(fn) => update((p) => { if (p.logo) fn(p.logo); })}
-                onRemove={() => onRemoveSlot("logo")} />
-            )}
+            <div className="card compact">
+              <button className={"btn upload" + (project.logo?.file ? " filled" : "")} onClick={() => logoInput.current?.click()}>
+                {project.logo?.file ? "Replace Logo" : "Upload Logo (top-right)"}
+              </button>
+              <input ref={logoInput} className="hidden-file" type="file" accept=".json,.webm,.mov,.mp4,.gif,.png,.svg"
+                onChange={(e) => e.target.files?.[0] && onSlotUpload("logo", e.target.files[0])} />
+              {project.logo && (
+                <AssetControls slot={project.logo} label="Logo" canvas={[project.width, project.height]}
+                  onChange={(fn) => update((p) => { if (p.logo) fn(p.logo); })}
+                  onRemove={() => onRemoveSlot("logo")} />
+              )}
+            </div>
 
             {/* LOADER */}
             <h2>Loader</h2>
@@ -858,30 +864,34 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         )}
 
         <h2>Export</h2>
-        <label className="row" style={{ gap: 6, alignItems: "center", marginBottom: 8 }}>
-          <input type="checkbox" checked={transparentExport}
-            onChange={(e) => setTransparentExport(e.target.checked)} />
-          Transparent background (alpha export, .webm)
-        </label>
-        <div className="row" style={{ gap: 8 }}>
-          <button className="btn" onClick={onSave} disabled={!project}>Save</button>
-          <button className="btn primary" onClick={onRender} disabled={!project}>
-            {transparentExport ? "Render WebM (alpha)" : "Render MP4"}
-          </button>
+        <div className="card compact">
+          <label className="row" style={{ gap: 6, alignItems: "center", marginBottom: 8 }}>
+            <input type="checkbox" checked={transparentExport}
+              onChange={(e) => setTransparentExport(e.target.checked)} />
+            Transparent background (alpha export, .webm)
+          </label>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn" onClick={onSave} disabled={!project}>Save</button>
+            <button className="btn primary" onClick={onRender} disabled={!project}>
+              {transparentExport ? "Render WebM (alpha)" : "Render MP4"}
+            </button>
+          </div>
+          {renderUrl && <p className="hint">Done → <a className="dl" href={renderUrl} target="_blank" rel="noreferrer">download reel</a></p>}
+          {busy && <p className="spin">{busy}</p>}
+          {err && (
+            <p className="err row between" style={{ alignItems: "center", gap: 8 }}>
+              <span>{err}</span>
+              <button className="btn small" title="Dismiss" onClick={() => setErr(null)}>✕</button>
+            </p>
+          )}
         </div>
-        {renderUrl && <p className="hint">Done → <a className="dl" href={renderUrl} target="_blank" rel="noreferrer">download reel</a></p>}
-        {busy && <p className="spin">{busy}</p>}
-        {err && (
-          <p className="err row between" style={{ alignItems: "center", gap: 8 }}>
-            <span>{err}</span>
-            <button className="btn small" title="Dismiss" onClick={() => setErr(null)}>✕</button>
-          </p>
-        )}
       </div>
 
       {/* CENTER: live preview */}
       <div className="center">
-        {project && project.pages.length > 0 && (
+        {/* A strip showing 1-2 thumbnails isn't a storyboard, it's noise —
+            only earns its space once there's an actual sequence to scan. */}
+        {project && project.pages.length > 2 && (
           <StoryboardStrip
             project={project}
             selected={sel}
@@ -894,7 +904,10 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             ref={playerWrapRef}
             style={{
               position: "relative",
-              height: project.pages.length > 0 ? "66vh" : "80vh",
+              // Matches the storyboard's own >2 threshold above — otherwise
+              // hiding the strip at 1-2 pages just leaves dead space instead
+              // of giving it back to the player.
+              height: project.pages.length > 2 ? "66vh" : "80vh",
               aspectRatio: `${project.width} / ${project.height}`,
             }}
           >
@@ -934,23 +947,29 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         {/* Meta's published Reels/Stories safe margins only mean anything on
             a portrait canvas — showing them over a landscape/square project
             would just be wrong, not merely irrelevant. */}
-        {project && project.height > project.width && (
-          <label className="row" style={{ gap: 6, fontSize: 12, color: "var(--muted)", cursor: "pointer" }}>
-            <input type="checkbox" checked={showSafeZone}
-              onChange={(e) => setShowSafeZone(e.target.checked)}
-              style={{ width: "auto" }} />
-            Show Instagram Reels safe zone (guide only — never rendered in export)
-          </label>
-        )}
-        {canvasHandles.length > 0 && (
-          <p className="hint" style={{ maxWidth: 320, textAlign: "center" }}>
-            BG/Logo/Title — drag to reposition, corner grip to resize · arrow keys to nudge (Shift = 10px)
-          </p>
-        )}
-        {photoPanTargets.length > 0 && (
-          <p className="hint" style={{ maxWidth: 320, textAlign: "center" }}>
-            Pink boxes — drag the photo to reposition its crop (the frame itself is fixed by the design)
-          </p>
+        {/* One grouped box instead of 2-3 loose paragraphs floating under the
+            player — same tips, just an actual section instead of stray text. */}
+        {project && (canvasHandles.length > 0 || photoPanTargets.length > 0 || project.height > project.width) && (
+          <div className="card compact" style={{ maxWidth: 420, width: "100%" }}>
+            {project.height > project.width && (
+              <label className="row" style={{ gap: 6, fontSize: 12, color: "var(--muted)", cursor: "pointer" }}>
+                <input type="checkbox" checked={showSafeZone}
+                  onChange={(e) => setShowSafeZone(e.target.checked)}
+                  style={{ width: "auto" }} />
+                Show Instagram Reels safe zone (guide only — never rendered in export)
+              </label>
+            )}
+            {canvasHandles.length > 0 && (
+              <p className="hint" style={{ margin: project.height > project.width ? "6px 0 0" : 0, textAlign: "center" }}>
+                BG/Logo/Title — drag to reposition, corner grip to resize · arrow keys to nudge (Shift = 10px)
+              </p>
+            )}
+            {photoPanTargets.length > 0 && (
+              <p className="hint" style={{ margin: "6px 0 0", textAlign: "center" }}>
+                Pink boxes — drag the photo to reposition its crop (the frame itself is fixed by the design)
+              </p>
+            )}
+          </div>
         )}
       </div>
 
@@ -1176,13 +1195,13 @@ const FxSlots: React.FC<{
               {options.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
             {i > 0 && (
-              <button className="btn small" title={`Remove FX${i + 1}`} disabled={disabled}
+              <button className="btn small" title={`Remove FX${i + 1}`} aria-label={`Remove FX${i + 1} effect`} disabled={disabled}
                 onClick={() => onRemove(i as 1 | 2)}>✕</button>
             )}
           </div>
         ))}
         {shown < 3 && (
-          <button className="btn small" title="Combine another effect" disabled={disabled} onClick={onAdd}>＋</button>
+          <button className="btn small" title="Combine another effect" aria-label="Combine another effect" disabled={disabled} onClick={onAdd}>＋</button>
         )}
       </div>
     </div>
@@ -1254,6 +1273,17 @@ const ElementMotion: React.FC<{
   const [newFamily, setNewFamily] = React.useState("");
   const [newStyle, setNewStyle] = React.useState("Regular");
   const [selectedPresetId, setSelectedPresetId] = React.useState("");
+  // Collapsed by default is a trap (fields silently hidden on load, easy to
+  // think they vanished) — starts expanded, same as before this existed;
+  // collapsing is something the user opts into per layer.
+  const [expanded, setExpanded] = React.useState(true);
+  const [renaming, setRenaming] = React.useState(false);
+  const [draftName, setDraftName] = React.useState(layer.name ?? "");
+  const commitRename = () => {
+    setRenaming(false);
+    const trimmed = draftName.trim();
+    if (trimmed !== (layer.name ?? "")) onChange((l) => { l.name = trimmed || undefined; });
+  };
   const isPhotoSlot = layer.role === "photo";
   const isTextLayer = layer.assetKind === "text";
   const inOptions = isTextLayer ? [...ENTRANCES, ...TEXT_ENTRANCE_NAMES] : ENTRANCES;
@@ -1272,11 +1302,37 @@ const ElementMotion: React.FC<{
 
   return (
     <div className="card compact">
-      <div className="row between">
-        <span className="lname" title={layer.name || undefined}>
-          {layer.name ? layer.name : layer.role} <span className="tag">({layer.role})</span>
+      <div className={"row between collapsible-header" + (expanded ? " expanded" : "")}
+        onClick={() => setExpanded((e) => !e)}
+        title={expanded ? "Click to collapse" : "Click to expand"}
+        role="button" tabIndex={0} aria-expanded={expanded}
+        aria-label={`${layer.name || layer.role} layer, ${expanded ? "expanded" : "collapsed"}`}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded((v) => !v); }
+        }}>
+        <span className="lname" style={{ minWidth: 0, overflow: "hidden" }}>
+          <span className="chevron">▸</span>
+          {renaming ? (
+            <input
+              className="lname-input"
+              autoFocus
+              value={draftName}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setDraftName(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") { setDraftName(layer.name ?? ""); setRenaming(false); }
+              }}
+            />
+          ) : (
+            <span title={(layer.name || layer.role) + " — double-click to rename"}
+              onDoubleClick={(e) => { e.stopPropagation(); setDraftName(layer.name ?? ""); setRenaming(true); }}>
+              {layer.name ? layer.name : layer.role} <span className="tag">({layer.role})</span>
+            </span>
+          )}
         </span>
-        <div className="row" style={{ gap: 4 }}>
+        <div className="row" style={{ gap: 4 }} onClick={(e) => e.stopPropagation()}>
           <button className="btn small" title="Bring forward (on top of the layer above)"
             disabled={!canMoveUp} onClick={() => onMove?.(1)}>↑</button>
           <button className="btn small" title="Send backward (behind the layer below)"
@@ -1289,6 +1345,16 @@ const ElementMotion: React.FC<{
         </div>
       </div>
 
+      {!expanded && (
+        <p className="hint" style={{ margin: "4px 0 0" }}>
+          {layer.entrance !== "none" || (layer.exit && layer.exit !== "none")
+            ? `${layer.entrance}${layer.exit && layer.exit !== "none" ? ` → ${layer.exit}` : ""}`
+            : "no motion set"}
+        </p>
+      )}
+
+      {expanded && (
+      <>
       {/* Motion presets — same MotionClip shape as Copy/Paste above, but
           named and saved server-side, so it's reusable in OTHER projects
           too, not just pasted around within this one session. */}
@@ -1531,6 +1597,8 @@ const ElementMotion: React.FC<{
             disabled={(layer.exit ?? "none") === "none"}
             onChange={(frames) => onChange((l) => { l.outDuration = frames; })} /></div>
       </div>
+      </>
+      )}
     </div>
   );
 };
@@ -1555,82 +1623,104 @@ const PageInspector: React.FC<{
   onSaveMotionPreset: (name: string, clip: MotionClip) => void;
   onDeleteMotionPreset: (id: string) => void;
 }> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onAddText, onAddPhoto, onDeleteLayer, fonts, onSelectFont, onUploadNewFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset }) => {
+  // Duration/bg/ambient/transition/subtitle vs. the layer list were one long
+  // stacked scroll before — split so each is reachable without scrolling
+  // past the other. Resets to "Page" on every page switch (this component
+  // remounts per page.id at its call site), which is the more useful default
+  // — you land on a newly-selected page's own settings, not wherever the
+  // last page's tab happened to be.
+  const [tab, setTab] = React.useState<"page" | "elements">("page");
   return (
     <div>
       <h1 title={page.id}>Page: {page.name ?? page.id}</h1>
 
-      <label>Duration (seconds)</label>
-      <input type="number" min={1} step={0.5}
-        value={+(page.durationInFrames / 30).toFixed(2)}
-        onChange={(e) => onChange((pg) => {
-          // Remotion's <TransitionSeries.Sequence> throws outright at 0 (and
-          // presumably chokes on negative) — clamp to at least 1 frame so a
-          // stray "0" in this field can't crash the whole player.
-          pg.durationInFrames = Math.max(1, Math.round(parseFloat(e.target.value || "1") * 30));
-        })} />
-
-      <div className="row between" style={{ alignItems: "center" }}>
-        <label style={{ margin: 0 }}>Background color (this page only — empty follows the project's)</label>
-        <div className="row" style={{ gap: 4 }}>
-          <ColorField value={page.bgColor ?? "#e8e4dd"}
-            onChange={(hex) => onChange((pg) => { pg.bgColor = hex; })}
-            swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
-          {page.bgColor && (
-            <button className="btn small" title="Clear — follow the project's backdrop color instead"
-              onClick={() => onChange((pg) => { pg.bgColor = undefined; })}>✕</button>
-          )}
-        </div>
-      </div>
-
-      <label>Ambient motion</label>
-      <select value={page.ambient} onChange={(e) => onChange((pg) => { pg.ambient = e.target.value as any; })}>
-        {AMBIENTS.map((a) => <option key={a} value={a}>{a}</option>)}
-      </select>
-
-      <label>Transition to next page</label>
-      <select value={page.transition.type} onChange={(e) => onChange((pg) => { pg.transition.type = e.target.value as any; })}>
-        {TRANSITIONS.map((t) => <option key={t.name} value={t.name}>{t.label}</option>)}
-      </select>
-
-      <label>Subtitle (English) — empty = nothing shows</label>
-      <textarea value={page.subtitle ?? ""} placeholder="Caption for this page…"
-        onChange={(e) => onChange((pg) => { pg.subtitle = e.target.value; })} />
-
-      <div className="row between" style={{ alignItems: "center", marginTop: 18 }}>
-        <h2 style={{ margin: 0 }}>Element motion (in / out)</h2>
-        <button className="btn small" disabled={!clip}
-          title="Paste the copied motion onto every element on this page"
-          onClick={() => onChange((pg) => { pg.layers.forEach((l) => applyClip(l, clip!)); })}>
-          Paste to all
+      <div className="tabs">
+        <button className={"tab" + (tab === "page" ? " active" : "")} onClick={() => setTab("page")}>Page</button>
+        <button className={"tab" + (tab === "elements" ? " active" : "")} onClick={() => setTab("elements")}>
+          Elements{page.layers.length > 0 ? ` (${page.layers.length})` : ""}
         </button>
       </div>
-      <div className="row" style={{ gap: 6, marginBottom: 8 }}>
-        <button className="btn small" style={{ flex: 1 }} onClick={onAddPhoto}>+ Add photo</button>
-        <button className="btn small" style={{ flex: 1 }} onClick={onAddText}>+ Add Farsi text</button>
-      </div>
-      {/* Rendered top-to-bottom = front-to-back (Photoshop/Figma convention)
-          — reverses the DISPLAY order only; `li` stays the real array index
-          so every callback still targets the right layer regardless of
-          where it's drawn in this list. */}
-      {page.layers.map((l, li) => (
-        <ElementMotion key={l.index} layer={l} clip={clip} onCopy={onCopyClip}
-          onChange={(fn) => onChange((pg) => fn(pg.layers[li]))}
-          onMove={(dir) => onChange((pg) => {
-            const j = li + dir;
-            if (j < 0 || j >= pg.layers.length) return;
-            [pg.layers[li], pg.layers[j]] = [pg.layers[j], pg.layers[li]];
-          })}
-          canMoveUp={li < page.layers.length - 1}
-          canMoveDown={li > 0}
-          onUploadPhoto={(file) => onUploadPhoto(li, file)}
-          fonts={fonts}
-          onSelectFont={(entry) => onSelectFont(li, entry)}
-          onUploadNewFont={(file, family, style) => onUploadNewFont(li, file, family, style)}
-          swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch}
-          motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
-          onDelete={() => onDeleteLayer(li)} />
-      )).reverse()}
-      <p className="hint">Fixed chrome, logo, loader and the subtitle zone are not listed — they are handled separately and don't get page motion.</p>
+
+      {tab === "page" && (
+        <>
+          <label>Duration (seconds)</label>
+          <input type="number" min={1} step={0.5}
+            value={+(page.durationInFrames / 30).toFixed(2)}
+            onChange={(e) => onChange((pg) => {
+              // Remotion's <TransitionSeries.Sequence> throws outright at 0 (and
+              // presumably chokes on negative) — clamp to at least 1 frame so a
+              // stray "0" in this field can't crash the whole player.
+              pg.durationInFrames = Math.max(1, Math.round(parseFloat(e.target.value || "1") * 30));
+            })} />
+
+          <div className="row between" style={{ alignItems: "center" }}>
+            <label style={{ margin: 0 }}>Background color (this page only — empty follows the project's)</label>
+            <div className="row" style={{ gap: 4 }}>
+              <ColorField value={page.bgColor ?? "#e8e4dd"}
+                onChange={(hex) => onChange((pg) => { pg.bgColor = hex; })}
+                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+              {page.bgColor && (
+                <button className="btn small" title="Clear — follow the project's backdrop color instead"
+                  onClick={() => onChange((pg) => { pg.bgColor = undefined; })}>✕</button>
+              )}
+            </div>
+          </div>
+
+          <label>Ambient motion</label>
+          <select value={page.ambient} onChange={(e) => onChange((pg) => { pg.ambient = e.target.value as any; })}>
+            {AMBIENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+
+          <label>Transition to next page</label>
+          <select value={page.transition.type} onChange={(e) => onChange((pg) => { pg.transition.type = e.target.value as any; })}>
+            {TRANSITIONS.map((t) => <option key={t.name} value={t.name}>{t.label}</option>)}
+          </select>
+
+          <label>Subtitle (English) — empty = nothing shows</label>
+          <textarea value={page.subtitle ?? ""} placeholder="Caption for this page…"
+            onChange={(e) => onChange((pg) => { pg.subtitle = e.target.value; })} />
+        </>
+      )}
+
+      {tab === "elements" && (
+        <>
+          <div className="row between" style={{ alignItems: "center" }}>
+            <h2 style={{ margin: 0, border: "none", padding: 0 }}>Element motion (in / out)</h2>
+            <button className="btn small" disabled={!clip}
+              title="Paste the copied motion onto every element on this page"
+              onClick={() => onChange((pg) => { pg.layers.forEach((l) => applyClip(l, clip!)); })}>
+              Paste to all
+            </button>
+          </div>
+          <div className="row" style={{ gap: 6, marginTop: 10, marginBottom: 8 }}>
+            <button className="btn small" style={{ flex: 1 }} onClick={onAddPhoto}>+ Add photo</button>
+            <button className="btn small" style={{ flex: 1 }} onClick={onAddText}>+ Add Farsi text</button>
+          </div>
+          {/* Rendered top-to-bottom = front-to-back (Photoshop/Figma convention)
+              — reverses the DISPLAY order only; `li` stays the real array index
+              so every callback still targets the right layer regardless of
+              where it's drawn in this list. */}
+          {page.layers.map((l, li) => (
+            <ElementMotion key={l.index} layer={l} clip={clip} onCopy={onCopyClip}
+              onChange={(fn) => onChange((pg) => fn(pg.layers[li]))}
+              onMove={(dir) => onChange((pg) => {
+                const j = li + dir;
+                if (j < 0 || j >= pg.layers.length) return;
+                [pg.layers[li], pg.layers[j]] = [pg.layers[j], pg.layers[li]];
+              })}
+              canMoveUp={li < page.layers.length - 1}
+              canMoveDown={li > 0}
+              onUploadPhoto={(file) => onUploadPhoto(li, file)}
+              fonts={fonts}
+              onSelectFont={(entry) => onSelectFont(li, entry)}
+              onUploadNewFont={(file, family, style) => onUploadNewFont(li, file, family, style)}
+              swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch}
+              motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
+              onDelete={() => onDeleteLayer(li)} />
+          )).reverse()}
+          <p className="hint">Fixed chrome, logo, loader and the subtitle zone are not listed — they are handled separately and don't get page motion.</p>
+        </>
+      )}
     </div>
   );
 };
