@@ -55,7 +55,7 @@ const ColorField: React.FC<{
     <div>
       <div className="row" style={{ gap: 4 }}>
         <input type="color" value={value}
-          style={{ width: 36, height: 28, padding: 2, ...swatchStyle }}
+          style={{ width: 36, height: 28, ...swatchStyle }}
           onChange={(e) => onChange(e.target.value)} />
         <input type="text" value={text} maxLength={7} placeholder="#rrggbb"
           style={{ width: 78, fontFamily: "var(--mono, monospace)", fontSize: 12, textTransform: "uppercase" }}
