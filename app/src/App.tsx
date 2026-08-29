@@ -1254,6 +1254,50 @@ function applyClip(l: LayerT, clip: MotionClip) {
   if (clip.photoZoom !== undefined) l.photoZoom = clip.photoZoom;
 }
 
+// Small inline icon set for the icon-only alignment/direction controls below
+// — plain SVG (not emoji) so each stays crisp at any size and themes via
+// currentColor, same as the button text/active color around it.
+
+// Paragraph-style: 3 bars mimicking actual aligned text — this is TEXT
+// alignment (CSS text-align inside the box), not the box's own position.
+const AlignTextIcon: React.FC<{ align: "left" | "center" | "right" }> = ({ align }) => {
+  const bars =
+    align === "left" ? [{ x: 1, w: 13 }, { x: 1, w: 8 }, { x: 1, w: 11 }] :
+    align === "right" ? [{ x: 1, w: 13 }, { x: 6, w: 8 }, { x: 3, w: 11 }] :
+    [{ x: 1, w: 13 }, { x: 3.5, w: 8 }, { x: 2, w: 11 }];
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+      {bars.map((b, i) => <rect key={i} x={b.x} y={2 + i * 4.5} width={b.w} height={1.6} rx={0.6} fill="currentColor" />)}
+    </svg>
+  );
+};
+
+// Illustrator-style "align to artboard": a dashed guide at the target edge
+// plus a small box snapped to it — this is the BOX's position on the frame,
+// deliberately drawn nothing like AlignTextIcon so the two are never
+// mistaken for each other.
+const AlignBoxIcon: React.FC<{ align: "left" | "center" | "right" }> = ({ align }) => {
+  const guideX = align === "left" ? 1.5 : align === "right" ? 13.5 : 7.5;
+  const boxX = align === "left" ? 1.5 : align === "right" ? 6.5 : 4;
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+      <line x1={guideX} y1="1" x2={guideX} y2="14" stroke="currentColor" strokeWidth="1" strokeDasharray="1.6,1.4" opacity="0.6" />
+      <rect x={boxX} y="4.5" width="7" height="6" fill="none" stroke="currentColor" strokeWidth="1.4" rx="0.5" />
+    </svg>
+  );
+};
+
+// RTL is just the LTR glyph mirrored — same bars/arrow, flipped, so the pair
+// reads as one flow-direction control rather than two unrelated icons.
+const DirectionIcon: React.FC<{ dir: "ltr" | "rtl" }> = ({ dir }) => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true"
+    style={dir === "rtl" ? { transform: "scaleX(-1)" } : undefined}>
+    <rect x="1" y="3" width="9" height="1.6" rx="0.6" fill="currentColor" />
+    <rect x="1" y="10" width="6" height="1.6" rx="0.6" fill="currentColor" />
+    <path d="M10 10.8 H14 M12 8.8 L14 10.8 L12 12.8" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 // Up to 3 combined effects on one IN or OUT direction — FX1 is always shown,
 // a "+" reveals FX2 then FX3 (capped there), each removable with its own ✕
 // (removing one also clears anything after it, so there's never a gap).
@@ -1352,7 +1396,8 @@ const ElementMotion: React.FC<{
   motionPresets?: MotionPresetEntry[];
   onSaveMotionPreset?: (name: string, clip: MotionClip) => void;
   onDeleteMotionPreset?: (id: string) => void;
-}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onUploadNewFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset }) => {
+  canvas: [number, number];
+}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onUploadNewFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas }) => {
   const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
   const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
   const photoInput = React.useRef<HTMLInputElement>(null);
@@ -1560,19 +1605,57 @@ const ElementMotion: React.FC<{
               <ColorField value={layer.textColor ?? "#1a1a1a"}
                 onChange={(hex) => onChange((l) => { l.textColor = hex; })}
                 swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} /></div>
-            <div><label>Align</label>
-              <select value={layer.textAlign ?? "right"}
-                onChange={(e) => onChange((l) => { l.textAlign = e.target.value as any; })}>
-                <option value="right">right</option>
-                <option value="center">center</option>
-                <option value="left">left</option>
-              </select></div>
+          </div>
+          <div className="grid3 mini" style={{ marginTop: 4 }}>
+            {/* Text align: where the TEXT sits inside its own box (CSS
+                text-align). Not the same as Box align below — deliberately
+                different icon style so the two are never confused. */}
+            <div><label>Text align</label>
+              <div className="row" style={{ gap: 4 }}>
+                {(["left", "center", "right"] as const).map((a) => {
+                  const active = (layer.textAlign ?? "right") === a;
+                  return (
+                    <button key={a} className={"btn small icon" + (active ? " active" : "")}
+                      title={`Align text ${a}`} aria-label={`Align text ${a}`} aria-pressed={active}
+                      onClick={() => onChange((l) => { l.textAlign = a; })}>
+                      <AlignTextIcon align={a} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {/* Box align: snaps the text box itself to the frame (like
+                Illustrator's align-to-artboard) — a one-off action, not a
+                stored state, so no button stays "pressed". */}
+            <div><label title="Snaps this text box to the frame — not the text alignment on the left">Box align</label>
+              <div className="row" style={{ gap: 4 }}>
+                {(["left", "center", "right"] as const).map((a) => (
+                  <button key={a} className="btn small icon"
+                    title={`Align box to the ${a} of the frame`} aria-label={`Align text box to the ${a} of the frame`}
+                    onClick={() => onChange((l) => {
+                      l.left = a === "left" ? 0 : a === "right" ? canvas[0] - l.width : Math.round((canvas[0] - l.width) / 2);
+                    })}>
+                    <AlignBoxIcon align={a} />
+                  </button>
+                ))}
+              </div>
+            </div>
             <div><label>Direction</label>
-              <select value={layer.direction ?? "rtl"} title="RTL for Farsi/Arabic, LTR for English/Latin text"
-                onChange={(e) => onChange((l) => { l.direction = e.target.value as any; })}>
-                <option value="rtl">RTL (Farsi/Arabic)</option>
-                <option value="ltr">LTR (English/Latin)</option>
-              </select></div>
+              <div className="row" style={{ gap: 4 }}>
+                {(["rtl", "ltr"] as const).map((d) => {
+                  const active = (layer.direction ?? "rtl") === d;
+                  return (
+                    <button key={d} className={"btn small icon" + (active ? " active" : "")}
+                      title={d === "rtl" ? "RTL (Farsi/Arabic)" : "LTR (English/Latin)"}
+                      aria-label={d === "rtl" ? "Right-to-left direction (Farsi/Arabic)" : "Left-to-right direction (English/Latin)"}
+                      aria-pressed={active}
+                      onClick={() => onChange((l) => { l.direction = d; })}>
+                      <DirectionIcon dir={d} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1843,6 +1926,7 @@ const PageInspector: React.FC<{
               onUploadNewFont={(file, family, style) => onUploadNewFont(li, file, family, style)}
               swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch}
               motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
+              canvas={canvas}
               onDelete={() => onDeleteLayer(li)} />
           )).reverse()}
           <p className="hint">Fixed chrome, logo, loader and the subtitle zone are not listed — they are handled separately and don't get page motion.</p>
