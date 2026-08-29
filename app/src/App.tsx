@@ -1287,6 +1287,19 @@ const AlignBoxIcon: React.FC<{ align: "left" | "center" | "right" }> = ({ align 
   );
 };
 
+// Same idea, rotated: guide runs horizontally at the top/middle/bottom edge
+// instead of vertically at left/center/right.
+const AlignBoxIconV: React.FC<{ align: "top" | "middle" | "bottom" }> = ({ align }) => {
+  const guideY = align === "top" ? 1.5 : align === "bottom" ? 13.5 : 7.5;
+  const boxY = align === "top" ? 1.5 : align === "bottom" ? 6.5 : 4;
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+      <line x1="1" y1={guideY} x2="14" y2={guideY} stroke="currentColor" strokeWidth="1" strokeDasharray="1.6,1.4" opacity="0.6" />
+      <rect x="4.5" y={boxY} width="6" height="7" fill="none" stroke="currentColor" strokeWidth="1.4" rx="0.5" />
+    </svg>
+  );
+};
+
 // RTL is just the LTR glyph mirrored — same bars/arrow, flipped, so the pair
 // reads as one flow-direction control rather than two unrelated icons.
 const DirectionIcon: React.FC<{ dir: "ltr" | "rtl" }> = ({ dir }) => (
@@ -1628,6 +1641,7 @@ const ElementMotion: React.FC<{
                 Illustrator's align-to-artboard) — a one-off action, not a
                 stored state, so no button stays "pressed". */}
             <div><label title="Snaps this text box to the frame — not the text alignment on the left">Box align</label>
+              {/* Horizontal (left/center/right, against canvas width) */}
               <div className="row" style={{ gap: 4 }}>
                 {(["left", "center", "right"] as const).map((a) => (
                   <button key={a} className="btn small icon"
@@ -1636,6 +1650,19 @@ const ElementMotion: React.FC<{
                       l.left = a === "left" ? 0 : a === "right" ? canvas[0] - l.width : Math.round((canvas[0] - l.width) / 2);
                     })}>
                     <AlignBoxIcon align={a} />
+                  </button>
+                ))}
+              </div>
+              {/* Vertical (top/middle/bottom, against canvas height) — same
+                  one-off "snap it there" behavior, just the other axis. */}
+              <div className="row" style={{ gap: 4, marginTop: 4 }}>
+                {(["top", "middle", "bottom"] as const).map((a) => (
+                  <button key={a} className="btn small icon"
+                    title={`Align box to the ${a} of the frame`} aria-label={`Align text box to the ${a} of the frame`}
+                    onClick={() => onChange((l) => {
+                      l.top = a === "top" ? 0 : a === "bottom" ? canvas[1] - l.height : Math.round((canvas[1] - l.height) / 2);
+                    })}>
+                    <AlignBoxIconV align={a} />
                   </button>
                 ))}
               </div>
