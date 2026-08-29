@@ -6,6 +6,7 @@ import { ENTRANCE_NAMES, TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, EXIT_NAMES, EASING_
 import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, renderReel,
   listFonts, uploadFontToLibrary, deleteProjectFiles, type IngestResult, type FontEntry,
+  listMotionPresets, saveMotionPreset, deleteMotionPreset, type MotionPresetEntry,
 } from "./api";
 import { Dashboard } from "./Dashboard";
 import { StoryboardStrip } from "./StoryboardStrip";
@@ -268,6 +269,17 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [fonts, setFonts] = React.useState<FontEntry[]>([]);
   const refreshFonts = React.useCallback(() => { listFonts().then(setFonts).catch(() => {}); }, []);
   React.useEffect(() => { refreshFonts(); }, [refreshFonts]);
+  const [motionPresets, setMotionPresets] = React.useState<MotionPresetEntry[]>([]);
+  const refreshMotionPresets = React.useCallback(() => { listMotionPresets().then(setMotionPresets).catch(() => {}); }, []);
+  React.useEffect(() => { refreshMotionPresets(); }, [refreshMotionPresets]);
+  const onSaveMotionPreset = async (name: string, clip: MotionClip) => {
+    try { await saveMotionPreset(name, clip); refreshMotionPresets(); }
+    catch (e: any) { setErr(String(e.message || e)); }
+  };
+  const onDeleteMotionPreset = async (id: string) => {
+    await deleteMotionPreset(id);
+    refreshMotionPresets();
+  };
   const psdInput = React.useRef<HTMLInputElement>(null);
   const logoInput = React.useRef<HTMLInputElement>(null);
   const bgInput = React.useRef<HTMLInputElement>(null);
@@ -960,6 +972,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             onSelectFont={(li, entry) => onSelectFont(sel, li, entry)}
             onUploadNewFont={(li, file, family, style) => onUploadNewFont(sel, li, file, family, style)}
             swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch}
+            motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
           />
         ) : <p className="sub">Select a page.</p>}
       </div>
@@ -1097,7 +1110,7 @@ const LoaderControls: React.FC<{
 type PageT = Project["pages"][number];
 type LayerT = PageT["layers"][number];
 
-type MotionClip = {
+export type MotionClip = {
   entrance: LayerT["entrance"];
   entrance2?: LayerT["entrance2"];
   entrance3?: LayerT["entrance3"];
@@ -1192,7 +1205,10 @@ const ElementMotion: React.FC<{
   swatches?: string[];
   onAddSwatch?: (hex: string) => void;
   onRemoveSwatch?: (hex: string) => void;
-}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onUploadNewFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch }) => {
+  motionPresets?: MotionPresetEntry[];
+  onSaveMotionPreset?: (name: string, clip: MotionClip) => void;
+  onDeleteMotionPreset?: (id: string) => void;
+}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onUploadNewFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset }) => {
   const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
   const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
   const photoInput = React.useRef<HTMLInputElement>(null);
@@ -1200,6 +1216,7 @@ const ElementMotion: React.FC<{
   const [addingFont, setAddingFont] = React.useState(false);
   const [newFamily, setNewFamily] = React.useState("");
   const [newStyle, setNewStyle] = React.useState("Regular");
+  const [selectedPresetId, setSelectedPresetId] = React.useState("");
   const isPhotoSlot = layer.role === "photo";
   const isTextLayer = layer.assetKind === "text";
   const inOptions = isTextLayer ? [...ENTRANCES, ...TEXT_ENTRANCE_NAMES] : ENTRANCES;
@@ -1234,6 +1251,42 @@ const ElementMotion: React.FC<{
           <button className="btn small" title="Delete this layer" onClick={onDelete}>✕</button>
         </div>
       </div>
+
+      {/* Motion presets — same MotionClip shape as Copy/Paste above, but
+          named and saved server-side, so it's reusable in OTHER projects
+          too, not just pasted around within this one session. */}
+      {onSaveMotionPreset && (
+        <div className="row" style={{ gap: 4, marginTop: 4 }}>
+          <button className="btn small" title="Save this element's current motion as a reusable preset"
+            onClick={() => {
+              const name = window.prompt("Name this motion preset:");
+              if (name && name.trim()) onSaveMotionPreset(name.trim(), clipFromLayer(layer));
+            }}>
+            Save motion preset
+          </button>
+          {motionPresets && motionPresets.length > 0 && (
+            <>
+              <select value={selectedPresetId} style={{ flex: 1 }}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setSelectedPresetId(id);
+                  const preset = motionPresets.find((p) => p.id === id);
+                  if (preset) onChange((l) => applyClip(l, preset.clip));
+                }}>
+                <option value="" disabled>Apply saved preset…</option>
+                {motionPresets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <button className="btn small" title="Delete the selected preset" disabled={!selectedPresetId}
+                onClick={() => {
+                  if (selectedPresetId && onDeleteMotionPreset) {
+                    onDeleteMotionPreset(selectedPresetId);
+                    setSelectedPresetId("");
+                  }
+                }}>✕</button>
+            </>
+          )}
+        </div>
+      )}
 
       {isTextLayer && (
         <>
@@ -1452,7 +1505,10 @@ const PageInspector: React.FC<{
   swatches: string[];
   onAddSwatch: (hex: string) => void;
   onRemoveSwatch: (hex: string) => void;
-}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onAddText, onAddPhoto, onDeleteLayer, fonts, onSelectFont, onUploadNewFont, swatches, onAddSwatch, onRemoveSwatch }) => {
+  motionPresets: MotionPresetEntry[];
+  onSaveMotionPreset: (name: string, clip: MotionClip) => void;
+  onDeleteMotionPreset: (id: string) => void;
+}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onAddText, onAddPhoto, onDeleteLayer, fonts, onSelectFont, onUploadNewFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset }) => {
   return (
     <div>
       <h1 title={page.id}>Page: {page.name ?? page.id}</h1>
@@ -1525,6 +1581,7 @@ const PageInspector: React.FC<{
           onSelectFont={(entry) => onSelectFont(li, entry)}
           onUploadNewFont={(file, family, style) => onUploadNewFont(li, file, family, style)}
           swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch}
+          motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
           onDelete={() => onDeleteLayer(li)} />
       )).reverse()}
       <p className="hint">Fixed chrome, logo, loader and the subtitle zone are not listed — they are handled separately and don't get page motion.</p>

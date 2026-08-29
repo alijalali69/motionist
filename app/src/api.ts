@@ -127,6 +127,39 @@ export async function deleteFont(id: string): Promise<void> {
   await fetch(`/api/fonts/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+// --- Global motion preset library: a named IN/OUT effect combo (the same
+// MotionClip shape the in-memory "Copy/Paste motion" feature already uses),
+// saved once and reusable across every project. `MotionClip` is a type-only
+// import (erased at build time) so this doesn't create a real runtime
+// circular dependency with App.tsx, which imports plenty from this file.
+import type { MotionClip } from "./App";
+
+export type MotionPresetEntry = {
+  id: string;
+  name: string;
+  clip: MotionClip;
+  createdAt: string;
+};
+
+export async function listMotionPresets(): Promise<MotionPresetEntry[]> {
+  const r = await fetch("/api/motion-presets");
+  return r.json();
+}
+
+export async function saveMotionPreset(name: string, clip: MotionClip): Promise<MotionPresetEntry> {
+  const r = await fetch("/api/motion-presets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, clip }),
+  });
+  if (!r.ok) throw new Error((await r.json()).error || "saving preset failed");
+  return r.json();
+}
+
+export async function deleteMotionPreset(id: string): Promise<void> {
+  await fetch(`/api/motion-presets/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 // Cleans up an uploaded asset (or a whole PSD/SVG-extracted page folder)
 // once nothing references it any more — a deleted layer, a deleted page, or
 // the old file an upload just replaced. Fire-and-forget from the caller's

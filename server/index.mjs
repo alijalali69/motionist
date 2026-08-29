@@ -178,6 +178,49 @@ app.delete("/api/fonts/:id", (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Global motion preset library: a named IN/OUT effect combo (the same
+// shape the app's in-memory "Copy/Paste motion" clip already uses), saved
+// once and reusable across every project — mirrors the font library above,
+// just with no file to store since a preset is plain JSON.
+const MOTION_PRESETS_JSON = path.join(ROOT, "data", "motion-presets.json");
+
+function readMotionPresets() {
+  if (!fs.existsSync(MOTION_PRESETS_JSON)) return [];
+  try { return JSON.parse(fs.readFileSync(MOTION_PRESETS_JSON, "utf-8")); } catch { return []; }
+}
+function writeMotionPresets(list) {
+  fs.writeFileSync(MOTION_PRESETS_JSON, JSON.stringify(list, null, 2), "utf-8");
+}
+
+app.get("/api/motion-presets", (_req, res) => res.json(readMotionPresets()));
+
+app.post("/api/motion-presets", (req, res) => {
+  try {
+    const name = (req.body?.name || "").trim();
+    if (!name) return res.status(400).json({ error: "name required" });
+    if (!req.body?.clip || typeof req.body.clip !== "object") {
+      return res.status(400).json({ error: "clip required" });
+    }
+    const entry = {
+      id: "motion_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name,
+      clip: req.body.clip,
+      createdAt: new Date().toISOString(),
+    };
+    const list = readMotionPresets();
+    list.push(entry);
+    writeMotionPresets(list);
+    res.json(entry);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.delete("/api/motion-presets/:id", (req, res) => {
+  writeMotionPresets(readMotionPresets().filter((p) => p.id !== req.params.id));
+  res.json({ ok: true });
+});
+
 // --- Dashboard: list / create / delete projects -------------------------------
 app.get("/api/projects", (_req, res) => {
   const files = fs.readdirSync(DATA_DIR).filter((f) => f.endsWith(".json"));
