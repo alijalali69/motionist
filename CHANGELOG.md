@@ -81,4 +81,62 @@ First tagged version. Everything up to here, in one place:
 
 ---
 
+## v1.3.0 — 2026-08-30
+
+**DaVinci Resolve integration**
+- New "Motionist Timeline Text" panel: a focused text-animation editor for
+  existing Text+/Text3D/MultiText clips already on the Resolve timeline —
+  edit/animate, render, drop back in place, non-destructive.
+- `install_resolve_plugin.bat`: one-click install for either Resolve plugin.
+- Fixed a real title-readback bug in that panel (`GetAttrs()` was called
+  with an argument the API doesn't take, and MultiText titles weren't
+  checked under their actual nested input) — a real title always came back
+  empty instead of pre-filling the field.
+- Alpha export switched from VP8/WebM to ProRes 4444 (.mov) — WebM alpha
+  decodes badly in Resolve, showing as a colored glow/halo around soft
+  edges; ProRes is what NLEs actually expect for alpha.
+
+**Motion**
+- Professional easing: curated default curves per entrance/exit effect
+  (no more dead-zone-then-snap defaults), plus a per-layer IN/OUT easing
+  picker with 12 named curves and an explicit "(auto)" option.
+- Combine up to 3 entrance and 3 exit effects on one layer (FX1/FX2/FX3,
+  "+" to add, capped at 3) — opacity/scale/position/blur layer together
+  without compounding fades.
+- Duration fields got a real "Auto" option (Fast/Normal/Slow presets + exact
+  seconds), instead of only resetting to auto via the easing pickers.
+- Per-layer text direction (RTL for Farsi/Arabic, LTR for English/Latin) —
+  no more hardcoded RTL-only rendering.
+- Saveable, named motion presets — save a layer's full motion + style as a
+  reusable preset, apply it to any layer in any project, inline name field
+  and a visible list (not a hidden dropdown).
+- Copy/Paste (and presets) now carry font/size/color/align/direction and
+  photo fit/motion/pan/zoom along with entrance/exit motion — previously
+  motion-only, silently dropping the rest of a layer's style.
+
+**Editor UI**
+- Saved color swatches, shared across every color picker in a project.
+- Layer cards collapse/expand (click header) and rename inline
+  (double-click the name).
+- Page inspector split into Page / Elements tabs; selected-element panel
+  grouped into Text / Effects / Keyframes boxes.
+- Section titles + separators made visibly distinct; Global Assets and
+  Export boxed to match the Loader section's style.
+- Storyboard strip only shows once a project has more than 2 pages.
+- Left/right panels are resizable (drag the bars next to the preview).
+- Dark themed scrollbars everywhere, replacing the browser's stock white one.
+- Loader now defaults to off on new projects (still opt-in, per project).
+- "out at" gets an explicit reset-to-auto button (clearing a number field
+  by hand wasn't reliable).
+
+**Fixes**
+- OUT effect's FX1 was permanently locked at "none" — a real bug (the
+  "disable while combining" flag was wrongly applied to FX1 itself too).
+- `zoomOut`/`shrinkOut` exits looked frozen — their default easing held
+  nearly still for ~85% of the duration then snapped; re-tuned.
+- Element handle outlines/labels now fully hide when inactive instead of
+  lingering faintly.
+
+---
+
 <!-- Add new entries above this line as versions ship. -->
