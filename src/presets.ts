@@ -218,7 +218,11 @@ const DEFAULT_ENTRANCE_EASING: Partial<Record<EntranceName, EasingName>> = {
   slideRight: "easeOutCubic", slideLeft: "easeOutCubic",
   slideUp: "easeOutCubic", slideDown: "easeOutCubic",
   pop: "spring", growIn: "spring", dropIn: "spring",
-  zoomIn: "easeOutBack", zoomOut: "easeOutExpo",
+  // NOT easeOutExpo here — measured it live: that curve is genuinely
+  // correct for its name, but it means "snap to ~done almost instantly,
+  // then sit still for the rest of the duration" — over a normal ~1s
+  // entrance that reads as "barely animates," not smooth or punchy.
+  zoomIn: "easeOutBack", zoomOut: "easeOutCubic",
   riseIn: "easeOutCubic", floatIn: "easeOutCubic",
   blurIn: "easeInOut",
   rotateIn: "easeOutBack",
@@ -236,7 +240,10 @@ const DEFAULT_EXIT_EASING: Partial<Record<ExitName, EasingName>> = {
   fadeOut: "easeIn",
   slideOutLeft: "easeInCubic", slideOutRight: "easeInCubic",
   slideOutUp: "easeInCubic", slideOutDown: "easeInCubic",
-  shrinkOut: "easeInExpo", zoomOut: "easeInExpo", popOut: "easeIn",
+  // NOT easeInExpo — measured it live (see the entrance table's zoomOut
+  // comment): near-zero visible motion for ~85% of the duration, then a
+  // sudden snap in the last couple frames. Reads as broken, not gradual.
+  shrinkOut: "easeInCubic", zoomOut: "easeInCubic", popOut: "easeIn",
   blurOut: "easeIn",
   dropOut: "easeInCubic", riseOut: "easeInCubic",
   rotateOut: "easeInCubic",
