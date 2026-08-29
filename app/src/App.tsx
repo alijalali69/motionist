@@ -1108,7 +1108,10 @@ const FxSlots: React.FC<{
         {([0, 1, 2] as const).slice(0, shown).map((i) => (
           <div key={i} className="row" style={{ gap: 2, alignItems: "center" }}>
             <span className="tag" style={{ fontSize: 10, padding: "1px 4px" }}>FX{i + 1}</span>
-            <select value={values[i]} disabled={disabled}
+            {/* `disabled` means "can't combine more effects yet" (e.g. OUT's
+                FX1 is still "none") — it must never lock FX1 itself, or
+                there'd be no way to ever set it away from "none" at all. */}
+            <select value={values[i]} disabled={i > 0 && disabled}
               onChange={(e) => onChangeSlot(i, e.target.value)}>
               {options.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
