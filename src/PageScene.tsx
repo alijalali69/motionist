@@ -5,15 +5,13 @@ import {
   OffthreadVideo,
   staticFile,
   spring,
-  interpolate,
-  Easing,
   delayRender,
   continueRender,
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
 import { Gif } from "@remotion/gif";
-import { entranceMotion, entranceSpring, exitMotion, ambientMotion } from "./presets";
+import { entranceMotion, entranceProgress, exitMotion, exitProgress, ambientMotion } from "./presets";
 import type { Page, ContentLayer } from "./types";
 
 export type { Page } from "./types";
@@ -60,15 +58,10 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
 
   let m;
   if (inExitPhase) {
-    const q = interpolate(frame, [outStart, outStart + outDuration], [0, 1], {
-      extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.in(Easing.ease),
-    });
+    const q = exitProgress(exit, layer.exitEasing, frame, outStart, outDuration);
     m = exitMotion(exit, q);
   } else if (!isStagger) {
-    const inP = spring({
-      frame: frame - layer.delay, fps,
-      config: entranceSpring(layer.entrance), durationInFrames: inDuration,
-    });
+    const inP = entranceProgress(layer.entrance, layer.entranceEasing, frame, fps, layer.delay, inDuration);
     m = entranceMotion(layer.entrance, inP);
   } else {
     m = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, clipPath: undefined as string | undefined };
@@ -142,21 +135,13 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
   const exit = layer.exit ?? "none";
   const outStart = layer.outDelay ?? (pageDuration - outDuration);
 
-  // Entrance progress (spring). Exit progress (eased) over the page's last frames.
-  const inP = spring({
-    frame: frame - layer.delay,
-    fps,
-    config: entranceSpring(layer.entrance),
-    durationInFrames: inDuration,
-  });
+  // Entrance progress (spring, or a curated/overridden bezier curve — see
+  // presets.ts). Exit progress (same, mirrored) over the page's last frames.
+  const inP = entranceProgress(layer.entrance, layer.entranceEasing, frame, fps, layer.delay, inDuration);
 
   let m;
   if (exit !== "none" && frame >= outStart) {
-    const q = interpolate(frame, [outStart, outStart + outDuration], [0, 1], {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-      easing: Easing.in(Easing.ease),
-    });
+    const q = exitProgress(exit, layer.exitEasing, frame, outStart, outDuration);
     m = exitMotion(exit, q);
   } else {
     m = entranceMotion(layer.entrance, inP);

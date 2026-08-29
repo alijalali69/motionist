@@ -1,6 +1,6 @@
 // Shared reel types. The whole reel is described by a Project object, which the
 // app edits in memory and passes to the Remotion Player (and to render via props).
-import type { EntranceName, AmbientName, ExitName } from "./presets";
+import type { EntranceName, AmbientName, ExitName, EasingName } from "./presets";
 
 export type Box = { left: number; top: number; width: number; height: number };
 
@@ -18,6 +18,7 @@ export type ContentLayer = {
   entrance: EntranceName;
   delay: number;         // in-delay (frames) before the entrance starts
   inDuration?: number;   // entrance length (frames), default 26
+  entranceEasing?: EasingName; // unset = use the curated default for this entrance (see presets.ts)
   // OUT effect — by default plays over the last outDuration frames of the
   // page (anchored to the page's END); set outDelay to instead anchor it to
   // an exact time from the page's START (e.g. "exit at 4.5s"), independent
@@ -25,6 +26,7 @@ export type ContentLayer = {
   exit?: ExitName;       // default "none"
   outDuration?: number;  // exit length (frames), default 24
   outDelay?: number;     // exit START (frames from page start) — unset = old "anchored to page end" behavior
+  exitEasing?: EasingName; // unset = use the curated default for this exit (see presets.ts)
   // Optional uploaded replacement asset (BG/Title "like the logo"). When kind is
   // video/gif/lottie the layer plays that asset in place of the static image,
   // keeping its box + motion. Absent => render `file` as a still image.

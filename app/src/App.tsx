@@ -2,7 +2,7 @@ import React from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { Reel } from "../../src/Reel";
 import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
-import { ENTRANCE_NAMES, TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, EXIT_NAMES, TRANSITIONS } from "../../src/presets";
+import { ENTRANCE_NAMES, TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, EXIT_NAMES, EASING_NAMES, TRANSITIONS } from "../../src/presets";
 import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, renderReel,
   listFonts, uploadFontToLibrary, deleteProjectFiles, type IngestResult, type FontEntry,
@@ -15,6 +15,7 @@ import { SafeZoneOverlay } from "./SafeZoneOverlay";
 
 const ENTRANCES = ENTRANCE_NAMES;
 const AMBIENTS = AMBIENT_NAMES;
+const EASINGS = EASING_NAMES;
 
 function clone<T>(x: T): T {
   return JSON.parse(JSON.stringify(x));
@@ -1053,20 +1054,27 @@ type MotionClip = {
   entrance: LayerT["entrance"];
   delay: number;
   inDuration?: number;
+  entranceEasing?: LayerT["entranceEasing"];
   exit?: LayerT["exit"];
   outDuration?: number;
+  exitEasing?: LayerT["exitEasing"];
 };
 
 function clipFromLayer(l: LayerT): MotionClip {
-  return { entrance: l.entrance, delay: l.delay, inDuration: l.inDuration, exit: l.exit, outDuration: l.outDuration };
+  return {
+    entrance: l.entrance, delay: l.delay, inDuration: l.inDuration, entranceEasing: l.entranceEasing,
+    exit: l.exit, outDuration: l.outDuration, exitEasing: l.exitEasing,
+  };
 }
 
 function applyClip(l: LayerT, clip: MotionClip) {
   l.entrance = clip.entrance;
   l.delay = clip.delay;
   l.inDuration = clip.inDuration;
+  l.entranceEasing = clip.entranceEasing;
   l.exit = clip.exit;
   l.outDuration = clip.outDuration;
+  l.exitEasing = clip.exitEasing;
 }
 
 const ElementMotion: React.FC<{
@@ -1251,6 +1259,21 @@ const ElementMotion: React.FC<{
           <select value={layer.exit ?? "none"}
             onChange={(e) => onChange((l) => { l.exit = e.target.value as any; })}>
             {EXIT_NAMES.map((en) => <option key={en} value={en}>{en}</option>)}
+          </select></div>
+      </div>
+      <div className="grid2 mini" style={{ marginTop: 4 }}>
+        <div><label>IN easing</label>
+          <select value={layer.entranceEasing ?? ""} title="Auto = a curve chosen to fit the IN effect"
+            onChange={(e) => onChange((l) => { l.entranceEasing = e.target.value === "" ? undefined : e.target.value as any; })}>
+            <option value="">(auto)</option>
+            {EASINGS.map((en) => <option key={en} value={en}>{en}</option>)}
+          </select></div>
+        <div><label>OUT easing</label>
+          <select value={layer.exitEasing ?? ""} title="Auto = a curve chosen to fit the OUT effect"
+            disabled={(layer.exit ?? "none") === "none"}
+            onChange={(e) => onChange((l) => { l.exitEasing = e.target.value === "" ? undefined : e.target.value as any; })}>
+            <option value="">(auto)</option>
+            {EASINGS.map((en) => <option key={en} value={en}>{en}</option>)}
           </select></div>
       </div>
       <div className="grid2 mini" style={{ marginTop: 4 }}>

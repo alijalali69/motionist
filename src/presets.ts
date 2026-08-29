@@ -1,6 +1,6 @@
 // Motion + transition preset library. This is the curated "menu" the app offers.
 // Entrances are pure functions of a 0..1 progress; ambient is a function of frame.
-import { interpolate } from "remotion";
+import { interpolate, spring, Easing } from "remotion";
 
 export type EntranceName =
   | "none"
@@ -126,6 +126,127 @@ export function entranceSpring(name: EntranceName) {
   return bouncy
     ? { damping: 12, mass: 0.85, stiffness: 130 }
     : { damping: 200, mass: 0.7 };
+}
+
+// --- Easing -----------------------------------------------------------
+// "spring" is physics (Remotion's real spring() simulator, tuned per-effect
+// above — bouncy ones overshoot). Everything else is a named cubic-bezier
+// curve, using the actual industry-standard control points (the same ones
+// CSS/Framer Motion/GSAP ship as their own named curves — easings.net is
+// the common reference), not a generic one-size-fits-all "ease" for
+// everything. A layer can override its effect's default via
+// entranceEasing/exitEasing; leaving it unset uses the curated default
+// below for whichever entrance/exit it's using.
+export type EasingName =
+  | "spring"
+  | "linear"
+  | "ease"
+  | "easeIn"
+  | "easeOut"
+  | "easeInOut"
+  | "easeOutCubic"
+  | "easeInCubic"
+  | "easeOutExpo"
+  | "easeInExpo"
+  | "easeOutBack"
+  | "easeInBack";
+
+export const EASING_NAMES: EasingName[] = [
+  "spring", "linear", "ease", "easeIn", "easeOut", "easeInOut",
+  "easeOutCubic", "easeInCubic", "easeOutExpo", "easeInExpo",
+  "easeOutBack", "easeInBack",
+];
+
+function easingFn(name: Exclude<EasingName, "spring">): (t: number) => number {
+  switch (name) {
+    case "linear": return Easing.linear;
+    case "ease": return Easing.bezier(0.25, 0.1, 0.25, 1.0);
+    case "easeIn": return Easing.bezier(0.42, 0, 1.0, 1.0);
+    case "easeOut": return Easing.bezier(0, 0, 0.58, 1.0);
+    case "easeInOut": return Easing.bezier(0.42, 0, 0.58, 1.0);
+    case "easeOutCubic": return Easing.bezier(0.215, 0.61, 0.355, 1);
+    case "easeInCubic": return Easing.bezier(0.55, 0.055, 0.675, 0.19);
+    case "easeOutExpo": return Easing.bezier(0.19, 1, 0.22, 1);
+    case "easeInExpo": return Easing.bezier(0.95, 0.05, 0.795, 0.035);
+    case "easeOutBack": return Easing.bezier(0.34, 1.56, 0.64, 1); // slight overshoot, then settles
+    case "easeInBack": return Easing.bezier(0.36, 0, 0.66, -0.56); // slight pull-back before leaving
+    default: return Easing.bezier(0.25, 0.1, 0.25, 1.0);
+  }
+}
+
+// Crafted per motion character rather than one blanket curve for every
+// entrance — a punchy zoom wants overshoot, a slide wants a clean
+// decelerate, a mask wipe reads best fairly linear-ish (ease-in-out).
+const DEFAULT_ENTRANCE_EASING: Partial<Record<EntranceName, EasingName>> = {
+  fade: "easeInOut",
+  slideRight: "easeOutCubic", slideLeft: "easeOutCubic",
+  slideUp: "easeOutCubic", slideDown: "easeOutCubic",
+  pop: "spring", growIn: "spring", dropIn: "spring",
+  zoomIn: "easeOutBack", zoomOut: "easeOutExpo",
+  riseIn: "easeOutCubic", floatIn: "easeOutCubic",
+  blurIn: "easeInOut",
+  rotateIn: "easeOutBack",
+  flipIn: "easeInOut",
+  wipeLeftToRight: "easeInOut", wipeRightToLeft: "easeInOut",
+  wipeTopToBottom: "easeInOut", wipeBottomToTop: "easeInOut",
+  circleReveal: "easeInOut",
+};
+
+// Exits mirror the entrance table's intent but reversed: things arriving
+// decelerate INTO place (ease-out), things leaving accelerate AWAY
+// (ease-in) — the standard motion-design convention, now actually applied
+// per-effect instead of every exit sharing one identical curve.
+const DEFAULT_EXIT_EASING: Partial<Record<ExitName, EasingName>> = {
+  fadeOut: "easeIn",
+  slideOutLeft: "easeInCubic", slideOutRight: "easeInCubic",
+  slideOutUp: "easeInCubic", slideOutDown: "easeInCubic",
+  shrinkOut: "easeInExpo", zoomOut: "easeInExpo", popOut: "easeIn",
+  blurOut: "easeIn",
+  dropOut: "easeInCubic", riseOut: "easeInCubic",
+  rotateOut: "easeInCubic",
+  flipOut: "easeInOut",
+  wipeOutLeftToRight: "easeInOut", wipeOutRightToLeft: "easeInOut",
+  wipeOutTopToBottom: "easeInOut", wipeOutBottomToTop: "easeInOut",
+  circleHide: "easeInOut",
+};
+
+// 0..1 entrance progress, driven by whichever easing applies — physics
+// (spring) or a bezier curve. `easingOverride` is the layer's own explicit
+// choice (from the picker); leave it undefined to use the curated default
+// for this entrance.
+export function entranceProgress(
+  name: EntranceName,
+  easingOverride: EasingName | undefined,
+  frame: number,
+  fps: number,
+  delay: number,
+  inDuration: number
+): number {
+  const easing = easingOverride ?? DEFAULT_ENTRANCE_EASING[name] ?? "ease";
+  if (easing === "spring") {
+    return spring({ frame: frame - delay, fps, config: entranceSpring(name), durationInFrames: inDuration });
+  }
+  return interpolate(frame - delay, [0, inDuration], [0, 1], {
+    extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: easingFn(easing),
+  });
+}
+
+// 0..1 exit progress (0 = fully in / at rest, 1 = fully gone). "spring" as
+// an exit choice falls back to a clean ease-in — a settle-to-rest simulator
+// run backwards doesn't read as a natural "leaving" motion, so exits don't
+// offer real spring physics, only the curated/overridden bezier curve.
+export function exitProgress(
+  name: ExitName,
+  easingOverride: EasingName | undefined,
+  frame: number,
+  outStart: number,
+  outDuration: number
+): number {
+  const resolved = easingOverride ?? DEFAULT_EXIT_EASING[name] ?? "easeIn";
+  const easing = resolved === "spring" ? "easeIn" : resolved;
+  return interpolate(frame, [outStart, outStart + outDuration], [0, 1], {
+    extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: easingFn(easing),
+  });
 }
 
 // p = spring progress 0..1 for this layer's entrance.
