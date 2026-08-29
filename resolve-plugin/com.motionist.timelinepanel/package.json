@@ -1,0 +1,6 @@
+{
+  "name": "motionist-timeline-plugin",
+  "version": "1.0.0",
+  "description": "Reads/writes Resolve's timeline directly — animate a clip's text with Motionist, drop the render onto a new track at the same spot.",
+  "main": "main.js"
+}

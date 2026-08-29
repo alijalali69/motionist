@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Motionist — Timeline Text</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 16px; background: #1c1c1e; color: #e8e8ea;
+    font: 13px/1.4 -apple-system, "Segoe UI", Arial, sans-serif;
+  }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  p.hint { color: #9a9a9e; margin: 0 0 16px; }
+  label { display: block; margin: 12px 0 4px; color: #c6c6ca; }
+  select, textarea, input[type="text"], input[type="number"] {
+    width: 100%; box-sizing: border-box; background: #2c2c2e; color: #e8e8ea;
+    border: 1px solid #48484a; border-radius: 6px; padding: 6px 8px; font: inherit;
+  }
+  textarea { resize: vertical; min-height: 60px; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; min-width: 0; }
+  input[type="color"] { padding: 2px; height: 32px; }
+  button {
+    background: #3a3a3c; color: #e8e8ea; border: 1px solid #55555a; border-radius: 6px;
+    padding: 8px 12px; font: inherit; cursor: pointer;
+  }
+  button:hover { background: #48484a; }
+  button.primary { background: #d9694f; border-color: #d9694f; color: #fff; font-weight: 600; }
+  button.primary:hover { background: #c65a41; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .meta { color: #9a9a9e; font-size: 12px; margin-top: 4px; }
+  #status { margin-top: 14px; padding: 8px 10px; border-radius: 6px; font-size: 12px; display: none; }
+  #status.ok { display: block; background: #1f3a2a; color: #8fd6a8; }
+  #status.err { display: block; background: #3a1f1f; color: #e29999; }
+  #status.busy { display: block; background: #2c2c2e; color: #c6c6ca; }
+</style>
+</head>
+<body>
+  <h1>Motionist — Timeline Text</h1>
+  <p class="hint">Pick a clip, edit its text, render — lands on a new "Motionist Overlay" track at the same spot. Original clip is never touched.</p>
+
+  <div class="toolbar">
+    <label style="margin:0">Clip</label>
+    <button id="rescan">↻ Rescan timeline</button>
+  </div>
+  <select id="clipPicker"><option>Scanning…</option></select>
+  <div class="meta" id="clipMeta"></div>
+
+  <label>Text</label>
+  <textarea id="text" placeholder="Type the text to animate…"></textarea>
+
+  <div class="row">
+    <div>
+      <label>Font family</label>
+      <input type="text" id="fontFamily" value="Arial, sans-serif">
+    </div>
+    <div>
+      <label>Size (px)</label>
+      <input type="number" id="fontSize" value="64" min="8">
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>Color</label>
+      <input type="color" id="textColor" value="#ffffff">
+    </div>
+    <div>
+      <label>Align</label>
+      <select id="textAlign">
+        <option value="left" selected>left</option>
+        <option value="center">center</option>
+        <option value="right">right</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>Entrance</label>
+      <select id="entrance"></select>
+    </div>
+    <div>
+      <label>Exit</label>
+      <select id="exit"></select>
+    </div>
+  </div>
+
+  <button class="primary" id="render" style="width:100%; margin-top:16px;" disabled>Render &amp; add above</button>
+  <div id="status"></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

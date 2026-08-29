@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BlackmagicDesign>
+    <Plugin>
+        <Id>com.motionist.timelinepanel</Id>
+        <Name>Motionist Timeline Text</Name>
+        <Version>1.0</Version>
+        <Description>Pick a clip on your timeline, animate its text with Motionist's presets, and drop the result onto a new track at the same spot — original clip untouched.</Description>
+        <FilePath>main.js</FilePath>
+    </Plugin>
+</BlackmagicDesign>
