@@ -394,17 +394,11 @@ input.project-name-input::placeholder { color: var(--muted); font-weight: 600; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent2); background-clip: padding-box; }
 ::-webkit-scrollbar-corner { background: var(--panel); }
 
-/* --- Number input spin arrows — recolored toward the app's accent instead of
-   stock OS-gray, so they read as part of this UI. Chromium-only (this app's
-   target browser); Firefox's plain up/down arrows are left as-is, there's no
-   equivalent hook for them. */
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  filter: invert(36%) sepia(54%) saturate(1508%) hue-rotate(333deg) brightness(93%) contrast(92%);
-  opacity: 0.8;
-  cursor: pointer;
-}
-input[type="number"]::-webkit-inner-spin-button:hover,
-input[type="number"]::-webkit-outer-spin-button:hover {
-  opacity: 1;
-}
+/* Number input spin arrows are left at Chrome's plain default. A CSS filter
+   was tried to recolor them toward the app's accent, but Chrome/Windows
+   paints an opaque light box behind the arrows as part of the native widget
+   itself — not a CSS `background` — so the filter recolored that whole box
+   solid orange instead of just tinting the two arrow glyphs. Getting real
+   "just the arrows, no box" requires replacing the native control with a
+   custom-built stepper (its own component, wired to every numeric field) —
+   parked as a follow-up, not done here. */
