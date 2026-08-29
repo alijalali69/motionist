@@ -266,6 +266,36 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [motionClip, setMotionClip] = React.useState<MotionClip | null>(null);
   const [showSafeZone, setShowSafeZone] = React.useState(false);
   const [transparentExport, setTransparentExport] = React.useState(false);
+  // Left/right panel widths — draggable via the resizer bars between them and
+  // the center preview, remembered across reloads (per-browser, not part of
+  // the project). Center always takes whatever's left (min 320px so the
+  // player never gets crushed to nothing by two over-widened side panels).
+  const [leftW, setLeftW] = React.useState(() => {
+    const v = Number(localStorage.getItem("motionist:leftW"));
+    return v >= 200 && v <= 640 ? v : 280;
+  });
+  const [rightW, setRightW] = React.useState(() => {
+    const v = Number(localStorage.getItem("motionist:rightW"));
+    return v >= 280 && v <= 800 ? v : 440;
+  });
+  React.useEffect(() => { localStorage.setItem("motionist:leftW", String(leftW)); }, [leftW]);
+  React.useEffect(() => { localStorage.setItem("motionist:rightW", String(rightW)); }, [rightW]);
+  const startPanelDrag = (side: "left" | "right") => (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = side === "left" ? leftW : rightW;
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      if (side === "left") setLeftW(Math.max(200, Math.min(640, startW + dx)));
+      else setRightW(Math.max(280, Math.min(800, startW - dx)));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
   const [fonts, setFonts] = React.useState<FontEntry[]>([]);
   const refreshFonts = React.useCallback(() => { listFonts().then(setFonts).catch(() => {}); }, []);
   React.useEffect(() => { refreshFonts(); }, [refreshFonts]);
@@ -749,7 +779,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   return (
     <div className="app">
       {/* LEFT: project + pages */}
-      <div className="col">
+      <div className="col" style={{ width: leftW, flex: `0 0 ${leftW}px` }}>
         <div className="editor-header">
           <button className="btn back-btn" onClick={onBack}>← Dashboard</button>
           <div className="row" style={{ gap: 4 }}>
@@ -868,12 +898,12 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           <label className="row" style={{ gap: 6, alignItems: "center", marginBottom: 8 }}>
             <input type="checkbox" checked={transparentExport}
               onChange={(e) => setTransparentExport(e.target.checked)} />
-            Transparent background (alpha export, .webm)
+            Transparent background (alpha export, ProRes .mov — for Resolve/editors)
           </label>
           <div className="row" style={{ gap: 8 }}>
             <button className="btn" onClick={onSave} disabled={!project}>Save</button>
             <button className="btn primary" onClick={onRender} disabled={!project}>
-              {transparentExport ? "Render WebM (alpha)" : "Render MP4"}
+              {transparentExport ? "Render ProRes (alpha)" : "Render MP4"}
             </button>
           </div>
           {renderUrl && <p className="hint">Done → <a className="dl" href={renderUrl} target="_blank" rel="noreferrer">download reel</a></p>}
@@ -887,8 +917,10 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         </div>
       </div>
 
+      <div className="panel-resizer" onMouseDown={startPanelDrag("left")} title="Drag to resize" />
+
       {/* CENTER: live preview */}
-      <div className="center">
+      <div className="center" style={{ flex: "1 1 auto", minWidth: 320 }}>
         {/* A strip showing 1-2 thumbnails isn't a storyboard, it's noise —
             only earns its space once there's an actual sequence to scan. */}
         {project && project.pages.length > 2 && (
@@ -973,8 +1005,10 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         )}
       </div>
 
+      <div className="panel-resizer" onMouseDown={startPanelDrag("right")} title="Drag to resize" />
+
       {/* RIGHT: page inspector */}
-      <div className="col">
+      <div className="col" style={{ width: rightW, flex: `0 0 ${rightW}px` }}>
         {project && project.pages[sel] ? (
           <PageInspector
             key={project.pages[sel].id}
@@ -1129,6 +1163,11 @@ const LoaderControls: React.FC<{
 type PageT = Project["pages"][number];
 type LayerT = PageT["layers"][number];
 
+// Everything about a layer that's worth copying to another layer — motion,
+// timing AND style (font/size/color/align/direction/photo crop) — except the
+// literal `text` string and structural fields (box, role, file, asset kind),
+// which stay tied to the layer they came from. Also doubles as the shape
+// saved server-side by motion presets.
 export type MotionClip = {
   entrance: LayerT["entrance"];
   entrance2?: LayerT["entrance2"];
@@ -1141,6 +1180,19 @@ export type MotionClip = {
   exit3?: LayerT["exit3"];
   outDuration?: number;
   exitEasing?: LayerT["exitEasing"];
+  // Text style — never the `text` content itself.
+  fontFamily?: LayerT["fontFamily"];
+  fontFile?: LayerT["fontFile"];
+  fontSize?: LayerT["fontSize"];
+  textColor?: LayerT["textColor"];
+  textAlign?: LayerT["textAlign"];
+  direction?: LayerT["direction"];
+  // Photo/video crop + in-frame motion.
+  fit?: LayerT["fit"];
+  photoMotion?: LayerT["photoMotion"];
+  photoPanX?: LayerT["photoPanX"];
+  photoPanY?: LayerT["photoPanY"];
+  photoZoom?: LayerT["photoZoom"];
 };
 
 function clipFromLayer(l: LayerT): MotionClip {
@@ -1149,6 +1201,10 @@ function clipFromLayer(l: LayerT): MotionClip {
     delay: l.delay, inDuration: l.inDuration, entranceEasing: l.entranceEasing,
     exit: l.exit, exit2: l.exit2, exit3: l.exit3,
     outDuration: l.outDuration, exitEasing: l.exitEasing,
+    fontFamily: l.fontFamily, fontFile: l.fontFile, fontSize: l.fontSize,
+    textColor: l.textColor, textAlign: l.textAlign, direction: l.direction,
+    fit: l.fit, photoMotion: l.photoMotion,
+    photoPanX: l.photoPanX, photoPanY: l.photoPanY, photoZoom: l.photoZoom,
   };
 }
 
@@ -1164,6 +1220,20 @@ function applyClip(l: LayerT, clip: MotionClip) {
   l.exit3 = clip.exit3;
   l.outDuration = clip.outDuration;
   l.exitEasing = clip.exitEasing;
+  // Style — skipped entirely for a field the clip never set (undefined),
+  // so pasting an older clip that predates these fields is a no-op for them
+  // instead of wiping the target layer's existing style back to defaults.
+  if (clip.fontFamily !== undefined) l.fontFamily = clip.fontFamily;
+  if (clip.fontFile !== undefined) l.fontFile = clip.fontFile;
+  if (clip.fontSize !== undefined) l.fontSize = clip.fontSize;
+  if (clip.textColor !== undefined) l.textColor = clip.textColor;
+  if (clip.textAlign !== undefined) l.textAlign = clip.textAlign;
+  if (clip.direction !== undefined) l.direction = clip.direction;
+  if (clip.fit !== undefined) l.fit = clip.fit;
+  if (clip.photoMotion !== undefined) l.photoMotion = clip.photoMotion;
+  if (clip.photoPanX !== undefined) l.photoPanX = clip.photoPanX;
+  if (clip.photoPanY !== undefined) l.photoPanY = clip.photoPanY;
+  if (clip.photoZoom !== undefined) l.photoZoom = clip.photoZoom;
 }
 
 // Up to 3 combined effects on one IN or OUT direction — FX1 is always shown,
@@ -1272,7 +1342,15 @@ const ElementMotion: React.FC<{
   const [addingFont, setAddingFont] = React.useState(false);
   const [newFamily, setNewFamily] = React.useState("");
   const [newStyle, setNewStyle] = React.useState("Regular");
-  const [selectedPresetId, setSelectedPresetId] = React.useState("");
+  const [savingPreset, setSavingPreset] = React.useState(false);
+  const [presetName, setPresetName] = React.useState("");
+  const commitSavePreset = () => {
+    const name = presetName.trim();
+    if (!name || !onSaveMotionPreset) return;
+    onSaveMotionPreset(name, clipFromLayer(layer));
+    setSavingPreset(false);
+    setPresetName("");
+  };
   // Collapsed by default is a trap (fields silently hidden on load, easy to
   // think they vanished) — starts expanded, same as before this existed;
   // collapsing is something the user opts into per layer.
@@ -1337,9 +1415,9 @@ const ElementMotion: React.FC<{
             disabled={!canMoveUp} onClick={() => onMove?.(1)}>↑</button>
           <button className="btn small" title="Send backward (behind the layer below)"
             disabled={!canMoveDown} onClick={() => onMove?.(-1)}>↓</button>
-          <button className="btn small" title="Copy this element's motion"
+          <button className="btn small" title="Copy this element's motion + style (not its text)"
             onClick={() => onCopy(clipFromLayer(layer))}>Copy</button>
-          <button className="btn small" title="Paste copied motion onto this element"
+          <button className="btn small" title="Paste copied motion + style onto this element (its text is untouched)"
             disabled={!clip} onClick={() => clip && onChange((l) => applyClip(l, clip))}>Paste</button>
           <button className="btn small" title="Delete this layer" onClick={onDelete}>✕</button>
         </div>
@@ -1355,47 +1433,54 @@ const ElementMotion: React.FC<{
 
       {expanded && (
       <>
-      {/* Motion presets — same MotionClip shape as Copy/Paste above, but
-          named and saved server-side, so it's reusable in OTHER projects
-          too, not just pasted around within this one session. */}
-      {onSaveMotionPreset && (
-        <div className="row" style={{ gap: 4, marginTop: 4 }}>
-          <button className="btn small" title="Save this element's current motion as a reusable preset"
-            onClick={() => {
-              const name = window.prompt("Name this motion preset:");
-              if (name && name.trim()) onSaveMotionPreset(name.trim(), clipFromLayer(layer));
-            }}>
-            Save motion preset
+      {isPhotoSlot && onUploadPhoto && (
+        <div className="card compact group" style={{ marginTop: 8 }}>
+          <div className="subhead">Photo</div>
+          <button className={"btn upload small" + (layer.assetKind ? " filled" : "")} style={{ width: "100%" }}
+            onClick={() => photoInput.current?.click()}>
+            {layer.assetKind ? "Replace photo/video" : "Upload photo/video"}
           </button>
-          {motionPresets && motionPresets.length > 0 && (
+          <input ref={photoInput} className="hidden-file" type="file"
+            accept=".png,.jpg,.jpeg,.webp,.svg,.gif,.webm,.mov,.mp4"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadPhoto(f); e.target.value = ""; }} />
+          {layer.assetKind && (
             <>
-              <select value={selectedPresetId} style={{ flex: 1 }}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  setSelectedPresetId(id);
-                  const preset = motionPresets.find((p) => p.id === id);
-                  if (preset) onChange((l) => applyClip(l, preset.clip));
-                }}>
-                <option value="" disabled>Apply saved preset…</option>
-                {motionPresets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              <button className="btn small" title="Delete the selected preset" disabled={!selectedPresetId}
-                onClick={() => {
-                  if (selectedPresetId && onDeleteMotionPreset) {
-                    onDeleteMotionPreset(selectedPresetId);
-                    setSelectedPresetId("");
-                  }
-                }}>✕</button>
+              <div className="row between mini" style={{ marginTop: 6 }}>
+                <span style={{ color: "var(--muted)" }}>Zoom {(layer.photoZoom ?? 1).toFixed(2)}×</span>
+                <div className="row" style={{ gap: 4 }}>
+                  <button className="btn small" title="Zoom out"
+                    onClick={() => onChange((l) => { l.photoZoom = Math.max(1, +((l.photoZoom ?? 1) - 0.1).toFixed(2)); })}>−</button>
+                  <button className="btn small" title="Zoom in"
+                    onClick={() => onChange((l) => { l.photoZoom = Math.min(3, +((l.photoZoom ?? 1) + 0.1).toFixed(2)); })}>＋</button>
+                  <button className="btn small" title="Reset crop to centered"
+                    onClick={() => onChange((l) => { l.photoZoom = 1; l.photoPanX = 50; l.photoPanY = 50; })}>Reset</button>
+                </div>
+              </div>
+              <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+                <span style={{ color: "var(--muted)" }} title="Cover fills the frame (crops mismatched aspect ratios); contain shows the whole photo (may letterbox).">Fit</span>
+                <select value={layer.fit ?? "cover"} style={{ width: "auto" }}
+                  onChange={(e) => onChange((l) => { l.fit = e.target.value as any; })}>
+                  <option value="cover">cover (fill, may crop)</option>
+                  <option value="contain">contain (whole photo, may letterbox)</option>
+                </select>
+              </div>
             </>
           )}
+          <div className="mini" style={{ marginTop: 4 }}>
+            <label>Photo motion (inside the frame)</label>
+            <select value={layer.photoMotion ?? "none"}
+              onChange={(e) => onChange((l) => { l.photoMotion = e.target.value as any; })}>
+              {AMBIENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
         </div>
       )}
 
       {isTextLayer && (
-        <>
+        <div className="card compact group" style={{ marginTop: 8 }}>
+          <div className="subhead">Text</div>
           <textarea dir={layer.direction ?? "rtl"}
             placeholder={(layer.direction ?? "rtl") === "ltr" ? "Text…" : "متن فارسی…"}
-            style={{ marginTop: 6 }}
             value={layer.text ?? ""}
             onChange={(e) => onChange((l) => { l.text = e.target.value; })} />
           <div className="grid2 mini" style={{ marginTop: 6 }}>
@@ -1471,131 +1556,155 @@ const ElementMotion: React.FC<{
                 <option value="ltr">LTR (English/Latin)</option>
               </select></div>
           </div>
-        </>
+        </div>
       )}
 
-      {isPhotoSlot && onUploadPhoto && (
-        <>
-          <button className={"btn upload small" + (layer.assetKind ? " filled" : "")} style={{ width: "100%", marginTop: 6 }}
-            onClick={() => photoInput.current?.click()}>
-            {layer.assetKind ? "Replace photo/video" : "Upload photo/video"}
-          </button>
-          <input ref={photoInput} className="hidden-file" type="file"
-            accept=".png,.jpg,.jpeg,.webp,.svg,.gif,.webm,.mov,.mp4"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadPhoto(f); e.target.value = ""; }} />
-          {layer.assetKind && (
-            <>
-              <div className="row between mini" style={{ marginTop: 4 }}>
-                <span style={{ color: "var(--muted)" }}>Zoom {(layer.photoZoom ?? 1).toFixed(2)}×</span>
-                <div className="row" style={{ gap: 4 }}>
-                  <button className="btn small" title="Zoom out"
-                    onClick={() => onChange((l) => { l.photoZoom = Math.max(1, +((l.photoZoom ?? 1) - 0.1).toFixed(2)); })}>−</button>
-                  <button className="btn small" title="Zoom in"
-                    onClick={() => onChange((l) => { l.photoZoom = Math.min(3, +((l.photoZoom ?? 1) + 0.1).toFixed(2)); })}>＋</button>
-                  <button className="btn small" title="Reset crop to centered"
-                    onClick={() => onChange((l) => { l.photoZoom = 1; l.photoPanX = 50; l.photoPanY = 50; })}>Reset</button>
-                </div>
+      <div className="card compact group" style={{ marginTop: 8 }}>
+        <div className="subhead">Effects</div>
+
+        {/* Motion presets — same MotionClip shape as Copy/Paste above, but
+            named and saved server-side, so it's reusable in OTHER projects
+            too, not just pasted around within this one session. An inline
+            name field (not window.prompt, which is easy to mistake for
+            "nothing happened") and a visible named list (not a hidden
+            dropdown) so it's obvious where a saved preset lives and how to
+            reuse it. */}
+        {onSaveMotionPreset && (
+          <div className="mini" style={{ marginBottom: 8 }}>
+            <label>Motion presets (reusable across projects)</label>
+            {!savingPreset ? (
+              <button className="btn small" onClick={() => setSavingPreset(true)}>Save current as preset…</button>
+            ) : (
+              <div className="row" style={{ gap: 4 }}>
+                <input type="text" autoFocus placeholder="Preset name" value={presetName} style={{ flex: 1 }}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitSavePreset();
+                    if (e.key === "Escape") { setSavingPreset(false); setPresetName(""); }
+                  }} />
+                <button className="btn small primary" disabled={!presetName.trim()} onClick={commitSavePreset}>Save</button>
+                <button className="btn small" onClick={() => { setSavingPreset(false); setPresetName(""); }}>Cancel</button>
               </div>
-              <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
-                <span style={{ color: "var(--muted)" }} title="Cover fills the frame (crops mismatched aspect ratios); contain shows the whole photo (may letterbox).">Fit</span>
-                <select value={layer.fit ?? "cover"} style={{ width: "auto" }}
-                  onChange={(e) => onChange((l) => { l.fit = e.target.value as any; })}>
-                  <option value="cover">cover (fill, may crop)</option>
-                  <option value="contain">contain (whole photo, may letterbox)</option>
-                </select>
+            )}
+            {motionPresets && motionPresets.length > 0 ? (
+              <div className="preset-list">
+                {motionPresets.map((p) => (
+                  <div key={p.id} className="row between preset-row">
+                    <span className="preset-name" title={p.name}>{p.name}</span>
+                    <div className="row" style={{ gap: 4 }}>
+                      <button className="btn small" title={`Apply "${p.name}" to this element`}
+                        onClick={() => onChange((l) => applyClip(l, p.clip))}>Apply</button>
+                      {onDeleteMotionPreset && (
+                        <button className="btn small" title={`Delete "${p.name}"`}
+                          onClick={() => onDeleteMotionPreset(p.id)}>✕</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-            </>
-          )}
-          <div className="mini" style={{ marginTop: 4 }}>
-            <label>Photo motion (inside the frame)</label>
-            <select value={layer.photoMotion ?? "none"}
-              onChange={(e) => onChange((l) => { l.photoMotion = e.target.value as any; })}>
-              {AMBIENTS.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
+            ) : (
+              <p className="hint" style={{ margin: "4px 0 0" }}>No saved presets yet.</p>
+            )}
           </div>
-        </>
-      )}
+        )}
 
-      <FxSlots
-        label="IN effect (combine up to 3)"
-        options={inOptions}
-        values={[layer.entrance, layer.entrance2, layer.entrance3]}
-        disabled={layer.entrance === "wordReveal" || layer.entrance === "lineReveal"}
-        onChangeSlot={(i, v) => onChange((l) => {
-          if (i === 0) l.entrance = v as any;
-          else if (i === 1) l.entrance2 = v as any;
-          else l.entrance3 = v as any;
-        })}
-        onAdd={() => onChange((l) => {
-          if (!l.entrance2) l.entrance2 = inOptions[0] as any;
-          else l.entrance3 = inOptions[0] as any;
-        })}
-        onRemove={(i) => onChange((l) => {
-          if (i === 1) { l.entrance2 = undefined; l.entrance3 = undefined; }
-          else l.entrance3 = undefined;
-        })}
-      />
-      <FxSlots
-        label="OUT effect (combine up to 3)"
-        options={EXIT_NAMES}
-        values={[layer.exit ?? "none", layer.exit2, layer.exit3]}
-        disabled={(layer.exit ?? "none") === "none"}
-        onChangeSlot={(i, v) => onChange((l) => {
-          if (i === 0) l.exit = v as any;
-          else if (i === 1) l.exit2 = v as any;
-          else l.exit3 = v as any;
-        })}
-        onAdd={() => onChange((l) => {
-          if (!l.exit2) l.exit2 = EXIT_NAMES[0] as any;
-          else l.exit3 = EXIT_NAMES[0] as any;
-        })}
-        onRemove={(i) => onChange((l) => {
-          if (i === 1) { l.exit2 = undefined; l.exit3 = undefined; }
-          else l.exit3 = undefined;
-        })}
-      />
-      <div className="grid2 mini" style={{ marginTop: 4 }}>
-        <div><label>IN easing</label>
-          <select value={layer.entranceEasing ?? ""} title="Auto = a curve chosen to fit the IN effect"
-            onChange={(e) => onChange((l) => { l.entranceEasing = e.target.value === "" ? undefined : e.target.value as any; })}>
-            <option value="">(auto)</option>
-            {EASINGS.map((en) => <option key={en} value={en}>{en}</option>)}
-          </select></div>
-        <div><label>OUT easing</label>
-          <select value={layer.exitEasing ?? ""} title="Auto = a curve chosen to fit the OUT effect"
-            disabled={(layer.exit ?? "none") === "none"}
-            onChange={(e) => onChange((l) => { l.exitEasing = e.target.value === "" ? undefined : e.target.value as any; })}>
-            <option value="">(auto)</option>
-            {EASINGS.map((en) => <option key={en} value={en}>{en}</option>)}
-          </select></div>
+        <FxSlots
+          label="IN effect (combine up to 3)"
+          options={inOptions}
+          values={[layer.entrance, layer.entrance2, layer.entrance3]}
+          disabled={layer.entrance === "wordReveal" || layer.entrance === "lineReveal"}
+          onChangeSlot={(i, v) => onChange((l) => {
+            if (i === 0) l.entrance = v as any;
+            else if (i === 1) l.entrance2 = v as any;
+            else l.entrance3 = v as any;
+          })}
+          onAdd={() => onChange((l) => {
+            if (!l.entrance2) l.entrance2 = inOptions[0] as any;
+            else l.entrance3 = inOptions[0] as any;
+          })}
+          onRemove={(i) => onChange((l) => {
+            if (i === 1) { l.entrance2 = undefined; l.entrance3 = undefined; }
+            else l.entrance3 = undefined;
+          })}
+        />
+        <FxSlots
+          label="OUT effect (combine up to 3)"
+          options={EXIT_NAMES}
+          values={[layer.exit ?? "none", layer.exit2, layer.exit3]}
+          disabled={(layer.exit ?? "none") === "none"}
+          onChangeSlot={(i, v) => onChange((l) => {
+            if (i === 0) l.exit = v as any;
+            else if (i === 1) l.exit2 = v as any;
+            else l.exit3 = v as any;
+          })}
+          onAdd={() => onChange((l) => {
+            if (!l.exit2) l.exit2 = EXIT_NAMES[0] as any;
+            else l.exit3 = EXIT_NAMES[0] as any;
+          })}
+          onRemove={(i) => onChange((l) => {
+            if (i === 1) { l.exit2 = undefined; l.exit3 = undefined; }
+            else l.exit3 = undefined;
+          })}
+        />
+        <div className="grid2 mini" style={{ marginTop: 4 }}>
+          <div><label>IN easing</label>
+            <select value={layer.entranceEasing ?? ""} title="Auto = a curve chosen to fit the IN effect"
+              onChange={(e) => onChange((l) => { l.entranceEasing = e.target.value === "" ? undefined : e.target.value as any; })}>
+              <option value="">(auto)</option>
+              {EASINGS.map((en) => <option key={en} value={en}>{en}</option>)}
+            </select></div>
+          <div><label>OUT easing</label>
+            <select value={layer.exitEasing ?? ""} title="Auto = a curve chosen to fit the OUT effect"
+              disabled={(layer.exit ?? "none") === "none"}
+              onChange={(e) => onChange((l) => { l.exitEasing = e.target.value === "" ? undefined : e.target.value as any; })}>
+              <option value="">(auto)</option>
+              {EASINGS.map((en) => <option key={en} value={en}>{en}</option>)}
+            </select></div>
+        </div>
       </div>
-      <div className="grid2 mini" style={{ marginTop: 4 }}>
-        <div><label>in delay (s) &mdash; when it starts</label>
-          <input type="number" step={0.1} min={0} value={sec(layer.delay)}
-            onChange={(e) => onChange((l) => { l.delay = toFr(e.target.value); })} /></div>
-        <div><label>in dur (s)</label>
-          {/* spring() throws outright at durationInFrames 0 (unlike delay/out
-              dur, which are safe at 0) — DurationPresetField already floors
-              at 1 frame so this can't crash the player. */}
-          <DurationPresetField value={layer.inDuration} fallback={26}
-            onChange={(frames) => onChange((l) => { l.inDuration = frames; })} /></div>
-      </div>
-      <div className="grid2 mini" style={{ marginTop: 4 }}>
-        <div><label>out at (s) &mdash; blank = end of page</label>
-          <input type="number" step={0.1} min={0} value={layer.outDelay != null ? sec(layer.outDelay) : ""}
-            placeholder="auto"
-            disabled={(layer.exit ?? "none") === "none"}
-            onChange={(e) => onChange((l) => {
-              l.outDelay = e.target.value === "" ? undefined : toFr(e.target.value);
-            })} /></div>
-        <div><label>out dur (s)</label>
-          {/* Same interpolate()-needs-a-real-range crash as in dur — with an
-              explicit out delay this boundary is now always reachable
-              mid-page, not just coincidentally safe at 0 like before.
-              DurationPresetField already floors at 1 frame. */}
-          <DurationPresetField value={layer.outDuration} fallback={24}
-            disabled={(layer.exit ?? "none") === "none"}
-            onChange={(frames) => onChange((l) => { l.outDuration = frames; })} /></div>
+
+      <div className="card compact group" style={{ marginTop: 8 }}>
+        <div className="subhead">Keyframes</div>
+        <div className="grid2 mini">
+          <div><label>in delay (s) &mdash; when it starts</label>
+            <input type="number" step={0.1} min={0} value={sec(layer.delay)}
+              onChange={(e) => onChange((l) => { l.delay = toFr(e.target.value); })} /></div>
+          <div><label>in dur (s)</label>
+            {/* spring() throws outright at durationInFrames 0 (unlike delay/out
+                dur, which are safe at 0) — DurationPresetField already floors
+                at 1 frame so this can't crash the player. */}
+            <DurationPresetField value={layer.inDuration} fallback={26}
+              onChange={(frames) => onChange((l) => { l.inDuration = frames; })} /></div>
+        </div>
+        <div className="grid2 mini" style={{ marginTop: 4 }}>
+          <div><label>out at (s) &mdash; blank = end of page</label>
+            {/* A bare number input relying on the user backspacing it fully
+                empty is unreliable in practice (selecting-all + deleting a
+                <input type="number"> doesn't always land on "" the way it
+                does for text inputs) — this ✕ is a guaranteed one-click way
+                back to "auto" instead of fighting the field's own text
+                selection. */}
+            <div className="row" style={{ gap: 4 }}>
+              <input type="number" step={0.1} min={0} value={layer.outDelay != null ? sec(layer.outDelay) : ""}
+                placeholder="auto"
+                disabled={(layer.exit ?? "none") === "none"}
+                style={{ flex: 1 }}
+                onChange={(e) => onChange((l) => {
+                  l.outDelay = e.target.value === "" ? undefined : toFr(e.target.value);
+                })} />
+              <button className="btn small" title="Reset to auto (end of page)"
+                disabled={(layer.exit ?? "none") === "none" || layer.outDelay == null}
+                onClick={() => onChange((l) => { l.outDelay = undefined; })}>✕</button>
+            </div></div>
+          <div><label>out dur (s)</label>
+            {/* Same interpolate()-needs-a-real-range crash as in dur — with an
+                explicit out delay this boundary is now always reachable
+                mid-page, not just coincidentally safe at 0 like before.
+                DurationPresetField already floors at 1 frame. */}
+            <DurationPresetField value={layer.outDuration} fallback={24}
+              disabled={(layer.exit ?? "none") === "none"}
+              onChange={(frames) => onChange((l) => { l.outDuration = frames; })} /></div>
+        </div>
       </div>
       </>
       )}
@@ -1687,14 +1796,14 @@ const PageInspector: React.FC<{
           <div className="row between" style={{ alignItems: "center" }}>
             <h2 style={{ margin: 0, border: "none", padding: 0 }}>Element motion (in / out)</h2>
             <button className="btn small" disabled={!clip}
-              title="Paste the copied motion onto every element on this page"
+              title="Paste the copied motion + style onto every element on this page (text untouched)"
               onClick={() => onChange((pg) => { pg.layers.forEach((l) => applyClip(l, clip!)); })}>
               Paste to all
             </button>
           </div>
           <div className="row" style={{ gap: 6, marginTop: 10, marginBottom: 8 }}>
             <button className="btn small" style={{ flex: 1 }} onClick={onAddPhoto}>+ Add photo</button>
-            <button className="btn small" style={{ flex: 1 }} onClick={onAddText}>+ Add Farsi text</button>
+            <button className="btn small" style={{ flex: 1 }} onClick={onAddText}>+ Add text</button>
           </div>
           {/* Rendered top-to-bottom = front-to-back (Photoshop/Figma convention)
               — reverses the DISPLAY order only; `li` stays the real array index

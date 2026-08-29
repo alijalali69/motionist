@@ -74,6 +74,8 @@ function emptyProject(id, name, w = 1080, h = 1920) {
     template: { layers: [] },
     logo: null, bg: null, title: null, // `title` here = the global Title asset slot
     loader: defaultLoader(w, h),
+    loaderVisible: false, // most reels don't want it; opt-in per project instead of opt-out
+
     subtitle: defaultSubtitle(w, h),
     subtitleStyle: defaultSubtitleStyle(h),
     captions: [],
@@ -498,17 +500,20 @@ app.post("/api/render", async (req, res) => {
     // the Remotion CLI's --props flag read from.
     fs.writeFileSync(LEGACY_PROJECT_JSON, JSON.stringify(project, null, 2), "utf-8");
     const safeName = (project.name || project.projectId || "reel").replace(/[^a-z0-9]/gi, "_");
-    // MP4/H.264 can't carry an alpha channel at all — vp8 in a WebM container
-    // (paired with the yuva420p pixel format) is the combination Remotion
-    // supports for a real transparent-background export.
-    const outName = `${safeName}_${Date.now()}.${transparent ? "webm" : "mp4"}`;
+    // MP4/H.264 can't carry an alpha channel at all. ProRes 4444 (.mov) is
+    // what NLEs — DaVinci Resolve included, which is this app's actual alpha
+    // destination via the Resolve plugin — decode correctly; VP8/VP9 WebM
+    // alpha is web-playback-oriented and Resolve's decoder mishandles it,
+    // which showed up as a colored glow/halo around soft edges and broken
+    // transparency once imported. ProRes 4444 doesn't have that problem.
+    const outName = `${safeName}_${Date.now()}.${transparent ? "mov" : "mp4"}`;
     const args = [
       "remotion", "render", "Reel", `out/${outName}`,
       "--props=src/project.json",
     ];
-    // yuva420p needs each rendered frame captured as PNG (Remotion's default
-    // JPEG capture format has no alpha channel to carry through at all).
-    if (transparent) args.push("--codec=vp8", "--pixel-format=yuva420p", "--image-format=png");
+    // yuva444p10le needs each rendered frame captured as PNG (Remotion's
+    // default JPEG capture format has no alpha channel to carry through).
+    if (transparent) args.push("--codec=prores", "--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png");
     await run("npx", args);
     // `path` is the absolute filesystem path — the Resolve plugin's bridge
     // needs a real path (not a URL) to hand the file to Resolve's Media
