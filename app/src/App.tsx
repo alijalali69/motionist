@@ -30,7 +30,14 @@ const ColorField: React.FC<{
   value: string;
   onChange: (hex: string) => void;
   swatchStyle?: React.CSSProperties;
-}> = ({ value, onChange, swatchStyle }) => {
+  // Saved-palette swatches — all three optional so existing call sites keep
+  // working untouched; a call site only shows the swatch row once it wires
+  // these up. Lives on the PROJECT (see Project.swatches), not per-field —
+  // one saved palette, offered next to every color picker in the app.
+  swatches?: string[];
+  onAddSwatch?: (hex: string) => void;
+  onRemoveSwatch?: (hex: string) => void;
+}> = ({ value, onChange, swatchStyle, swatches, onAddSwatch, onRemoveSwatch }) => {
   const [text, setText] = React.useState(value);
   React.useEffect(() => { setText(value); }, [value]);
 
@@ -41,16 +48,43 @@ const ColorField: React.FC<{
     else setText(value); // invalid — snap back to the last real value
   };
 
+  const alreadySaved = !!swatches?.some((s) => s.toLowerCase() === value.toLowerCase());
+
   return (
-    <div className="row" style={{ gap: 4 }}>
-      <input type="color" value={value}
-        style={{ width: 36, height: 28, padding: 2, ...swatchStyle }}
-        onChange={(e) => onChange(e.target.value)} />
-      <input type="text" value={text} maxLength={7} placeholder="#rrggbb"
-        style={{ width: 78, fontFamily: "var(--mono, monospace)", fontSize: 12, textTransform: "uppercase" }}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+    <div>
+      <div className="row" style={{ gap: 4 }}>
+        <input type="color" value={value}
+          style={{ width: 36, height: 28, padding: 2, ...swatchStyle }}
+          onChange={(e) => onChange(e.target.value)} />
+        <input type="text" value={text} maxLength={7} placeholder="#rrggbb"
+          style={{ width: 78, fontFamily: "var(--mono, monospace)", fontSize: 12, textTransform: "uppercase" }}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+        {onAddSwatch && (
+          <button className="btn small" title={alreadySaved ? "Already saved" : "Save this color as a swatch"}
+            disabled={alreadySaved} onClick={() => onAddSwatch(value)}>＋</button>
+        )}
+      </div>
+      {swatches && swatches.length > 0 && (
+        <div className="row" style={{ gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+          {swatches.map((hex) => (
+            <div key={hex} className="row" style={{ gap: 1, alignItems: "center" }}>
+              <button title={hex} onClick={() => onChange(hex)}
+                style={{
+                  width: 16, height: 16, borderRadius: 3, padding: 0, cursor: "pointer", background: hex,
+                  border: hex.toLowerCase() === value.toLowerCase() ? "2px solid var(--accent, #d9694f)" : "1px solid var(--line)",
+                }} />
+              {onRemoveSwatch && (
+                <button title={`Remove ${hex}`} onClick={() => onRemoveSwatch(hex)}
+                  style={{ fontSize: 8, width: 12, height: 12, padding: 0, lineHeight: 1, background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer" }}>
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -354,6 +388,17 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       return next;
     });
   };
+
+  // The saved color palette lives on the project (Project.swatches), shared
+  // by every color picker in the app — one list, not one per field.
+  const addSwatch = (hex: string) => update((p) => {
+    if (!(p.swatches ?? []).some((s) => s.toLowerCase() === hex.toLowerCase())) {
+      p.swatches = [...(p.swatches ?? []), hex];
+    }
+  });
+  const removeSwatch = (hex: string) => update((p) => {
+    p.swatches = (p.swatches ?? []).filter((s) => s.toLowerCase() !== hex.toLowerCase());
+  });
 
   // Accepts one or many files (batch upload). Server ingests one PSD/SVG at a
   // time, so files are processed sequentially, in filename order, and each
@@ -761,7 +806,8 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             <div className="row between" style={{ marginTop: 8, alignItems: "center" }}>
               <span className="hint" style={{ margin: 0 }}>Backdrop color (shows through gaps/transparency)</span>
               <ColorField value={project.bgColor ?? "#e8e4dd"}
-                onChange={(hex) => update((p) => { p.bgColor = hex; })} />
+                onChange={(hex) => update((p) => { p.bgColor = hex; })}
+                swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch} />
             </div>
 
             {/* TITLE */}
@@ -913,6 +959,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             fonts={fonts}
             onSelectFont={(li, entry) => onSelectFont(sel, li, entry)}
             onUploadNewFont={(li, file, family, style) => onUploadNewFont(sel, li, file, family, style)}
+            swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch}
           />
         ) : <p className="sub">Select a page.</p>}
       </div>
@@ -1142,7 +1189,10 @@ const ElementMotion: React.FC<{
   onMove?: (dir: -1 | 1) => void;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
-}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onUploadNewFont, onDelete, onMove, canMoveUp, canMoveDown }) => {
+  swatches?: string[];
+  onAddSwatch?: (hex: string) => void;
+  onRemoveSwatch?: (hex: string) => void;
+}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onUploadNewFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch }) => {
   const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
   const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
   const photoInput = React.useRef<HTMLInputElement>(null);
@@ -1247,7 +1297,8 @@ const ElementMotion: React.FC<{
                 onChange={(e) => onChange((l) => { l.fontSize = Math.max(8, Math.round(parseFloat(e.target.value || "48"))); })} /></div>
             <div style={{ gridColumn: "span 2" }}><label>Color</label>
               <ColorField value={layer.textColor ?? "#1a1a1a"}
-                onChange={(hex) => onChange((l) => { l.textColor = hex; })} /></div>
+                onChange={(hex) => onChange((l) => { l.textColor = hex; })}
+                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} /></div>
             <div><label>Align</label>
               <select value={layer.textAlign ?? "right"}
                 onChange={(e) => onChange((l) => { l.textAlign = e.target.value as any; })}>
@@ -1398,7 +1449,10 @@ const PageInspector: React.FC<{
   fonts: FontEntry[];
   onSelectFont: (layerIndex: number, entry: FontEntry | null) => void;
   onUploadNewFont: (layerIndex: number, file: File, family: string, style: string) => void;
-}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onAddText, onAddPhoto, onDeleteLayer, fonts, onSelectFont, onUploadNewFont }) => {
+  swatches: string[];
+  onAddSwatch: (hex: string) => void;
+  onRemoveSwatch: (hex: string) => void;
+}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onAddText, onAddPhoto, onDeleteLayer, fonts, onSelectFont, onUploadNewFont, swatches, onAddSwatch, onRemoveSwatch }) => {
   return (
     <div>
       <h1 title={page.id}>Page: {page.name ?? page.id}</h1>
@@ -1417,7 +1471,8 @@ const PageInspector: React.FC<{
         <label style={{ margin: 0 }}>Background color (this page only — empty follows the project's)</label>
         <div className="row" style={{ gap: 4 }}>
           <ColorField value={page.bgColor ?? "#e8e4dd"}
-            onChange={(hex) => onChange((pg) => { pg.bgColor = hex; })} />
+            onChange={(hex) => onChange((pg) => { pg.bgColor = hex; })}
+            swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
           {page.bgColor && (
             <button className="btn small" title="Clear — follow the project's backdrop color instead"
               onClick={() => onChange((pg) => { pg.bgColor = undefined; })}>✕</button>
@@ -1469,6 +1524,7 @@ const PageInspector: React.FC<{
           fonts={fonts}
           onSelectFont={(entry) => onSelectFont(li, entry)}
           onUploadNewFont={(file, family, style) => onUploadNewFont(li, file, family, style)}
+          swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch}
           onDelete={() => onDeleteLayer(li)} />
       )).reverse()}
       <p className="hint">Fixed chrome, logo, loader and the subtitle zone are not listed — they are handled separately and don't get page motion.</p>

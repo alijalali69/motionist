@@ -123,6 +123,7 @@ export type Project = {
   logo: LogoConfig | null;
   bg?: LogoConfig | null;    // global background, rendered behind all pages
   bgColor?: string;          // solid backdrop color, shows wherever bg/pages don't fully cover (default "#e8e4dd")
+  swatches?: string[];       // user-saved hex colors for this project, offered next to every color picker
   title?: LogoConfig | null; // global title, rendered as a locked overlay
   loader: Box;
   loaderStyle?: LoaderStyle; // default "bar"
