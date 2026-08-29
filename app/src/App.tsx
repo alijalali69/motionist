@@ -1052,30 +1052,79 @@ type LayerT = PageT["layers"][number];
 
 type MotionClip = {
   entrance: LayerT["entrance"];
+  entrance2?: LayerT["entrance2"];
+  entrance3?: LayerT["entrance3"];
   delay: number;
   inDuration?: number;
   entranceEasing?: LayerT["entranceEasing"];
   exit?: LayerT["exit"];
+  exit2?: LayerT["exit2"];
+  exit3?: LayerT["exit3"];
   outDuration?: number;
   exitEasing?: LayerT["exitEasing"];
 };
 
 function clipFromLayer(l: LayerT): MotionClip {
   return {
-    entrance: l.entrance, delay: l.delay, inDuration: l.inDuration, entranceEasing: l.entranceEasing,
-    exit: l.exit, outDuration: l.outDuration, exitEasing: l.exitEasing,
+    entrance: l.entrance, entrance2: l.entrance2, entrance3: l.entrance3,
+    delay: l.delay, inDuration: l.inDuration, entranceEasing: l.entranceEasing,
+    exit: l.exit, exit2: l.exit2, exit3: l.exit3,
+    outDuration: l.outDuration, exitEasing: l.exitEasing,
   };
 }
 
 function applyClip(l: LayerT, clip: MotionClip) {
   l.entrance = clip.entrance;
+  l.entrance2 = clip.entrance2;
+  l.entrance3 = clip.entrance3;
   l.delay = clip.delay;
   l.inDuration = clip.inDuration;
   l.entranceEasing = clip.entranceEasing;
   l.exit = clip.exit;
+  l.exit2 = clip.exit2;
+  l.exit3 = clip.exit3;
   l.outDuration = clip.outDuration;
   l.exitEasing = clip.exitEasing;
 }
+
+// Up to 3 combined effects on one IN or OUT direction — FX1 is always shown,
+// a "+" reveals FX2 then FX3 (capped there), each removable with its own ✕
+// (removing one also clears anything after it, so there's never a gap).
+// values/onChange/onAdd/onRemove all address slots by 0/1/2 (FX1/FX2/FX3).
+const FxSlots: React.FC<{
+  label: string;
+  options: readonly string[];
+  values: [string, string | undefined, string | undefined];
+  onChangeSlot: (index: 0 | 1 | 2, value: string) => void;
+  onAdd: () => void;
+  onRemove: (index: 1 | 2) => void;
+  disabled?: boolean;
+}> = ({ label, options, values, onChangeSlot, onAdd, onRemove, disabled }) => {
+  const shown = values[2] !== undefined ? 3 : values[1] !== undefined ? 2 : 1;
+  return (
+    <div className="mini">
+      <label>{label}</label>
+      <div className="row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+        {([0, 1, 2] as const).slice(0, shown).map((i) => (
+          <div key={i} className="row" style={{ gap: 2, alignItems: "center" }}>
+            <span className="tag" style={{ fontSize: 10, padding: "1px 4px" }}>FX{i + 1}</span>
+            <select value={values[i]} disabled={disabled}
+              onChange={(e) => onChangeSlot(i, e.target.value)}>
+              {options.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+            {i > 0 && (
+              <button className="btn small" title={`Remove FX${i + 1}`} disabled={disabled}
+                onClick={() => onRemove(i as 1 | 2)}>✕</button>
+            )}
+          </div>
+        ))}
+        {shown < 3 && (
+          <button className="btn small" title="Combine another effect" disabled={disabled} onClick={onAdd}>＋</button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const ElementMotion: React.FC<{
   layer: LayerT;
@@ -1249,18 +1298,44 @@ const ElementMotion: React.FC<{
         </>
       )}
 
-      <div className="grid2 mini" style={{ marginTop: 4 }}>
-        <div><label>IN effect</label>
-          <select value={layer.entrance}
-            onChange={(e) => onChange((l) => { l.entrance = e.target.value as any; })}>
-            {inOptions.map((en) => <option key={en} value={en}>{en}</option>)}
-          </select></div>
-        <div><label>OUT effect</label>
-          <select value={layer.exit ?? "none"}
-            onChange={(e) => onChange((l) => { l.exit = e.target.value as any; })}>
-            {EXIT_NAMES.map((en) => <option key={en} value={en}>{en}</option>)}
-          </select></div>
-      </div>
+      <FxSlots
+        label="IN effect (combine up to 3)"
+        options={inOptions}
+        values={[layer.entrance, layer.entrance2, layer.entrance3]}
+        disabled={layer.entrance === "wordReveal" || layer.entrance === "lineReveal"}
+        onChangeSlot={(i, v) => onChange((l) => {
+          if (i === 0) l.entrance = v as any;
+          else if (i === 1) l.entrance2 = v as any;
+          else l.entrance3 = v as any;
+        })}
+        onAdd={() => onChange((l) => {
+          if (!l.entrance2) l.entrance2 = inOptions[0] as any;
+          else l.entrance3 = inOptions[0] as any;
+        })}
+        onRemove={(i) => onChange((l) => {
+          if (i === 1) { l.entrance2 = undefined; l.entrance3 = undefined; }
+          else l.entrance3 = undefined;
+        })}
+      />
+      <FxSlots
+        label="OUT effect (combine up to 3)"
+        options={EXIT_NAMES}
+        values={[layer.exit ?? "none", layer.exit2, layer.exit3]}
+        disabled={(layer.exit ?? "none") === "none"}
+        onChangeSlot={(i, v) => onChange((l) => {
+          if (i === 0) l.exit = v as any;
+          else if (i === 1) l.exit2 = v as any;
+          else l.exit3 = v as any;
+        })}
+        onAdd={() => onChange((l) => {
+          if (!l.exit2) l.exit2 = EXIT_NAMES[0] as any;
+          else l.exit3 = EXIT_NAMES[0] as any;
+        })}
+        onRemove={(i) => onChange((l) => {
+          if (i === 1) { l.exit2 = undefined; l.exit3 = undefined; }
+          else l.exit3 = undefined;
+        })}
+      />
       <div className="grid2 mini" style={{ marginTop: 4 }}>
         <div><label>IN easing</label>
           <select value={layer.entranceEasing ?? ""} title="Auto = a curve chosen to fit the IN effect"

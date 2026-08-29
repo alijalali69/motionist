@@ -120,6 +120,42 @@ export type LayerMotion = {
 
 const BASE: LayerMotion = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, rotateY: 0 };
 
+// Combines up to 3 simultaneous entrance (or exit) motions into one. Each
+// property has its own composition rule, chosen so combining doesn't
+// double-count the same visual dimension:
+//   opacity  — MIN, not multiply/average. Almost every effect already
+//              encodes "fade" as part of its own opacity (e.g. slideRight
+//              returns opacity: p, not 1) — multiplying several of those
+//              together would compound into a much slower-looking fade
+//              (p * p * p). MIN instead means the layer is only as visible
+//              as whichever combined effect is currently the most
+//              restrictive — a mask-reveal effect (opacity stays 1, the
+//              clipPath does the hiding) never fights a genuine fade.
+//   tx/ty/rotate/rotateY/blur — SUM. These are independent offsets that
+//              naturally stack (slide right + float up = enters from the
+//              lower-right, exactly the sum of each effect's own offset).
+//   scale    — MULTIPLY. Scale factors compose multiplicatively, same as
+//              stacking CSS transforms.
+//   clipPath — first non-empty one wins. Two reveal masks can't both apply
+//              to the same layer at once; combining two mask effects just
+//              uses whichever was picked first (FX1 before FX2/FX3).
+export function combineMotions(motions: LayerMotion[]): LayerMotion {
+  if (motions.length === 0) return BASE;
+  if (motions.length === 1) return motions[0];
+  let opacity = 1, tx = 0, ty = 0, scale = 1, blur = 0, rotate = 0, rotateY = 0;
+  let clipPath: string | undefined;
+  for (const m of motions) {
+    opacity = Math.min(opacity, m.opacity);
+    tx += m.tx; ty += m.ty;
+    scale *= m.scale;
+    blur += m.blur;
+    rotate += m.rotate;
+    rotateY += m.rotateY;
+    if (!clipPath && m.clipPath) clipPath = m.clipPath;
+  }
+  return { opacity, tx, ty, scale, blur, rotate, rotateY, clipPath };
+}
+
 // Spring feel per entrance — bouncy ones overshoot, the rest settle smoothly.
 export function entranceSpring(name: EntranceName) {
   const bouncy = name === "pop" || name === "growIn" || name === "dropIn";

@@ -14,16 +14,22 @@ export type ContentLayer = {
   width: number;
   height: number;
   opacity: number;
-  // IN effect
+  // IN effect. entrance2/entrance3 are optional extra effects COMBINED with
+  // `entrance` (same delay/inDuration/easing, layered via combineMotions in
+  // presets.ts) — the FX1/FX2/FX3 slots in the inspector, capped at 3.
   entrance: EntranceName;
+  entrance2?: EntranceName;
+  entrance3?: EntranceName;
   delay: number;         // in-delay (frames) before the entrance starts
   inDuration?: number;   // entrance length (frames), default 26
   entranceEasing?: EasingName; // unset = use the curated default for this entrance (see presets.ts)
   // OUT effect — by default plays over the last outDuration frames of the
   // page (anchored to the page's END); set outDelay to instead anchor it to
   // an exact time from the page's START (e.g. "exit at 4.5s"), independent
-  // of how long the page is.
+  // of how long the page is. exit2/exit3 combine the same way entrance2/3 do.
   exit?: ExitName;       // default "none"
+  exit2?: ExitName;
+  exit3?: ExitName;
   outDuration?: number;  // exit length (frames), default 24
   outDelay?: number;     // exit START (frames from page start) — unset = old "anchored to page end" behavior
   exitEasing?: EasingName; // unset = use the curated default for this exit (see presets.ts)

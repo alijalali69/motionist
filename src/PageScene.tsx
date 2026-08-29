@@ -11,8 +11,40 @@ import {
   useVideoConfig,
 } from "remotion";
 import { Gif } from "@remotion/gif";
-import { entranceMotion, entranceProgress, exitMotion, exitProgress, ambientMotion } from "./presets";
+import {
+  entranceMotion, entranceProgress, exitMotion, exitProgress, combineMotions, ambientMotion,
+  type EntranceName, type ExitName,
+} from "./presets";
 import type { Page, ContentLayer } from "./types";
+
+// Resolves a layer's up-to-3 combined entrance (or exit) slots into one
+// LayerMotion — each slot gets its own progress (so "auto" easing still
+// resolves per-effect even when combined, e.g. zoomIn keeps its own
+// overshoot while slideRight keeps its own decelerate), then combineMotions
+// layers them together. Slots left unset (or "none") are skipped entirely.
+function combinedEntranceMotion(
+  layer: ContentLayer, frame: number, fps: number, inDuration: number
+) {
+  const names = [layer.entrance, layer.entrance2, layer.entrance3]
+    .filter((n): n is EntranceName => !!n && n !== "none");
+  if (names.length === 0) return entranceMotion("none", 1);
+  const motions = names.map((name) =>
+    entranceMotion(name, entranceProgress(name, layer.entranceEasing, frame, fps, layer.delay, inDuration))
+  );
+  return combineMotions(motions);
+}
+
+function combinedExitMotion(
+  layer: ContentLayer, frame: number, outStart: number, outDuration: number
+) {
+  const names = [layer.exit, layer.exit2, layer.exit3]
+    .filter((n): n is ExitName => !!n && n !== "none");
+  if (names.length === 0) return entranceMotion("none", 1);
+  const motions = names.map((name) =>
+    exitMotion(name, exitProgress(name, layer.exitEasing, frame, outStart, outDuration))
+  );
+  return combineMotions(motions);
+}
 
 export type { Page } from "./types";
 
@@ -51,18 +83,16 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
 
   const inDuration = layer.inDuration ?? 26;
   const outDuration = layer.outDuration ?? 24;
-  const exit = layer.exit ?? "none";
+  const hasExit = (layer.exit && layer.exit !== "none") || (layer.exit2 && layer.exit2 !== "none") || (layer.exit3 && layer.exit3 !== "none");
   const outStart = layer.outDelay ?? (pageDuration - outDuration);
-  const inExitPhase = exit !== "none" && frame >= outStart;
+  const inExitPhase = hasExit && frame >= outStart;
   const isStagger = layer.entrance === "wordReveal" || layer.entrance === "lineReveal";
 
   let m;
   if (inExitPhase) {
-    const q = exitProgress(exit, layer.exitEasing, frame, outStart, outDuration);
-    m = exitMotion(exit, q);
+    m = combinedExitMotion(layer, frame, outStart, outDuration);
   } else if (!isStagger) {
-    const inP = entranceProgress(layer.entrance, layer.entranceEasing, frame, fps, layer.delay, inDuration);
-    m = entranceMotion(layer.entrance, inP);
+    m = combinedEntranceMotion(layer, frame, fps, inDuration);
   } else {
     m = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, clipPath: undefined as string | undefined };
   }
@@ -132,19 +162,17 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
 
   const inDuration = layer.inDuration ?? 26;
   const outDuration = layer.outDuration ?? 24;
-  const exit = layer.exit ?? "none";
+  const hasExit = (layer.exit && layer.exit !== "none") || (layer.exit2 && layer.exit2 !== "none") || (layer.exit3 && layer.exit3 !== "none");
   const outStart = layer.outDelay ?? (pageDuration - outDuration);
 
-  // Entrance progress (spring, or a curated/overridden bezier curve — see
-  // presets.ts). Exit progress (same, mirrored) over the page's last frames.
-  const inP = entranceProgress(layer.entrance, layer.entranceEasing, frame, fps, layer.delay, inDuration);
-
+  // Up to 3 combined entrance/exit effects (FX1/FX2/FX3), each keeping its
+  // own progress/easing — see combinedEntranceMotion/combinedExitMotion and
+  // combineMotions in presets.ts.
   let m;
-  if (exit !== "none" && frame >= outStart) {
-    const q = exitProgress(exit, layer.exitEasing, frame, outStart, outDuration);
-    m = exitMotion(exit, q);
+  if (hasExit && frame >= outStart) {
+    m = combinedExitMotion(layer, frame, outStart, outDuration);
   } else {
-    m = entranceMotion(layer.entrance, inP);
+    m = combinedEntranceMotion(layer, frame, fps, inDuration);
   }
   const opacity = m.opacity * layer.opacity;
   const url = staticFile(layer.file);
