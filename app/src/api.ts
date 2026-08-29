@@ -187,11 +187,13 @@ declare global {
   }
 }
 
-export async function renderReel(project: Project, transparent?: boolean): Promise<string> {
-  // `transparent` rides along as an extra key on the same body, not a real
-  // Project field — the server reads it, drops an opaque backdrop, and
-  // switches to an alpha-capable codec/container. Never gets saved.
-  const body = transparent ? { ...project, transparent: true } : project;
+export async function renderReel(project: Project, transparent?: boolean, exportName?: string): Promise<string> {
+  // `transparent`/`exportName` ride along as extra keys on the same body,
+  // not real Project fields — the server reads them and never saves them.
+  const extra: Record<string, unknown> = {};
+  if (transparent) extra.transparent = true;
+  if (exportName && exportName.trim()) extra.exportName = exportName.trim();
+  const body = Object.keys(extra).length ? { ...project, ...extra } : project;
   const r = await fetch("/api/render", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

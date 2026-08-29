@@ -493,13 +493,14 @@ app.post("/api/asset", upload.single("asset"), async (req, res) => {
 app.post("/api/render", async (req, res) => {
   try {
     const project = req.body;
-    // `transparent` is a transient flag riding on the same body, not a real
-    // Project field — never gets persisted anywhere but this scratch file.
+    // `transparent`/`exportName` are transient flags riding on the same
+    // body, not real Project fields — never persisted anywhere but this
+    // scratch file.
     const transparent = !!project.transparent;
     // Mirror into src/project.json — that's what Root.tsx's defaultProps and
     // the Remotion CLI's --props flag read from.
     fs.writeFileSync(LEGACY_PROJECT_JSON, JSON.stringify(project, null, 2), "utf-8");
-    const safeName = (project.name || project.projectId || "reel").replace(/[^a-z0-9]/gi, "_");
+    const safeName = (project.exportName || project.name || project.projectId || "reel").replace(/[^a-z0-9]/gi, "_");
     // MP4/H.264 can't carry an alpha channel at all. ProRes 4444 (.mov) is
     // what NLEs — DaVinci Resolve included, which is this app's actual alpha
     // destination via the Resolve plugin — decode correctly; VP8/VP9 WebM

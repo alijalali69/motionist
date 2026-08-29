@@ -266,6 +266,17 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [motionClip, setMotionClip] = React.useState<MotionClip | null>(null);
   const [showSafeZone, setShowSafeZone] = React.useState(false);
   const [transparentExport, setTransparentExport] = React.useState(false);
+  // Export file name — seeded once per project load from the project's own
+  // name (so it's never blank by default), then left alone: a later project
+  // rename shouldn't silently overwrite a name the user already typed here.
+  const [exportName, setExportName] = React.useState("");
+  const exportNameSeededFor = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (project && exportNameSeededFor.current !== project.projectId) {
+      setExportName(project.name || project.projectId);
+      exportNameSeededFor.current = project.projectId;
+    }
+  }, [project?.projectId, project?.name]);
   // Left/right panel widths — draggable via the resizer bars between them and
   // the center preview, remembered across reloads (per-browser, not part of
   // the project). Center always takes whatever's left (min 320px so the
@@ -653,7 +664,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     setBusy("Rendering… (this can take a while)"); setErr(null); setRenderUrl(null);
     try {
       await saveProject(project); // keep the saved copy in sync with what's rendered
-      const url = await renderReel(project, transparentExport);
+      const url = await renderReel(project, transparentExport, exportName);
       setRenderUrl(url);
     } catch (e: any) { setErr(String(e.message || e)); }
     finally { setBusy(null); }
@@ -846,8 +857,11 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                   onChange={(fn) => update((p) => { if (p.bg) fn(p.bg); })}
                   onRemove={() => onRemoveSlot("bg")} />
               )}
-              <div className="row between" style={{ marginTop: 8, alignItems: "center" }}>
-                <span className="hint" style={{ margin: 0 }}>Backdrop color (shows through gaps/transparency)</span>
+              <div style={{ marginTop: 8 }}>
+                {/* Stacked, not side-by-side with the label — a long label
+                    next to the color swatch+hex+swatch-row combo had no room
+                    to breathe and pushed the control past the card's edge. */}
+                <span className="hint" style={{ margin: "0 0 4px", display: "block" }}>Backdrop color (shows through gaps/transparency)</span>
                 <ColorField value={project.bgColor ?? "#e8e4dd"}
                   onChange={(hex) => update((p) => { p.bgColor = hex; })}
                   swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch} />
@@ -895,6 +909,10 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
 
         <h2>Export</h2>
         <div className="card compact">
+          <label style={{ margin: "0 0 4px" }}>File name</label>
+          <input type="text" value={exportName} placeholder={project?.name || project?.projectId || "reel"}
+            style={{ marginBottom: 8 }}
+            onChange={(e) => setExportName(e.target.value)} />
           <label className="row" style={{ gap: 6, alignItems: "center", marginBottom: 8 }}>
             <input type="checkbox" checked={transparentExport}
               onChange={(e) => setTransparentExport(e.target.checked)} />
@@ -1762,8 +1780,8 @@ const PageInspector: React.FC<{
               pg.durationInFrames = Math.max(1, Math.round(parseFloat(e.target.value || "1") * 30));
             })} />
 
-          <div className="row between" style={{ alignItems: "center" }}>
-            <label style={{ margin: 0 }}>Background color (this page only — empty follows the project's)</label>
+          <div>
+            <label style={{ margin: "10px 0 4px" }}>Background color (this page only — empty follows the project's)</label>
             <div className="row" style={{ gap: 4 }}>
               <ColorField value={page.bgColor ?? "#e8e4dd"}
                 onChange={(hex) => onChange((pg) => { pg.bgColor = hex; })}
