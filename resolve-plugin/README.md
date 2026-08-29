@@ -53,7 +53,7 @@ end to end:
    `/api/render` with `transparent: true` — the exact same alpha-export
    path the app's own "Transparent background" checkbox uses. Motionist's
    own code is not touched by any of this.
-4. The rendered WebM is added to the same "Motionist" bin, then placed
+4. The rendered ProRes 4444 (.mov) is added to the same "Motionist" bin, then placed
    on a dedicated **"Motionist Overlay"** video track (created once,
    reused after) at the exact frame the source clip starts — non-
    destructive, the original clip is never modified or removed.

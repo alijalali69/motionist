@@ -8,7 +8,7 @@
 //
 // Flow: scan the timeline for text clips -> pick one (or start blank) ->
 // edit text/entrance/exit in this panel -> render -> the finished transparent
-// WebM gets imported into the Media Pool and placed on a dedicated overlay
+// ProRes 4444 .mov gets imported into the Media Pool and placed on a dedicated overlay
 // track at the SAME frame the source clip starts at. The source clip is
 // never modified or removed.
 //

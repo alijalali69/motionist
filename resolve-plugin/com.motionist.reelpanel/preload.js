@@ -8,6 +8,6 @@
 const { contextBridge, ipcRenderer } = require("electron/renderer");
 
 contextBridge.exposeInMainWorld("motionistResolveBridge", {
-  // absPath: absolute filesystem path to the just-finished render (mp4/webm).
+  // absPath: absolute filesystem path to the just-finished render (mp4/mov).
   onRendered: (absPath) => ipcRenderer.invoke("motionist:onRendered", absPath),
 });
