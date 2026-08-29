@@ -64,6 +64,10 @@ const PanBox: React.FC<{ target: PhotoPanTarget; scale: number }> = ({ target, s
   const { box, natural, panX, panY, onChange } = target;
   const dragRef = React.useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
   const [dragging, setDragging] = React.useState(false);
+  const [hovering, setHovering] = React.useState(false);
+  // Same idea as CanvasHandles: outline + label only show up on hover or
+  // while actively dragging, not permanently sitting on top of every photo.
+  const active = dragging || hovering;
   const overflow = overflowPx(box, natural);
   const lockedX = overflow.x === 0;
   const lockedY = overflow.y === 0;
@@ -104,6 +108,8 @@ const PanBox: React.FC<{ target: PhotoPanTarget; scale: number }> = ({ target, s
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
       title={canPan ? "Drag to reposition the photo inside its frame" : "This photo already fills its frame exactly — nothing to pan"}
       style={{
         position: "absolute",
@@ -111,13 +117,13 @@ const PanBox: React.FC<{ target: PhotoPanTarget; scale: number }> = ({ target, s
         top: box.top * scale,
         width: box.width * scale,
         height: box.height * scale,
-        border: `2px dashed ${dragging ? "#ff8fd1" : "rgba(255,143,209,0.55)"}`,
+        border: active ? `2px dashed ${dragging ? "#ff8fd1" : "rgba(255,143,209,0.55)"}` : "2px solid transparent",
         cursor: canPan ? (dragging ? "grabbing" : "grab") : "default",
         pointerEvents: "auto",
         boxSizing: "border-box",
       }}
     >
-      {canPan && (
+      {canPan && active && (
         <span
           style={{
             position: "absolute", top: -20, left: -2,

@@ -205,10 +205,9 @@ const DragBox: React.FC<{
 
   const dragging = busy !== null;
   const [hovering, setHovering] = React.useState(false);
-  // A thin loader bar (or a small folio numeral) is easily overpowered by an
-  // always-on 2px dashed outline — so the outline/fill only shows up on
-  // hover or while actively dragging; at rest it's just the small label,
-  // same idea as Illustrator guides only appearing when you're using them.
+  // Outline, fill, AND label only show up on hover or while actively
+  // dragging — at rest there's nothing drawn at all, so an inactive
+  // text/logo/title box never sits on top of the actual reel content.
   const active = dragging || hovering;
 
   return (
@@ -244,7 +243,7 @@ const DragBox: React.FC<{
           color: "#0e1013", background: handle.color,
           padding: "2px 6px", borderRadius: 4, whiteSpace: "nowrap",
           maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis",
-          opacity: active ? 1 : 0.55,
+          opacity: active ? 1 : 0,
         }}
       >
         {handle.label} · {Math.round(box.left)},{Math.round(box.top)}
