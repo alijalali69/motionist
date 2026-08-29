@@ -103,7 +103,7 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
     fontSize: layer.fontSize ?? 48,
     color: layer.textColor ?? "#1a1a1a",
     textAlign: layer.textAlign ?? "right",
-    direction: "rtl",
+    direction: layer.direction ?? "rtl",
     lineHeight: 1.5,
     whiteSpace: "pre-wrap",
   };

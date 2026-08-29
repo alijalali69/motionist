@@ -1189,6 +1189,43 @@ const FxSlots: React.FC<{
   );
 };
 
+// Quick-pick timings alongside "Auto" and an exact custom value — before
+// this, in/out duration only had a raw number field with no way back to
+// "auto" once touched at all (the easing pickers already had a working
+// "(auto)" option; these two fields never did).
+const DURATION_PRESETS: { label: string; frames: number }[] = [
+  { label: "Fast (0.3s)", frames: 9 },
+  { label: "Normal (0.6s)", frames: 18 },
+  { label: "Slow (1.2s)", frames: 36 },
+];
+
+const DurationPresetField: React.FC<{
+  value: number | undefined;
+  fallback: number; // frames used when value is unset ("auto") — matches the app's own built-in default
+  disabled?: boolean;
+  onChange: (frames: number | undefined) => void;
+}> = ({ value, fallback, disabled, onChange }) => {
+  const matched = DURATION_PRESETS.find((p) => p.frames === value);
+  const selectValue = value === undefined ? "auto" : matched ? String(matched.frames) : "custom";
+  const secVal = +(((value ?? fallback) / 30)).toFixed(2);
+  return (
+    <div className="row" style={{ gap: 4 }}>
+      <select value={selectValue} disabled={disabled} style={{ flex: 1 }}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "auto") onChange(undefined);
+          else if (v !== "custom") onChange(Number(v));
+        }}>
+        <option value="auto">Auto</option>
+        {DURATION_PRESETS.map((p) => <option key={p.frames} value={p.frames}>{p.label}</option>)}
+        <option value="custom">Custom…</option>
+      </select>
+      <input type="number" step={0.1} min={0.1} value={secVal} disabled={disabled} style={{ width: 64 }}
+        onChange={(e) => onChange(Math.max(1, Math.round(parseFloat(e.target.value || "0") * 30)))} />
+    </div>
+  );
+};
+
 const ElementMotion: React.FC<{
   layer: LayerT;
   clip: MotionClip | null;
@@ -1290,7 +1327,9 @@ const ElementMotion: React.FC<{
 
       {isTextLayer && (
         <>
-          <textarea dir="rtl" placeholder="متن فارسی…" style={{ marginTop: 6 }}
+          <textarea dir={layer.direction ?? "rtl"}
+            placeholder={(layer.direction ?? "rtl") === "ltr" ? "Text…" : "متن فارسی…"}
+            style={{ marginTop: 6 }}
             value={layer.text ?? ""}
             onChange={(e) => onChange((l) => { l.text = e.target.value; })} />
           <div className="grid2 mini" style={{ marginTop: 6 }}>
@@ -1358,6 +1397,12 @@ const ElementMotion: React.FC<{
                 <option value="right">right</option>
                 <option value="center">center</option>
                 <option value="left">left</option>
+              </select></div>
+            <div><label>Direction</label>
+              <select value={layer.direction ?? "rtl"} title="RTL for Farsi/Arabic, LTR for English/Latin text"
+                onChange={(e) => onChange((l) => { l.direction = e.target.value as any; })}>
+                <option value="rtl">RTL (Farsi/Arabic)</option>
+                <option value="ltr">LTR (English/Latin)</option>
               </select></div>
           </div>
         </>
@@ -1463,11 +1508,11 @@ const ElementMotion: React.FC<{
           <input type="number" step={0.1} min={0} value={sec(layer.delay)}
             onChange={(e) => onChange((l) => { l.delay = toFr(e.target.value); })} /></div>
         <div><label>in dur (s)</label>
-          <input type="number" step={0.1} min={0.1} value={sec(layer.inDuration, 26)}
-            // spring() throws outright at durationInFrames 0 (unlike delay/out
-            // dur, which are safe at 0) — floor at 1 frame so this field can't
-            // crash the whole player.
-            onChange={(e) => onChange((l) => { l.inDuration = Math.max(1, toFr(e.target.value)); })} /></div>
+          {/* spring() throws outright at durationInFrames 0 (unlike delay/out
+              dur, which are safe at 0) — DurationPresetField already floors
+              at 1 frame so this can't crash the player. */}
+          <DurationPresetField value={layer.inDuration} fallback={26}
+            onChange={(frames) => onChange((l) => { l.inDuration = frames; })} /></div>
       </div>
       <div className="grid2 mini" style={{ marginTop: 4 }}>
         <div><label>out at (s) &mdash; blank = end of page</label>
@@ -1478,12 +1523,13 @@ const ElementMotion: React.FC<{
               l.outDelay = e.target.value === "" ? undefined : toFr(e.target.value);
             })} /></div>
         <div><label>out dur (s)</label>
-          <input type="number" step={0.1} min={0.1} value={sec(layer.outDuration, 24)}
+          {/* Same interpolate()-needs-a-real-range crash as in dur — with an
+              explicit out delay this boundary is now always reachable
+              mid-page, not just coincidentally safe at 0 like before.
+              DurationPresetField already floors at 1 frame. */}
+          <DurationPresetField value={layer.outDuration} fallback={24}
             disabled={(layer.exit ?? "none") === "none"}
-            // Same interpolate()-needs-a-real-range crash as in dur — with an
-            // explicit out delay this boundary is now always reachable
-            // mid-page, not just coincidentally safe at 0 like before.
-            onChange={(e) => onChange((l) => { l.outDuration = Math.max(1, toFr(e.target.value)); })} /></div>
+            onChange={(frames) => onChange((l) => { l.outDuration = frames; })} /></div>
       </div>
     </div>
   );
