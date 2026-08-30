@@ -24,6 +24,17 @@ export type EntranceName =
   | "wipeTopToBottom"
   | "wipeBottomToTop"
   | "circleReveal"
+  // 3D flip with a cast shadow that grows in as the layer "lands" flat —
+  // like flipIn but with real weight to it (see LayerMotion.shadow).
+  | "cardFlipIn"
+  // A moving diagonal highlight sweeps across the layer once, on top of
+  // whatever else is combined with it (see LayerMotion.shine).
+  | "shineIn"
+  // Stepped clip-path reveal (a handful of discrete jumps, not a smooth
+  // wipe) — reads as "typed out" left-to-right. Text-shaping-safe: unlike
+  // word/lineReveal this never splits the DOM text at all, it's the same
+  // clip-path mechanism as wipeLeftToRight, just stepped instead of smooth.
+  | "typewriter"
   // Text-only: split into words/lines and reveal in sequence — safe for
   // cursive Farsi/Arabic script because each WORD stays one intact shaped
   // unit (never splits individual letters, which would break joining).
@@ -35,6 +46,7 @@ export const ENTRANCE_NAMES: EntranceName[] = [
   "pop", "zoomIn", "zoomOut", "growIn", "dropIn", "riseIn",
   "blurIn", "rotateIn", "flipIn", "floatIn",
   "wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop", "circleReveal",
+  "cardFlipIn", "shineIn", "typewriter",
 ];
 
 // Text-only entrances — offered in a separate list so image/photo layers
@@ -80,12 +92,16 @@ export type ExitName =
   | "wipeOutRightToLeft"
   | "wipeOutTopToBottom"
   | "wipeOutBottomToTop"
-  | "circleHide";
+  | "circleHide"
+  | "cardFlipOut"
+  | "shineOut"
+  | "typewriterOut";
 
 export const EXIT_NAMES: ExitName[] = [
   "none", "fadeOut", "slideOutLeft", "slideOutRight", "slideOutUp", "slideOutDown",
   "shrinkOut", "zoomOut", "popOut", "blurOut", "dropOut", "riseOut", "rotateOut", "flipOut",
   "wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide",
+  "cardFlipOut", "shineOut", "typewriterOut",
 ];
 
 // Page-to-page transitions. `name` is stored on the page; `label` shows in the UI.
@@ -116,6 +132,8 @@ export type LayerMotion = {
   rotate: number;
   rotateY: number; // 3D flip around the vertical axis — 0 = flat/facing forward
   clipPath?: string; // reveal/hide mask, applied on top of the other transforms
+  shadow?: number; // 0..1 cast-shadow intensity — cardFlipIn/Out's "landing" shadow
+  shine?: number; // 0..1 sweep position for a moving highlight overlay — shineIn/shineOut
 };
 
 const BASE: LayerMotion = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, rotateY: 0 };
@@ -144,6 +162,8 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
   if (motions.length === 1) return motions[0];
   let opacity = 1, tx = 0, ty = 0, scale = 1, blur = 0, rotate = 0, rotateY = 0;
   let clipPath: string | undefined;
+  let shadow: number | undefined;
+  let shine: number | undefined;
   for (const m of motions) {
     opacity = Math.min(opacity, m.opacity);
     tx += m.tx; ty += m.ty;
@@ -152,8 +172,15 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
     rotate += m.rotate;
     rotateY += m.rotateY;
     if (!clipPath && m.clipPath) clipPath = m.clipPath;
+    // Shadow intensity: MAX, not sum — two combined effects both casting a
+    // shadow should read as one shadow at its strongest point, not a
+    // doubled-up value that could exceed 1.
+    if (m.shadow !== undefined) shadow = Math.max(shadow ?? 0, m.shadow);
+    // Shine sweep, like clipPath: only one sweep makes sense on a layer at
+    // once, first one set wins.
+    if (shine === undefined && m.shine !== undefined) shine = m.shine;
   }
-  return { opacity, tx, ty, scale, blur, rotate, rotateY, clipPath };
+  return { opacity, tx, ty, scale, blur, rotate, rotateY, clipPath, shadow, shine };
 }
 
 // Spring feel per entrance — bouncy ones overshoot, the rest settle smoothly.
@@ -185,16 +212,37 @@ export type EasingName =
   | "easeOutExpo"
   | "easeInExpo"
   | "easeOutBack"
-  | "easeInBack";
+  | "easeInBack"
+  // A real multi-bounce settle (ball dropping and rebounding a few times,
+  // each smaller) — genuinely different from easeOutBack's single overshoot.
+  // Can't be expressed as a cubic-bezier at all (bezier is monotonic-ish by
+  // nature; this needs several literal up-down rebounds), so it's the one
+  // named curve here that isn't Easing.bezier(...) under the hood.
+  | "bounce";
 
 export const EASING_NAMES: EasingName[] = [
   "spring", "linear", "ease", "easeIn", "easeOut", "easeInOut",
   "easeOutCubic", "easeInCubic", "easeOutExpo", "easeInExpo",
-  "easeOutBack", "easeInBack",
+  "easeOutBack", "easeInBack", "bounce",
 ];
+
+// Standard easeOutBounce (the classic Penner formula, same one easings.net/
+// every animation library ships) — a plain JS function works fine here,
+// same as the Easing.bezier(...) results below; Remotion's `easing` option
+// just wants any (t: number) => number.
+function bounceOut(t: number): number {
+  const n1 = 7.5625;
+  const d1 = 2.75;
+  if (t < 1 / d1) return n1 * t * t;
+  if (t < 2 / d1) { const u = t - 1.5 / d1; return n1 * u * u + 0.75; }
+  if (t < 2.5 / d1) { const u = t - 2.25 / d1; return n1 * u * u + 0.9375; }
+  const u = t - 2.625 / d1;
+  return n1 * u * u + 0.984375;
+}
 
 function easingFn(name: Exclude<EasingName, "spring">): (t: number) => number {
   switch (name) {
+    case "bounce": return bounceOut;
     case "linear": return Easing.linear;
     case "ease": return Easing.bezier(0.25, 0.1, 0.25, 1.0);
     case "easeIn": return Easing.bezier(0.42, 0, 1.0, 1.0);
@@ -230,6 +278,11 @@ const DEFAULT_ENTRANCE_EASING: Partial<Record<EntranceName, EasingName>> = {
   wipeLeftToRight: "easeInOut", wipeRightToLeft: "easeInOut",
   wipeTopToBottom: "easeInOut", wipeBottomToTop: "easeInOut",
   circleReveal: "easeInOut",
+  cardFlipIn: "easeOutCubic",
+  shineIn: "easeInOut",
+  // Linear, deliberately — real typing happens at a constant rate; an eased
+  // curve would bunch the steps up at one end instead of ticking evenly.
+  typewriter: "linear",
 };
 
 // Exits mirror the entrance table's intent but reversed: things arriving
@@ -251,6 +304,9 @@ const DEFAULT_EXIT_EASING: Partial<Record<ExitName, EasingName>> = {
   wipeOutLeftToRight: "easeInOut", wipeOutRightToLeft: "easeInOut",
   wipeOutTopToBottom: "easeInOut", wipeOutBottomToTop: "easeInOut",
   circleHide: "easeInOut",
+  cardFlipOut: "easeInCubic",
+  shineOut: "easeIn",
+  typewriterOut: "linear",
 };
 
 // 0..1 entrance progress, driven by whichever easing applies — physics
@@ -339,6 +395,25 @@ export function entranceMotion(name: EntranceName, p: number): LayerMotion {
       return { ...BASE, clipPath: `inset(${(1 - p) * 100}% 0 0 0)` };
     case "circleReveal":
       return { ...BASE, clipPath: `circle(${p * 100}% at 50% 50%)` };
+    // Like flipIn but with real weight: a slight scale dip (like it's been
+    // lifted off the table) and a cast shadow that grows in as it lands
+    // flat — see LayerMotion.shadow, rendered as a boxShadow in PageScene.
+    case "cardFlipIn":
+      return { ...BASE, opacity: p, rotateY: (1 - p) * -110, scale: interpolate(p, [0, 1], [0.92, 1]), shadow: p };
+    // A fade-in with a diagonal highlight sweeping across in sync — see
+    // LayerMotion.shine, rendered as an overlay gradient in PageScene.
+    case "shineIn":
+      return { ...BASE, opacity: p, shine: p };
+    // Same clip-path mechanism as wipeLeftToRight, just stepped instead of
+    // smooth — a handful of discrete jumps reads as "typed out" rather than
+    // wiped. Never splits the actual text into characters (that would break
+    // Farsi/Arabic letter joining), it's purely a mask over the intact
+    // string, exactly like every other wipe/circle entrance above.
+    case "typewriter": {
+      const steps = 16;
+      const stepped = Math.floor(p * steps) / steps;
+      return { ...BASE, clipPath: `inset(0 ${(1 - stepped) * 100}% 0 0)` };
+    }
     default:
       return BASE;
   }
@@ -387,6 +462,16 @@ export function exitMotion(name: ExitName, q: number): LayerMotion {
       return { ...BASE, clipPath: `inset(0 0 ${q * 100}% 0)` };
     case "circleHide":
       return { ...BASE, clipPath: `circle(${(1 - q) * 100}% at 50% 50%)` };
+    // Mirror of cardFlipIn: shadow lifts away as it turns and fades.
+    case "cardFlipOut":
+      return { ...BASE, opacity: 1 - q, rotateY: q * 110, scale: interpolate(q, [0, 1], [1, 0.92]), shadow: 1 - q };
+    case "shineOut":
+      return { ...BASE, opacity: 1 - q, shine: q };
+    case "typewriterOut": {
+      const steps = 16;
+      const stepped = Math.floor(q * steps) / steps;
+      return { ...BASE, clipPath: `inset(0 0 0 ${stepped * 100}%)` };
+    }
     default:
       return BASE;
   }

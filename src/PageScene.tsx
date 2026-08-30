@@ -15,6 +15,29 @@ import {
   entranceMotion, entranceProgress, exitMotion, exitProgress, combineMotions, ambientMotion,
   type EntranceName, type ExitName,
 } from "./presets";
+
+// A moving diagonal highlight for shineIn/shineOut (LayerMotion.shine,
+// 0..1 sweep position) — an overlay on top of the content, not a filter on
+// it, so it works the same over text, photos, or video. `screen` blend
+// brightens what's underneath instead of just painting a flat white stripe.
+const ShineOverlay: React.FC<{ shine: number }> = ({ shine }) => (
+  <div
+    style={{
+      position: "absolute", inset: 0, pointerEvents: "none",
+      backgroundImage: "linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.55) 50%, transparent 65%)",
+      backgroundSize: "300% 300%",
+      backgroundPositionX: `${-100 + shine * 300}%`,
+      mixBlendMode: "screen",
+    }}
+  />
+);
+
+// cardFlipIn/Out's "landing" shadow (LayerMotion.shadow, 0..1 intensity) —
+// a plain boxShadow scaled by intensity, cheap and works on any layer.
+function shadowStyle(shadow: number | undefined): string | undefined {
+  if (!shadow) return undefined;
+  return `0 ${18 * shadow}px ${40 * shadow}px rgba(0,0,0,${0.45 * shadow})`;
+}
 import type { Page, ContentLayer } from "./types";
 
 // Resolves a layer's up-to-3 combined entrance (or exit) slots into one
@@ -116,6 +139,7 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
     transform: `perspective(900px) translate(${m.tx}px, ${m.ty}px) scale(${m.scale}) rotate(${m.rotate}deg) rotateY(${m.rotateY}deg)`,
     transformOrigin: "center center",
     clipPath: m.clipPath,
+    boxShadow: shadowStyle(m.shadow),
     overflow: "visible", // text isn't a mask — don't silently clip slightly-oversized content
     display: "flex",
     alignItems: "center",
@@ -123,7 +147,12 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
   };
 
   if (!isStagger || inExitPhase) {
-    return <div style={boxStyle}><div style={textStyle}>{layer.text}</div></div>;
+    return (
+      <div style={boxStyle}>
+        <div style={textStyle}>{layer.text}</div>
+        {m.shine !== undefined && <ShineOverlay shine={m.shine} />}
+      </div>
+    );
   }
 
   // Word/line stagger — split on the boundary, spread each unit's own short
@@ -221,6 +250,7 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
         transform: `perspective(900px) translate(${m.tx}px, ${m.ty}px) scale(${m.scale}) rotate(${m.rotate}deg) rotateY(${m.rotateY}deg)`,
         transformOrigin: "center center",
         clipPath: m.clipPath, // reveal/hide mask (wipe, circle) — undefined = no mask
+        boxShadow: shadowStyle(m.shadow),
         overflow: "hidden", // the box IS the mask — anything inside gets cropped to its shape
       }}
     >
@@ -234,6 +264,7 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
       >
         {media}
       </div>
+      {m.shine !== undefined && <ShineOverlay shine={m.shine} />}
     </div>
   );
 };
@@ -247,20 +278,42 @@ export const PageScene: React.FC<{ page: Page; background?: string }> = ({
 
   return (
     <AbsoluteFill style={{ backgroundColor: background, overflow: "hidden" }}>
-      <AbsoluteFill
-        style={{
-          transform: `translate(${a.tx}px, ${a.ty}px) scale(${a.scale}) rotate(${a.rotate}deg)`,
-          transformOrigin: "center center",
-        }}
-      >
-        {page.layers.map((layer) =>
-          layer.assetKind === "text" ? (
-            <TextLayerView key={layer.index} layer={layer} pageDuration={page.durationInFrames} />
-          ) : (
-            <LayerView key={layer.index} layer={layer} pageDuration={page.durationInFrames} />
-          )
-        )}
-      </AbsoluteFill>
+      {/* Each layer gets its OWN full-page ambient wrapper instead of one
+          shared wrapper around all of them — at the default depth (1, same
+          as every layer got before this existed) this renders pixel-
+          identical to one shared wrapper, since every wrapper is the same
+          size/position with the same transform. What it buys: a layer can
+          scale that same page-centered transform by its own depth (0 =
+          ignores the page ambient entirely, <1 = drifts slower/background
+          feel, >1 = drifts more/foreground feel) — real parallax instead of
+          every layer moving as one rigid unit. Depth still pivots around
+          the PAGE's center (this wrapper spans the whole page), not the
+          layer's own center, which is what keeps depth=1 identical to the
+          old shared-wrapper behavior. */}
+      {page.layers.map((layer) => {
+        const depth = layer.parallaxDepth ?? 1;
+        const scaled = depth === 1 ? a : {
+          tx: a.tx * depth,
+          ty: a.ty * depth,
+          scale: 1 + (a.scale - 1) * depth,
+          rotate: a.rotate * depth,
+        };
+        return (
+          <AbsoluteFill
+            key={layer.index}
+            style={{
+              transform: `translate(${scaled.tx}px, ${scaled.ty}px) scale(${scaled.scale}) rotate(${scaled.rotate}deg)`,
+              transformOrigin: "center center",
+            }}
+          >
+            {layer.assetKind === "text" ? (
+              <TextLayerView layer={layer} pageDuration={page.durationInFrames} />
+            ) : (
+              <LayerView layer={layer} pageDuration={page.durationInFrames} />
+            )}
+          </AbsoluteFill>
+        );
+      })}
     </AbsoluteFill>
   );
 };

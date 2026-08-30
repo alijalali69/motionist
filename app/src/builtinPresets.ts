@@ -65,7 +65,7 @@ export const BUILT_IN_PRESETS: BuiltInPreset[] = [
     name: "Bounce Settle",
     clip: {
       entrance: "dropIn", entrance2: "pop",
-      delay: 0, inDuration: 18, entranceEasing: "easeOutBack",
+      delay: 0, inDuration: 24, entranceEasing: "bounce",
       exit: "popOut",
       outDuration: 9, exitEasing: "easeInBack",
     },
@@ -88,6 +88,40 @@ export const BUILT_IN_PRESETS: BuiltInPreset[] = [
       delay: 0, inDuration: 36, entranceEasing: "easeOutCubic",
       exit: "circleHide",
       outDuration: 36, exitEasing: "easeInCubic",
+    },
+  },
+  // --- "Bucket B" primitives, showcased as presets so they're discoverable
+  // without hunting through the FX dropdown ---------------------------------
+  {
+    id: "builtin-card-flip-reveal",
+    name: "Card Flip Reveal",
+    clip: {
+      entrance: "cardFlipIn",
+      delay: 0, inDuration: 24, entranceEasing: "easeOutCubic",
+      exit: "cardFlipOut",
+      outDuration: 18, exitEasing: "easeInCubic",
+    },
+  },
+  {
+    id: "builtin-glossy-shine",
+    name: "Glossy Shine",
+    clip: {
+      entrance: "shineIn",
+      delay: 0, inDuration: 30, entranceEasing: "easeInOut",
+      exit: "fadeOut",
+      outDuration: 18, exitEasing: "easeIn",
+    },
+  },
+  {
+    id: "builtin-typewriter",
+    name: "Typewriter",
+    clip: {
+      // Longer than most — 16 discrete steps need enough time between each
+      // to actually read as "typed" instead of a fast blur of jumps.
+      entrance: "typewriter",
+      delay: 0, inDuration: 45, entranceEasing: "linear",
+      exit: "typewriterOut",
+      outDuration: 30, exitEasing: "linear",
     },
   },
 ];

@@ -1838,6 +1838,13 @@ const ElementMotion: React.FC<{
               disabled={(layer.exit ?? "none") === "none"}
               onChange={(frames) => onChange((l) => { l.outDuration = frames; })} /></div>
         </div>
+        <div className="mini" style={{ marginTop: 4 }}>
+          <label title="How much of the PAGE's own ambient motion (set on the Page tab, e.g. kenburns/sway) this layer follows. 1 = moves with it normally, 0 = stays still while everything else drifts, below 1 = drifts slower (background feel), above 1 = drifts more (foreground feel). No effect if the page's ambient is “none”.">
+            Parallax depth (page ambient)
+          </label>
+          <input type="number" step={0.1} min={0} value={layer.parallaxDepth ?? 1}
+            onChange={(e) => onChange((l) => { l.parallaxDepth = Math.max(0, parseFloat(e.target.value || "1")); })} />
+        </div>
       </div>
       </>
       )}

@@ -63,6 +63,15 @@ export type ContentLayer = {
   photoZoom?: number; // >=1, default 1 (1 = exact cover fit, no extra zoom)
   naturalWidth?: number | null;  // uploaded asset's real pixel size (for pan math)
   naturalHeight?: number | null;
+  // How much of the PAGE's own ambient motion (kenburns, sway, etc. — set on
+  // the page, not per-layer) this layer participates in. Unset/1 = moves
+  // exactly with the page ambient (today's only behavior, still the
+  // default). 0 = ignores it entirely (stays put while everything else
+  // drifts — e.g. a locked foreground title over a panning background).
+  // >1 = moves MORE than the page ambient (closer/foreground feel). <1 = a
+  // background layer drifting slower than the rest, for real parallax depth
+  // instead of every layer moving as one rigid unit.
+  parallaxDepth?: number;
 };
 
 export type TemplateLayer = {
