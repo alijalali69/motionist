@@ -1,14 +1,22 @@
 :root {
-  --bg: #14161a;
-  --panel: #1c1f26;
-  --panel2: #242832;
-  --line: #2f3440;
-  --text: #e7e9ee;
-  --muted: #9aa1ad;
-  --accent: #b5432f;
-  --accent2: #d9694f;
+  /* "Precision Console" — borrows its vocabulary from color-grading panels
+     (the other app Motionist lives inside, via the Resolve plugin). Cooler,
+     darker neutrals than before; ONE accent (blue) means "selected/primary/
+     interactive," full stop — the old orange is demoted to --warn,
+     destructive actions and errors only, so it stops competing with itself
+     across a dozen unrelated uses. */
+  --bg: #0d0f12;
+  --panel: #15181c;
+  --panel2: #1c2126;
+  --line: #272c33;
+  --text: #e7eaed;
+  --muted: #8b939e;
+  --accent: #3ea6ff;
+  --accent2: #63bbff; /* lighter hover-tint of --accent */
+  --warn: #d9694f;    /* the old orange — destructive/error only now */
   --good: #3fb96f;
   --good2: #2c8f54;
+  --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -92,7 +100,8 @@ h1 { font-size: 16px; margin: 0 0 4px; letter-spacing: 0.5px; }
    plus a brighter color make each section boundary actually visible instead
    of blending into the surrounding hint text. */
 h2 {
-  font-size: 12px; text-transform: uppercase; letter-spacing: 1px;
+  font-family: var(--mono);
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--text); font-weight: 700;
   margin: 20px 0 10px; padding-bottom: 6px;
   border-bottom: 1px solid var(--line);
@@ -114,19 +123,39 @@ h2 {
   padding: 1px 4px; width: 120px;
 }
 
-/* --- Tabs (Page inspector) ---------------------------------------------- */
+/* --- Tabs (Page inspector) — a bordered "segmented control", not an
+   underline strip. The underline version sat flush with the content above
+   and below it, so at a glance a tab and a plain label looked the same
+   thing; a bordered box around the WHOLE switch reads as one control with
+   states no matter how it's scanned, and the active segment gets its own
+   fill + border so "you are here" doesn't depend on noticing a 2px line. */
 .tabs {
-  display: flex; gap: 2px; border-bottom: 1px solid var(--line);
+  display: flex; gap: 4px; padding: 4px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
   margin-bottom: 12px;
 }
 .tab {
-  background: none; border: none; color: var(--muted);
-  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
-  padding: 8px 4px; cursor: pointer; border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  flex: 1;
+  background: none; border: 1px solid transparent; color: var(--muted);
+  font-family: var(--mono); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 8px 10px; border-radius: 5px; cursor: pointer;
 }
 .tab:hover { color: var(--text); }
-.tab.active { color: var(--accent2); border-bottom-color: var(--accent2); }
+.tab.active {
+  background: var(--panel); color: var(--accent); border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(62, 166, 255, 0.15);
+}
+
+/* Same bordered-box language as .tabs, sized for a row of icon-toggle
+   buttons (text align, direction) instead of text tabs — one consistent
+   "this is a switch with states" container wherever a real selection
+   exists. Box-align's icon row is deliberately NOT wrapped in this: those
+   are one-off actions with no persisted "current" state, so boxing them
+   the same way would falsely imply one is selected. */
+.segmented {
+  display: inline-flex; gap: 4px; padding: 4px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+}
 
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -195,10 +224,10 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 6px; }
 
 .layer-row { display: grid; grid-template-columns: 1fr 1.2fr; gap: 6px; align-items: center; margin-bottom: 6px; }
 .layer-row .lname { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent2); }
+.tag { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent2); }
 
 .hint { color: var(--muted); font-size: 11px; margin-top: 6px; line-height: 1.4; }
-.err { color: #e5715c; font-size: 12px; margin-top: 8px; white-space: pre-wrap; }
+.err { color: var(--warn); font-size: 12px; margin-top: 8px; white-space: pre-wrap; }
 .spin { color: var(--accent2); font-size: 12px; }
 a.dl { color: var(--accent2); }
 .hidden-file { display: none; }
@@ -212,7 +241,7 @@ a.dl { color: var(--accent2); }
 }
 .dropzone.over {
   border-color: var(--accent);
-  background: rgba(181, 67, 47, 0.08);
+  background: rgba(62, 166, 255, 0.08);
 }
 
 /* --- Dashboard ------------------------------------------------------------ */
@@ -296,7 +325,7 @@ a.dl { color: var(--accent2); }
   font-size: 12px; cursor: pointer; opacity: 0; transition: opacity 0.12s;
 }
 .project-card:hover .thumb-del { opacity: 1; }
-.thumb-del:hover { background: var(--accent); border-color: var(--accent); }
+.thumb-del:hover { background: var(--warn); border-color: var(--warn); }
 
 .thumb-confirm {
   position: absolute; inset: 0;
@@ -305,8 +334,8 @@ a.dl { color: var(--accent2); }
   gap: 10px; text-align: center; padding: 12px;
 }
 .thumb-confirm span { font-size: 13px; color: var(--text); }
-.btn.danger { background: var(--accent); border-color: var(--accent); }
-.btn.danger:hover { background: #c94f38; }
+.btn.danger { background: var(--warn); border-color: var(--warn); }
+.btn.danger:hover { background: #c4573f; }
 
 .project-meta { padding: 12px 14px 14px; }
 .project-name {
@@ -388,8 +417,9 @@ input.project-name-input::placeholder { color: var(--muted); font-weight: 600; }
    of two same-color borders blending together. */
 .card.compact.group { margin-top: 8px; background: var(--panel2); }
 .subhead {
-  font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
-  color: var(--accent2); font-weight: 700; margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--accent); font-weight: 700; margin: 0 0 8px;
 }
 
 /* --- Motion preset list -------------------------------------------------- */

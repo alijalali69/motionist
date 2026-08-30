@@ -1625,7 +1625,7 @@ const ElementMotion: React.FC<{
                 text-align). Not the same as Box align below — deliberately
                 different icon style so the two are never confused. */}
             <div><label>Text align</label>
-              <div className="row" style={{ gap: 4 }}>
+              <div className="segmented">
                 {(["left", "center", "right"] as const).map((a) => {
                   const active = (layer.textAlign ?? "right") === a;
                   return (
@@ -1669,7 +1669,7 @@ const ElementMotion: React.FC<{
               </div>
             </div>
             <div><label>Direction</label>
-              <div className="row" style={{ gap: 4 }}>
+              <div className="segmented">
                 {(["rtl", "ltr"] as const).map((d) => {
                   const active = (layer.direction ?? "rtl") === d;
                   return (
