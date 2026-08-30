@@ -8,6 +8,7 @@ import {
   listFonts, uploadFontToLibrary, deleteProjectFiles, type IngestResult, type FontEntry,
   listMotionPresets, saveMotionPreset, deleteMotionPreset, type MotionPresetEntry,
 } from "./api";
+import { BUILT_IN_PRESETS } from "./builtinPresets";
 import { Dashboard } from "./Dashboard";
 import { StoryboardStrip } from "./StoryboardStrip";
 import { CanvasHandles, type Handle } from "./CanvasHandles";
@@ -1714,25 +1715,29 @@ const ElementMotion: React.FC<{
                 <button className="btn small" onClick={() => { setSavingPreset(false); setPresetName(""); }}>Cancel</button>
               </div>
             )}
-            {motionPresets && motionPresets.length > 0 ? (
-              <div className="preset-list">
-                {motionPresets.map((p) => (
+            {/* Built-ins always show up first, ahead of whatever's saved to
+                this machine — they ship in source (not the gitignored
+                presets data file), so no delete button on them. */}
+            <div className="preset-list">
+              {[...BUILT_IN_PRESETS, ...(motionPresets ?? [])].map((p) => {
+                const builtin = p.id.startsWith("builtin-");
+                return (
                   <div key={p.id} className="row between preset-row">
-                    <span className="preset-name" title={p.name}>{p.name}</span>
+                    <span className="preset-name" title={p.name}>
+                      {p.name}{builtin && <span className="tag" style={{ marginLeft: 4 }}>built-in</span>}
+                    </span>
                     <div className="row" style={{ gap: 4 }}>
                       <button className="btn small" title={`Apply "${p.name}" to this element`}
                         onClick={() => onChange((l) => applyClip(l, p.clip))}>Apply</button>
-                      {onDeleteMotionPreset && (
+                      {!builtin && onDeleteMotionPreset && (
                         <button className="btn small" title={`Delete "${p.name}"`}
                           onClick={() => onDeleteMotionPreset(p.id)}>✕</button>
                       )}
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="hint" style={{ margin: "4px 0 0" }}>No saved presets yet.</p>
-            )}
+                );
+              })}
+            </div>
           </div>
         )}
 
