@@ -460,16 +460,17 @@ a.dl { color: var(--accent2); }
   border-radius: 3px;
   transition: width 0.3s ease;
 }
-/* Upload buttons — stand out from regular buttons (dashed accent border,
-   subtle icon) while empty; turn solid green once something is uploaded, so
-   filled-vs-empty is visible at a glance without reading the label text. */
+/* Upload buttons — a plain button while empty (border/text only pick up
+   accent color on hover, same "color carries the state" language as the
+   icon toggles); turn solid green once something is uploaded, so
+   filled-vs-empty is still visible at a glance without reading the label. */
 .btn.upload {
-  border: 1.5px dashed var(--accent2);
-  background: rgba(217, 105, 79, 0.1);
-  color: var(--accent2);
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--text);
   font-weight: 600;
 }
-.btn.upload:hover { background: rgba(217, 105, 79, 0.2); border-color: var(--accent2); }
+.btn.upload:hover { border-color: var(--accent); color: var(--accent2); }
 .btn.upload::before { content: "⬆ "; }
 .btn.upload.filled {
   border: 1.5px solid var(--good);
