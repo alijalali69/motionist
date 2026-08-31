@@ -266,6 +266,27 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [dragOver, setDragOver] = React.useState(false);
   const [motionClip, setMotionClip] = React.useState<MotionClip | null>(null);
   const [showSafeZone, setShowSafeZone] = React.useState(false);
+  // A photo layer's own frame is now freely draggable/resizable (plain drag)
+  // same as text/shapes — but it ALSO has a pan-within-frame interaction
+  // (drag the photo to choose its crop) that used to own the whole body-drag
+  // gesture. Both can't claim a plain drag on the same box at once, so pan
+  // moves behind a modifier: holding Alt hands the drag back to
+  // PhotoPanHandles instead of the move/resize handle (see canvasHandles'
+  // panPassthrough below, and CanvasHandles.tsx's use of it).
+  const [altHeld, setAltHeld] = React.useState(false);
+  React.useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Alt") setAltHeld(true); };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.key === "Alt") setAltHeld(false); };
+    const onBlur = () => setAltHeld(false); // Alt-tab away mid-hold shouldn't leave it stuck on
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
   const [transparentExport, setTransparentExport] = React.useState(false);
   // Export file name — seeded once per project load from the project's own
   // name (so it's never blank by default), then left alone: a later project
@@ -765,14 +786,11 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   };
 
   // Draggable/resizable canvas handles: global bg/logo/title + every
-  // photo-role layer on the CURRENT page (auto-detected placeholder slots —
-  // no naming convention needed). Rebuilt whenever the project or selected
-  // page changes. The global bg/logo/title are repositionable — they're
-  // standalone global elements, uploaded the same way, not part of any
-  // page's template. (Don't confuse this with a page's own template-derived
-  // photo/bg LAYER, which stays fixed — what's adjustable there is the
-  // photo's crop position INSIDE its locked frame, see PhotoPanHandles
-  // below, not the frame itself.) BG goes first so its handle renders
+  // text/shape/photo layer on the CURRENT page. Rebuilt whenever the
+  // project, selected page, or altHeld changes. A photo layer's move/resize
+  // handle sits on top of its own pan-crop zone (PhotoPanHandles) at rest;
+  // holding Alt flips panPassthrough on so the drag goes to panning instead
+  // — see the isPhoto branch below. BG goes first so its handle renders
   // underneath logo/title's — it's usually the biggest box on screen, and
   // shouldn't steal clicks meant for the smaller ones sitting on top of it.
   const canvasHandles: Handle[] = React.useMemo(() => {
@@ -794,18 +812,27 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       id: "loader", label: "LOADER", color: "#c9a53b", box: project.loader,
       onChange: (b) => update((p) => { p.loader = b; }),
     });
-    // Text and shape layers are user-created (not part of a PSD/SVG
-    // template), so — unlike photo placeholder boxes, whose frame comes from
-    // the design file (or defaults to the full page) and is only panned/
-    // zoomed within, never moved — they're freely draggable/resizable too.
+    // Text, shape, and photo layers are all freely draggable/resizable — a
+    // photo's box used to be treated as fixed (only pan/zoom the content
+    // within it, never move the frame itself), on the theory that a
+    // PSD-extracted slot's position was part of the template design. Users
+    // want to freely reposition/resize photos too, same as text/shapes, so
+    // that restriction is gone — nothing stops leaving a PSD-derived one
+    // exactly where it started if that's what's wanted.
     const page = project.pages[sel];
     page?.layers.forEach((l, li) => {
-      if (l.assetKind !== "text" && l.assetKind !== "shape") return;
+      const isPhoto = l.role === "photo";
+      if (l.assetKind !== "text" && l.assetKind !== "shape" && !isPhoto) return;
       list.push({
-        id: `${l.assetKind}-${li}`,
-        label: l.assetKind === "text" ? (l.text ? l.text.slice(0, 18) : "TEXT") : "SHAPE",
-        color: l.assetKind === "text" ? "#c46be0" : "#3ea6ff",
+        id: `${isPhoto ? "photo" : l.assetKind}-${li}`,
+        label: isPhoto ? "PHOTO" : l.assetKind === "text" ? (l.text ? l.text.slice(0, 18) : "TEXT") : "SHAPE",
+        color: isPhoto ? "#4fd1c5" : l.assetKind === "text" ? "#c46be0" : "#3ea6ff",
         box: { left: l.left, top: l.top, width: l.width, height: l.height },
+        // A photo's move/resize handle otherwise permanently shadows its own
+        // pan-crop zone underneath (same box, this handle wins the click) —
+        // hand the drag back to PhotoPanHandles while Alt is held instead of
+        // fighting over one gesture.
+        panPassthrough: isPhoto && altHeld,
         onChange: (b) => update((p) => {
           const layer = p.pages[sel].layers[li];
           layer.left = b.left; layer.top = b.top; layer.width = b.width; layer.height = b.height;
@@ -813,7 +840,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       });
     });
     return list;
-  }, [project, sel]);
+  }, [project, sel, altHeld]);
 
   // Photo pan targets: every photo-role layer on the current page that has a
   // real uploaded asset (with known natural size, needed to compute correct
@@ -1073,12 +1100,12 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             )}
             {canvasHandles.length > 0 && (
               <p className="hint" style={{ margin: project.height > project.width ? "6px 0 0" : 0, textAlign: "center" }}>
-                BG/Logo/Title — drag to reposition, corner grip to resize · arrow keys to nudge (Shift = 10px)
+                BG/Logo/Title/Text/Shape/Photo — drag to reposition, corner grip to resize · arrow keys to nudge (Shift = 10px)
               </p>
             )}
             {photoPanTargets.length > 0 && (
               <p className="hint" style={{ margin: "6px 0 0", textAlign: "center" }}>
-                Pink boxes — drag the photo to reposition its crop (the frame itself is fixed by the design)
+                Hold <b>Alt</b> and drag a photo to reposition its crop inside its frame instead of moving the frame itself
               </p>
             )}
           </div>

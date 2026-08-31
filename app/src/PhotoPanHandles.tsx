@@ -110,7 +110,7 @@ const PanBox: React.FC<{ target: PhotoPanTarget; scale: number }> = ({ target, s
       onPointerUp={onPointerUp}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
-      title={canPan ? "Drag to reposition the photo inside its frame" : "This photo already fills its frame exactly — nothing to pan"}
+      title={canPan ? "Alt+drag to reposition the photo inside its frame (plain drag moves/resizes the frame itself)" : "This photo already fills its frame exactly — nothing to pan"}
       style={{
         position: "absolute",
         left: box.left * scale,

@@ -7,6 +7,11 @@ export type Handle = {
   color: string;
   box: Box;
   onChange: (box: Box) => void;
+  // When true, this handle steps aside (pointer-events off) so whatever's
+  // underneath — a photo's own pan-crop zone in PhotoPanHandles — gets the
+  // drag instead. Used for the Alt-to-pan modifier on photo layers, whose
+  // move/resize handle otherwise permanently sits on top of that same box.
+  panPassthrough?: boolean;
 };
 
 type Guide = { axis: "x" | "y"; pos: number }; // canvas-space position of an active alignment line
@@ -220,7 +225,11 @@ const DragBox: React.FC<{
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
       onKeyDown={onKeyDown}
-      title={`Drag to move ${handle.label.toLowerCase()} — arrow keys to nudge (Shift = 10px)`}
+      title={
+        handle.id.startsWith("photo")
+          ? "Drag to move/resize the photo's frame — hold Alt and drag to reposition the photo inside it instead"
+          : `Drag to move ${handle.label.toLowerCase()} — arrow keys to nudge (Shift = 10px)`
+      }
       className="canvas-handle"
       style={{
         position: "absolute",
@@ -231,7 +240,10 @@ const DragBox: React.FC<{
         border: active ? `2px ${dragging ? "solid" : "dashed"} ${handle.color}` : "2px solid transparent",
         background: dragging ? `${handle.color}22` : "transparent",
         cursor: "move",
-        pointerEvents: "auto",
+        // Alt-to-pan: step aside so the pan-crop zone underneath (same box,
+        // in PhotoPanHandles) gets the drag instead of this move/resize
+        // handle permanently shadowing it.
+        pointerEvents: handle.panPassthrough ? "none" : "auto",
         boxSizing: "border-box",
         outlineOffset: 2,
       }}
