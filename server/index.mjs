@@ -72,7 +72,14 @@ async function runRenderWithBrowserFallback(args) {
     const looksLikeBrowserDownloadFailure = /chrome-for-testing|chrome-headless-shell|downloading file|AccessDenied/i.test(msg);
     const localBrowser = looksLikeBrowserDownloadFailure ? findLocalBrowser() : null;
     if (!localBrowser) throw e;
-    return await run("npx", [...args, `--browser-executable=${localBrowser}`]);
+    // `run()` spawns with `shell: true`, which (per Node's own docs/
+    // deprecation warning) does NOT escape array args — it just
+    // concatenates them into one command line for cmd.exe to split on
+    // whitespace again. An unquoted Program Files path truncates at the
+    // first space ("browserExecutable" was specified as 'C:\Program' but
+    // the path doesn't exist — the exact failure this hit in the wild).
+    // Quoting the whole flag=value argument keeps it one token.
+    return await run("npx", [...args, `"--browser-executable=${localBrowser}"`]);
   }
 }
 
