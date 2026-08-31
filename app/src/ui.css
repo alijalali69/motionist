@@ -175,14 +175,17 @@ h2 {
    call-to-action, so they shouldn't read as buttons until touched. */
 .btn.icon { padding: 3px 5px; line-height: 0; background: none; border-color: transparent; }
 .btn.icon svg { display: block; }
-.btn.icon:hover { border-color: var(--line); }
+/* Box align (one-off action, never gets .active) has no other state to show
+   it's clickable — hover needs an actual fill, not just a hairline border,
+   or it's invisible against the dark panel behind it. */
+.btn.icon:hover { background: var(--panel2); border-color: var(--line); }
 /* Selected state for icon toggles (text align / direction) — the icon
    itself carries the selected state via color, not a filled box; no
    background/border swap needed since .btn.icon is already transparent. */
 .btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn.active:hover { background: var(--accent2); border-color: var(--accent2); }
 .btn.icon.active { background: none; border-color: transparent; color: var(--accent); }
-.btn.icon.active:hover { background: none; border-color: var(--line); color: var(--accent2); }
+.btn.icon.active:hover { background: var(--panel2); border-color: var(--line); color: var(--accent2); }
 
 .row { display: flex; gap: 8px; align-items: center; }
 .row.between { justify-content: space-between; }
