@@ -10,14 +10,27 @@ const FONT_STYLES = [
 ];
 
 // Canvas-size presets for the "New project" dialog. Pixel dimensions match
-// each platform's own published spec, not a guess.
-const SIZE_PRESETS: { label: string; w: number; h: number }[] = [
-  { label: "Instagram / TikTok Reels, Stories (9:16)", w: 1080, h: 1920 },
-  { label: "YouTube Shorts (9:16)", w: 1080, h: 1920 },
-  { label: "Instagram feed, square (1:1)", w: 1080, h: 1080 },
-  { label: "Instagram feed, portrait (4:5)", w: 1080, h: 1350 },
-  { label: "YouTube standard, landscape (16:9)", w: 1920, h: 1080 },
+// each platform's own published spec, not a guess. `short` is just for the
+// dashboard's size-card row — `label` (the long form) is what the New
+// project dialog's own <select> still shows.
+const SIZE_PRESETS: { label: string; short: string; w: number; h: number }[] = [
+  { label: "Instagram / TikTok Reels, Stories (9:16)", short: "Reels / TikTok", w: 1080, h: 1920 },
+  { label: "YouTube Shorts (9:16)", short: "YouTube Shorts", w: 1080, h: 1920 },
+  { label: "Instagram feed, square (1:1)", short: "Feed, square", w: 1080, h: 1080 },
+  { label: "Instagram feed, portrait (4:5)", short: "Feed, portrait", w: 1080, h: 1350 },
+  { label: "YouTube standard, landscape (16:9)", short: "YouTube landscape", w: 1920, h: 1080 },
 ];
+
+// A small outline box in the preset's own aspect ratio — capped to a 40px
+// bounding square so portrait/square/landscape presets read as visibly
+// different shapes at a glance, not just different caption text.
+const SizeShape: React.FC<{ w: number; h: number }> = ({ w, h }) => {
+  const max = 40;
+  const ratio = w / h;
+  const boxW = ratio >= 1 ? max : Math.round(max * ratio);
+  const boxH = ratio >= 1 ? Math.round(max / ratio) : max;
+  return <div className="size-shape" style={{ width: boxW, height: boxH }} />;
+};
 
 // Guesses a variant's style from its filename — e.g. "Vazirmatn-Bold.ttf" ->
 // "Bold" — so selecting a whole family's files at once (Regular + Bold +
@@ -231,6 +244,18 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
 
       {managingFonts && <FontManager onClose={() => setManagingFonts(false)} />}
 
+      <div className="section-label">Start a new project</div>
+      <div className="size-preset-row">
+        {SIZE_PRESETS.map((s, i) => (
+          <button key={s.short} className="size-preset-card"
+            onClick={() => { setSizeIdx(i); setCreating(true); }}>
+            <SizeShape w={s.w} h={s.h} />
+            <span className="size-preset-name">{s.short}</span>
+            <span className="size-preset-dims">{s.w} × {s.h}</span>
+          </button>
+        ))}
+      </div>
+
       {projects === null && <p className="sub" style={{ padding: "40px 0" }}>Loading…</p>}
 
       {projects && projects.length === 0 && (
@@ -243,6 +268,8 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
       )}
 
       {projects && projects.length > 0 && (
+        <>
+        <div className="section-label" style={{ marginTop: 32 }}>Your projects</div>
         <div className="project-grid">
           {projects.map((p) => (
             <div key={p.id} className="project-card" onClick={() => confirmDelete !== p.id && onOpen(p.id)}>
@@ -277,6 +304,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
             </div>
           ))}
         </div>
+        </>
       )}
 
       {creating && (

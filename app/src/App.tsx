@@ -1480,6 +1480,31 @@ const DirectionIcon: React.FC<{ dir: "ltr" | "rtl" }> = ({ dir }) => (
   </svg>
 );
 
+// The element panel's rail (Content/Effects/Keyframes) — thin outline glyphs,
+// same 15x15/currentColor convention as the align/direction icons above, kept
+// visually distinct from those (this rail picks a whole SECTION, not a
+// one-off alignment) so the two icon families are never confused at a glance.
+const ContentIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+    <rect x="2" y="1.5" width="11" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <line x1="4.3" y1="5" x2="10.7" y2="5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    <line x1="4.3" y1="7.5" x2="10.7" y2="7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    <line x1="4.3" y1="10" x2="8.3" y2="10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+  </svg>
+);
+const EffectsIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+    <path d="M7.5 1.5 L8.7 6.3 L13.5 7.5 L8.7 8.7 L7.5 13.5 L6.3 8.7 L1.5 7.5 L6.3 6.3 Z"
+      fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+  </svg>
+);
+const KeyframesIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+    <rect x="4.5" y="4.5" width="6" height="6" rx="1" transform="rotate(45 7.5 7.5)"
+      fill="none" stroke="currentColor" strokeWidth="1.3" />
+  </svg>
+);
+
 // Up to 3 combined effects on one IN or OUT direction — FX1 is always shown,
 // a "+" reveals FX2 then FX3 (capped there), each removable with its own ✕
 // (removing one also clears anything after it, so there's never a gap).
@@ -1600,6 +1625,12 @@ const ElementMotion: React.FC<{
   // think they vanished) — starts expanded, same as before this existed;
   // collapsing is something the user opts into per layer.
   const [expanded, setExpanded] = React.useState(true);
+  // Which of Content/Effects/Keyframes this layer's own panel is showing —
+  // used to be all three stacked and expanded together (a wall of fields per
+  // layer); now one rail, one pane at a time, so a layer with a lot set
+  // doesn't turn into a scroll marathon.
+  const [panel, setPanel] = React.useState<"content" | "effects" | "keyframes">("content");
+  const [managingPresets, setManagingPresets] = React.useState(false);
   const [renaming, setRenaming] = React.useState(false);
   const [draftName, setDraftName] = React.useState(layer.name ?? "");
   const commitRename = () => {
@@ -1679,7 +1710,31 @@ const ElementMotion: React.FC<{
 
       {expanded && (
       <>
-      {isPhotoSlot && onUploadPhoto && (
+      <div className="el-body">
+        <div className="el-rail">
+          <button className={"el-rail-btn" + (panel === "content" ? " active" : "")}
+            title="Content" aria-label="Content" aria-pressed={panel === "content"}
+            onClick={() => setPanel("content")}>
+            <ContentIcon /><span>Content</span>
+          </button>
+          <button className={"el-rail-btn" + (panel === "effects" ? " active" : "")}
+            title="Effects" aria-label="Effects" aria-pressed={panel === "effects"}
+            onClick={() => setPanel("effects")}>
+            <EffectsIcon /><span>Effects</span>
+          </button>
+          <button className={"el-rail-btn" + (panel === "keyframes" ? " active" : "")}
+            title="Keyframes" aria-label="Keyframes" aria-pressed={panel === "keyframes"}
+            onClick={() => setPanel("keyframes")}>
+            <KeyframesIcon /><span>Keys</span>
+          </button>
+        </div>
+        <div className="el-pane">
+        {panel === "content" && (
+        <>
+        {!isPhotoSlot && !isShapeLayer && !isTextLayer && (
+          <p className="hint" style={{ margin: 0 }}>No content settings for this layer type.</p>
+        )}
+        {isPhotoSlot && onUploadPhoto && (
         <div className="card compact group" style={{ marginTop: 8 }}>
           <div className="subhead">Photo</div>
           <button className={"btn upload small" + (layer.assetKind ? " filled" : "")} style={{ width: "100%" }}
@@ -1912,7 +1967,10 @@ const ElementMotion: React.FC<{
           </div>
         </div>
       )}
-
+        </>
+        )}
+        {panel === "effects" && (
+        <>
       <div className="card compact group" style={{ marginTop: 8 }}>
         <div className="row between" style={{ alignItems: "center", marginBottom: 8 }}>
           <div className="subhead" style={{ margin: 0 }}>Effects</div>
@@ -1938,43 +1996,66 @@ const ElementMotion: React.FC<{
         {onSaveMotionPreset && (
           <div className="mini" style={{ marginBottom: 8 }}>
             <label>Motion presets (reusable across projects)</label>
-            {!savingPreset ? (
-              <button className="btn small" onClick={() => setSavingPreset(true)}>Save current as preset…</button>
-            ) : (
-              <div className="row" style={{ gap: 4 }}>
-                <input type="text" autoFocus placeholder="Preset name" value={presetName} style={{ flex: 1 }}
-                  onChange={(e) => setPresetName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitSavePreset();
-                    if (e.key === "Escape") { setSavingPreset(false); setPresetName(""); }
-                  }} />
-                <button className="btn small primary" disabled={!presetName.trim()} onClick={commitSavePreset}>Save</button>
-                <button className="btn small" onClick={() => { setSavingPreset(false); setPresetName(""); }}>Cancel</button>
+            {/* Collapsed to one dropdown instead of a full always-open list —
+                picking an entry applies it right away (same effect the old
+                per-row "Apply" button had). Built-ins ship in source (not the
+                gitignored presets data file) so they're always available and
+                never deletable. */}
+            <select value="" style={{ marginBottom: 6 }}
+              onChange={(e) => {
+                const id = e.target.value;
+                if (!id) return;
+                const preset = [...BUILT_IN_PRESETS, ...(motionPresets ?? [])].find((p) => p.id === id);
+                if (preset) onChange((l) => applyClip(l, preset.clip));
+                e.target.value = "";
+              }}>
+              <option value="">Apply preset…</option>
+              <optgroup label="Built-in">
+                {BUILT_IN_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </optgroup>
+              {motionPresets && motionPresets.length > 0 && (
+                <optgroup label="Yours">
+                  {motionPresets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </optgroup>
+              )}
+            </select>
+            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+              {!savingPreset ? (
+                <button className="btn small" onClick={() => setSavingPreset(true)}>Save current as preset…</button>
+              ) : (
+                <div className="row" style={{ gap: 4, flex: 1, minWidth: 0 }}>
+                  <input type="text" autoFocus placeholder="Preset name" value={presetName} style={{ flex: 1 }}
+                    onChange={(e) => setPresetName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitSavePreset();
+                      if (e.key === "Escape") { setSavingPreset(false); setPresetName(""); }
+                    }} />
+                  <button className="btn small primary" disabled={!presetName.trim()} onClick={commitSavePreset}>Save</button>
+                  <button className="btn small" onClick={() => { setSavingPreset(false); setPresetName(""); }}>Cancel</button>
+                </div>
+              )}
+              {!savingPreset && motionPresets && motionPresets.length > 0 && (
+                <button className="btn small" onClick={() => setManagingPresets((v) => !v)}>
+                  {managingPresets ? "Hide saved presets" : "Manage saved presets"}
+                </button>
+              )}
+            </div>
+            {/* Delete-capable list — tucked behind "Manage", not shown by
+                default; built-ins never appear here since they can't be
+                deleted anyway. */}
+            {managingPresets && motionPresets && motionPresets.length > 0 && (
+              <div className="preset-list" style={{ marginTop: 6 }}>
+                {motionPresets.map((p) => (
+                  <div key={p.id} className="row between preset-row">
+                    <span className="preset-name" title={p.name}>{p.name}</span>
+                    {onDeleteMotionPreset && (
+                      <button className="btn small" title={`Delete "${p.name}"`}
+                        onClick={() => onDeleteMotionPreset(p.id)}>✕</button>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
-            {/* Built-ins always show up first, ahead of whatever's saved to
-                this machine — they ship in source (not the gitignored
-                presets data file), so no delete button on them. */}
-            <div className="preset-list">
-              {[...BUILT_IN_PRESETS, ...(motionPresets ?? [])].map((p) => {
-                const builtin = p.id.startsWith("builtin-");
-                return (
-                  <div key={p.id} className="row between preset-row">
-                    <span className="preset-name" title={p.name}>
-                      {p.name}{builtin && <span className="tag" style={{ marginLeft: 4 }}>built-in</span>}
-                    </span>
-                    <div className="row" style={{ gap: 4 }}>
-                      <button className="btn small" title={`Apply "${p.name}" to this element`}
-                        onClick={() => onChange((l) => applyClip(l, p.clip))}>Apply</button>
-                      {!builtin && onDeleteMotionPreset && (
-                        <button className="btn small" title={`Delete "${p.name}"`}
-                          onClick={() => onDeleteMotionPreset(p.id)}>✕</button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           </div>
         )}
 
@@ -2032,7 +2113,10 @@ const ElementMotion: React.FC<{
             </select></div>
         </div>
       </div>
-
+        </>
+        )}
+        {panel === "keyframes" && (
+        <>
       <div className="card compact group" style={{ marginTop: 8 }}>
         <div className="subhead">Keyframes</div>
         <div className="grid2 mini">
@@ -2081,6 +2165,10 @@ const ElementMotion: React.FC<{
           </label>
           <input type="number" step={0.1} min={0} value={layer.parallaxDepth ?? 1}
             onChange={(e) => onChange((l) => { l.parallaxDepth = Math.max(0, parseFloat(e.target.value || "1")); })} />
+        </div>
+      </div>
+        </>
+        )}
         </div>
       </div>
       </>
