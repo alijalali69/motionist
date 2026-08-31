@@ -2242,12 +2242,17 @@ const PageInspector: React.FC<{
 
           <div>
             <label style={{ margin: "10px 0 4px" }}>Background color (this page only — empty follows the project's)</label>
-            <div className="row" style={{ gap: 4 }}>
+            {/* align-items: flex-start, not center — ColorField is two rows
+                tall once it has saved swatches (the picker row + the swatch
+                row below it), and centering Clear against its FULL height
+                left it floating over the swatches instead of sitting next
+                to the picker row it actually belongs to. */}
+            <div className="row" style={{ gap: 4, alignItems: "flex-start" }}>
               <ColorField value={page.bgColor ?? "#e8e4dd"}
                 onChange={(hex) => onChange((pg) => { pg.bgColor = hex; })}
                 swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
               {page.bgColor && (
-                <button className="btn small" title="Clear — follow the project's backdrop color instead"
+                <button className="btn small color-field-clear" title="Clear — follow the project's backdrop color instead"
                   onClick={() => onChange((pg) => { pg.bgColor = undefined; })}>✕</button>
               )}
             </div>

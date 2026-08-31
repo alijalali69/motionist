@@ -265,6 +265,10 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 6px; }
   font-family: var(--mono); font-size: 12px; text-transform: uppercase; padding: 0 8px !important;
 }
 .color-save-btn { height: 30px; flex: none; }
+/* The "clear this field" ✕ that sits OUTSIDE ColorField, next to it, on
+   fields that can fall back to a parent default (page bg color, etc.) —
+   same 30px so it lines up with the picker row, not the swatch row below. */
+.color-field-clear { height: 30px; flex: none; }
 
 .swatch-row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 .swatch-chip {
