@@ -55,34 +55,34 @@ const ColorField: React.FC<{
 
   return (
     <div>
-      <div className="row" style={{ gap: 4 }}>
-        <input type="color" value={value}
-          style={{ width: 36, height: 28, ...swatchStyle }}
+      <div className="row color-field-row">
+        <input type="color" value={value} className="color-swatch-input"
+          style={swatchStyle}
           onChange={(e) => onChange(e.target.value)} />
-        <input type="text" value={text} maxLength={7} placeholder="#rrggbb"
-          style={{ width: 78, fontFamily: "var(--mono, monospace)", fontSize: 12, textTransform: "uppercase" }}
+        <input type="text" value={text} maxLength={7} placeholder="#rrggbb" className="color-hex-input"
           onChange={(e) => setText(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
         {onAddSwatch && (
-          <button className="btn small" title={alreadySaved ? "Already saved" : "Save this color as a swatch"}
+          <button className="btn small color-save-btn" title={alreadySaved ? "Already saved" : "Save this color as a swatch"}
             disabled={alreadySaved} onClick={() => onAddSwatch(value)}>＋</button>
         )}
       </div>
+      {/* Each saved swatch is one fixed-size chip — the remove ✕ is an
+          absolutely-positioned corner badge (same hover-reveal language as
+          a project card's delete button), not a sibling button next to a
+          differently-sized swatch. That's what kept the old row visually
+          uneven: a 16px swatch and a 12px ✕ button, flex-centered against
+          each other, never quite lined up across a whole row of them. */}
       {swatches && swatches.length > 0 && (
-        <div className="row" style={{ gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+        <div className="swatch-row">
           {swatches.map((hex) => (
-            <div key={hex} className="row" style={{ gap: 1, alignItems: "center" }}>
-              <button title={hex} onClick={() => onChange(hex)}
-                style={{
-                  width: 16, height: 16, borderRadius: 3, padding: 0, cursor: "pointer", background: hex,
-                  border: hex.toLowerCase() === value.toLowerCase() ? "2px solid var(--accent, #d9694f)" : "1px solid var(--line)",
-                }} />
+            <div key={hex} className={"swatch-chip" + (hex.toLowerCase() === value.toLowerCase() ? " selected" : "")}
+              style={{ background: hex }}>
+              <button className="swatch-pick" title={hex} aria-label={`Use ${hex}`} onClick={() => onChange(hex)} />
               {onRemoveSwatch && (
-                <button title={`Remove ${hex}`} onClick={() => onRemoveSwatch(hex)}
-                  style={{ fontSize: 8, width: 12, height: 12, padding: 0, lineHeight: 1, background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer" }}>
-                  ✕
-                </button>
+                <button className="swatch-del" title={`Remove ${hex}`} aria-label={`Remove ${hex}`}
+                  onClick={() => onRemoveSwatch(hex)}>✕</button>
               )}
             </div>
           ))}
