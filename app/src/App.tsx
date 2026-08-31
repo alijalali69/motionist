@@ -937,12 +937,9 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           disabled={!project}
           onChange={(e) => update((p) => { p.name = e.target.value; })}
         />
-        <p className="sub">PSD → animated reel</p>
-
-        <button className="btn primary" onClick={() => psdInput.current?.click()}>+ Add pages (PSD / SVG / photo)</button>
+        <button className="btn" style={{ marginTop: 10 }} onClick={() => psdInput.current?.click()}>+ Add pages (PSD / SVG / photo)</button>
         <input ref={psdInput} className="hidden-file" type="file" accept=".psd,.svg,.png,.jpg,.jpeg,.webp,.gif" multiple
           onChange={(e) => { if (e.target.files) onAddPages(e.target.files); e.target.value = ""; }} />
-        <p className="hint">PSD/SVG extract their layers; a plain photo becomes a simple full-frame page. Select multiple at once, or drop below — added in filename order.</p>
         <button className="btn" style={{ width: "100%", marginTop: 6 }} onClick={onAddBlankPage}>+ Add blank page (color + text only)</button>
 
         <h2>Pages</h2>
@@ -990,10 +987,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                   onRemove={() => onRemoveSlot("bg")} />
               )}
               <div style={{ marginTop: 8 }}>
-                {/* Stacked, not side-by-side with the label — a long label
-                    next to the color swatch+hex+swatch-row combo had no room
-                    to breathe and pushed the control past the card's edge. */}
-                <span className="hint" style={{ margin: "0 0 4px", display: "block" }}>Backdrop color (shows through gaps/transparency)</span>
                 <ColorField value={project.bgColor ?? "#e8e4dd"}
                   onChange={(hex) => update((p) => { p.bgColor = hex; })}
                   swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch} />
@@ -2269,10 +2262,6 @@ const PageInspector: React.FC<{
           <select value={page.transition.type} onChange={(e) => onChange((pg) => { pg.transition.type = e.target.value as any; })}>
             {TRANSITIONS.map((t) => <option key={t.name} value={t.name}>{t.label}</option>)}
           </select>
-
-          <label>Subtitle (English) — empty = nothing shows</label>
-          <textarea value={page.subtitle ?? ""} placeholder="Caption for this page…"
-            onChange={(e) => onChange((pg) => { pg.subtitle = e.target.value; })} />
         </>
       )}
 
