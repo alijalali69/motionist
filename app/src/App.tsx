@@ -4,7 +4,7 @@ import { Reel } from "../../src/Reel";
 import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
 import { ENTRANCE_NAMES, TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, EXIT_NAMES, EASING_NAMES, TRANSITIONS } from "../../src/presets";
 import {
-  loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus,
+  loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
   listFonts, uploadFontToLibrary, deleteProjectFiles, type IngestResult, type FontEntry,
   listMotionPresets, saveMotionPreset, deleteMotionPreset, type MotionPresetEntry,
 } from "./api";
@@ -263,7 +263,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [busy, setBusy] = React.useState<string | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [renderUrl, setRenderUrl] = React.useState<string | null>(null);
-  const [renderProgress, setRenderProgress] = React.useState<{ percent: number; phase?: string; frame?: number; totalFrames?: number } | null>(null);
+  const [renderProgress, setRenderProgress] = React.useState<{ percent: number; phase?: string; frame?: number; totalFrames?: number; status?: string } | null>(null);
   const [dragOver, setDragOver] = React.useState(false);
   const [motionClip, setMotionClip] = React.useState<MotionClip | null>(null);
   const [showSafeZone, setShowSafeZone] = React.useState(false);
@@ -738,20 +738,28 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     finally { setBusy(null); }
   };
 
+  // Holds the in-flight render's job id so the Stop button (rendered from a
+  // totally separate click handler) knows what to cancel — state instead of
+  // a plain local var since onStopRender needs it outside onRender's own
+  // closure/lifetime.
+  const renderJobIdRef = React.useRef<string | null>(null);
+
   const onRender = async () => {
     if (!project) return;
     setErr(null); setRenderUrl(null); setRenderProgress({ percent: 0 });
     try {
       await saveProject(project); // keep the saved copy in sync with what's rendered
       const jobId = await startRenderJob(project, transparentExport, exportName);
-      // Poll until the job reports done/error — /api/render/start returns
-      // immediately instead of blocking for the whole render, specifically
-      // so this loop can show a real percentage instead of a static
-      // "Rendering… (this can take a while)".
+      renderJobIdRef.current = jobId;
+      // Poll until the job reports done/error/cancelled — /api/render/start
+      // returns immediately instead of blocking for the whole render,
+      // specifically so this loop can show a real percentage instead of a
+      // static "Rendering… (this can take a while)".
       for (;;) {
         await new Promise((r) => setTimeout(r, 600));
         const status = await getRenderJobStatus(jobId);
         if (status.status === "error") throw new Error(status.error || "render failed");
+        if (status.status === "cancelled") break; // stopped on purpose — not an error, nothing to show
         if (status.status === "done") {
           setRenderUrl(status.url ?? null);
           // Same Resolve Media Pool hand-off renderReel() used to do —
@@ -764,10 +772,15 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           }
           break;
         }
-        setRenderProgress({ percent: status.percent, phase: status.phase, frame: status.frame, totalFrames: status.totalFrames });
+        setRenderProgress({ percent: status.percent, phase: status.phase, frame: status.frame, totalFrames: status.totalFrames, status: status.status });
       }
     } catch (e: any) { setErr(String(e.message || e)); }
-    finally { setRenderProgress(null); }
+    finally { setRenderProgress(null); renderJobIdRef.current = null; }
+  };
+
+  const onStopRender = () => {
+    if (!renderJobIdRef.current) return;
+    cancelRenderJob(renderJobIdRef.current).catch((e) => setErr(String(e.message || e)));
   };
 
   const movePage = (i: number, dir: -1 | 1) => {
@@ -1037,9 +1050,17 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           </label>
           <div className="row" style={{ gap: 8 }}>
             <button className="btn" onClick={onSave} disabled={!project}>Save</button>
-            <button className="btn primary" onClick={onRender} disabled={!project || !!renderProgress}>
-              {transparentExport ? "Render ProRes (alpha)" : "Render MP4"}
-            </button>
+            {renderProgress ? (
+              <button className="btn danger" onClick={onStopRender}
+                disabled={renderProgress.status === "cancelling"}
+                title="Stop this render — the partial file gets deleted, nothing is saved">
+                {renderProgress.status === "cancelling" ? "Stopping…" : "■ Stop"}
+              </button>
+            ) : (
+              <button className="btn primary" onClick={onRender} disabled={!project}>
+                {transparentExport ? "Render ProRes (alpha)" : "Render MP4"}
+              </button>
+            )}
           </div>
           {renderProgress && (
             <div style={{ marginTop: 8 }}>

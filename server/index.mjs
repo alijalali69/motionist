@@ -46,9 +46,12 @@ function run(cmd, args, opts = {}) {
 // Same as run(), but calls onLine(line) for every complete stdout line as it
 // streams in, instead of only handing back the full output at the end —
 // needed to report render progress while the process is still running.
-function runStreaming(cmd, args, onLine, opts = {}) {
+// onSpawn(proc), if given, fires once with the actual ChildProcess — how the
+// caller gets a pid to cancel a running render by.
+function runStreaming(cmd, args, onLine, onSpawn, opts = {}) {
   return new Promise((resolve, reject) => {
     const p = spawn(cmd, args, { cwd: ROOT, shell: true, ...opts });
+    if (onSpawn) onSpawn(p);
     let err = "", buf = "";
     p.stdout.on("data", (d) => {
       buf += d.toString();
@@ -107,10 +110,12 @@ function findLocalBrowser() {
 // keeps using Remotion's own pinned Chrome build unchanged. Retries exactly
 // once, with `--browser-executable` pointing at whatever local browser
 // findLocalBrowser() found, if any. `onLine` gets every stdout line from
-// whichever attempt is currently running, for progress reporting.
-async function runRenderWithBrowserFallback(args, onLine) {
+// whichever attempt is currently running, for progress reporting; `onSpawn`
+// fires again on the retry so a cancel button always targets the process
+// that's actually running right now.
+async function runRenderWithBrowserFallback(args, onLine, onSpawn) {
   try {
-    return await runStreaming("npx", args, onLine);
+    return await runStreaming("npx", args, onLine, onSpawn);
   } catch (e) {
     const msg = String(e.message || e);
     const looksLikeBrowserDownloadFailure = /chrome-for-testing|chrome-headless-shell|downloading file|AccessDenied/i.test(msg);
@@ -123,7 +128,7 @@ async function runRenderWithBrowserFallback(args, onLine) {
     // first space ("browserExecutable" was specified as 'C:\Program' but
     // the path doesn't exist — the exact failure this hit in the wild).
     // Quoting the whole flag=value argument keeps it one token.
-    return await runStreaming("npx", [...args, `"--browser-executable=${localBrowser}"`], onLine);
+    return await runStreaming("npx", [...args, `"--browser-executable=${localBrowser}"`], onLine, onSpawn);
   }
 }
 
@@ -631,29 +636,67 @@ app.post("/api/render/start", (req, res) => {
     return res.status(500).json({ error: String(e.message || e) });
   }
   const jobId = "job_" + Date.now().toString(36) + "_" + (renderJobSeq++);
-  const job = { status: "running", percent: 0, phase: "bundling", frame: 0, totalFrames: 0 };
+  const job = { status: "running", percent: 0, phase: "bundling", frame: 0, totalFrames: 0, pid: null };
   renderJobs.set(jobId, job);
   res.json({ jobId });
 
-  runRenderWithBrowserFallback(args, (line) => {
-    const progress = parseProgressLine(line);
-    if (progress) Object.assign(job, progress);
-  })
+  const outPath = path.join(ROOT, "out", outName);
+
+  runRenderWithBrowserFallback(
+    args,
+    (line) => {
+      const progress = parseProgressLine(line);
+      if (progress) Object.assign(job, progress);
+    },
+    (proc) => { job.pid = proc.pid; },
+  )
     .then(() => {
       job.status = "done"; job.percent = 100;
       job.url = `/out/${outName}`;
-      job.path = path.join(ROOT, "out", outName);
+      job.path = outPath;
     })
     .catch((e) => {
-      job.status = "error";
-      job.error = String(e.message || e);
+      // The cancel route below sets "cancelling" synchronously, before the
+      // kill signal actually finishes the process off (whose rejection
+      // lands here, same as any other failure) — that's how a deliberate
+      // stop is told apart from a genuine render error.
+      if (job.status === "cancelling") {
+        job.status = "cancelled";
+        // A killed render leaves a broken/incomplete file sitting in out/ —
+        // clean it up rather than leave a corrupt video behind.
+        fs.rm(outPath, { force: true }, () => {});
+      } else {
+        job.status = "error";
+        job.error = String(e.message || e);
+      }
     })
     .finally(() => {
       // Jobs are only ever read right after they finish (the client stops
-      // polling once it sees "done"/"error") — a few minutes of headroom
-      // covers a slow client without leaking memory across a long session.
+      // polling once it sees "done"/"error"/"cancelled") — a few minutes of
+      // headroom covers a slow client without leaking memory across a long
+      // session.
       setTimeout(() => renderJobs.delete(jobId), 5 * 60 * 1000);
     });
+});
+
+// Stop button: kill whichever process this job is currently running (the
+// browser-executable fallback means that could be a retry, hence tracking
+// the pid on the job itself rather than closing over one process). A no-op
+// if the job already finished — nothing to stop.
+app.post("/api/render/:jobId/cancel", (req, res) => {
+  const job = renderJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "unknown or expired render job" });
+  if (job.status !== "running") return res.json({ ok: true });
+  job.status = "cancelling";
+  if (job.pid) {
+    // spawn(..., {shell:true}) on Windows launches cmd.exe, which in turn
+    // launches node/npx/remotion/chrome-headless-shell as children — plain
+    // process.kill() only kills that top cmd.exe shell, leaving the actual
+    // work (and any spawned Chrome) running as orphans. `taskkill /T` kills
+    // the whole tree.
+    spawn("taskkill", ["/PID", String(job.pid), "/T", "/F"], { shell: true });
+  }
+  res.json({ ok: true });
 });
 
 app.get("/api/render/status/:jobId", (req, res) => {

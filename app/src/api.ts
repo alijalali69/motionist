@@ -220,7 +220,7 @@ export async function renderReel(project: Project, transparent?: boolean, export
 // until the whole render finishes, so the UI can poll for a real progress
 // percentage instead of showing a static "Rendering…" the whole time.
 export type RenderJobStatus = {
-  status: "running" | "done" | "error";
+  status: "running" | "done" | "error" | "cancelling" | "cancelled";
   percent: number;
   phase?: "bundling" | "rendering" | "encoding";
   frame?: number;
@@ -249,4 +249,9 @@ export async function getRenderJobStatus(jobId: string): Promise<RenderJobStatus
   const r = await fetch(`/api/render/status/${jobId}`);
   if (!r.ok) throw new Error((await r.json()).error || "render status unavailable");
   return r.json();
+}
+
+export async function cancelRenderJob(jobId: string): Promise<void> {
+  const r = await fetch(`/api/render/${jobId}/cancel`, { method: "POST" });
+  if (!r.ok) throw new Error((await r.json()).error || "couldn't stop the render");
 }
