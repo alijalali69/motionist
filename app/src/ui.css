@@ -286,10 +286,26 @@ a.dl { color: var(--accent2); }
   padding: 16px 10px; cursor: pointer; color: var(--text);
 }
 .size-preset-card:hover { border-color: var(--accent); }
+.size-preset-card.custom { position: relative; }
 .size-shape { border: 1.6px solid var(--muted); border-radius: 3px; opacity: 0.85; }
 .size-preset-card:hover .size-shape { border-color: var(--accent); opacity: 1; }
 .size-preset-name { font-size: 12.5px; font-weight: 600; text-align: center; }
 .size-preset-dims { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.size-preset-del {
+  position: absolute; top: 6px; right: 6px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: rgba(14, 16, 19, 0.75); color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; opacity: 0; transition: opacity 0.12s;
+}
+.size-preset-card.custom:hover .size-preset-del { opacity: 1; }
+.size-preset-del:hover { background: var(--warn); }
+.size-preset-card.add {
+  background: none; border-style: dashed; color: var(--muted);
+  justify-content: center;
+}
+.size-preset-card.add:hover { color: var(--accent); }
+.size-preset-add-icon { font-size: 22px; line-height: 1; color: inherit; }
 
 .dash-empty {
   display: flex;
@@ -505,8 +521,30 @@ input.project-name-input::placeholder { color: var(--muted); font-weight: 600; }
 }
 .el-rail-btn:hover { color: var(--text); }
 .el-rail-btn.active { background: var(--accent); color: #fff; }
-.el-pane { flex: 1; min-width: 0; padding: 8px; background: var(--panel2); }
+.el-pane { flex: 1; min-width: 0; padding: 10px 12px; background: var(--panel2); }
 .el-pane .card.compact.group:first-child { margin-top: 0; }
+
+/* Roomier field sizing inside the rail's panes specifically — the rest of
+   the app (Page tab, etc.) keeps the denser .card.compact sizing on
+   purpose. Specificity here (.card.compact .el-body ...) is deliberately
+   higher than the base .card.compact select/input rule so this wins
+   regardless of source order. */
+.card.compact .el-body select,
+.card.compact .el-body input[type="text"],
+.card.compact .el-body input[type="number"],
+.card.compact .el-body textarea {
+  padding: 9px 10px;
+  font-size: 13px;
+}
+.el-body .mini label,
+.el-body label {
+  font-size: 12px;
+  margin: 0 0 6px;
+}
+.el-body .grid2, .el-body .grid3 { gap: 10px; }
+.el-body .segmented { gap: 6px; padding: 5px; }
+.el-body .btn.icon { padding: 7px 8px; }
+.el-body .fx-slots select { min-width: 116px; }
 
 /* --- Motion preset list -------------------------------------------------- */
 .preset-list {

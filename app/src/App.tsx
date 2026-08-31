@@ -1511,21 +1511,22 @@ const KeyframesIcon: React.FC = () => (
 // values/onChange/onAdd/onRemove all address slots by 0/1/2 (FX1/FX2/FX3).
 const FxSlots: React.FC<{
   label: string;
+  hint?: string; // tooltip on the label — detail that doesn't need to sit in the visible text
   options: readonly string[];
   values: [string, string | undefined, string | undefined];
   onChangeSlot: (index: 0 | 1 | 2, value: string) => void;
   onAdd: () => void;
   onRemove: (index: 1 | 2) => void;
   disabled?: boolean;
-}> = ({ label, options, values, onChangeSlot, onAdd, onRemove, disabled }) => {
+}> = ({ label, hint, options, values, onChangeSlot, onAdd, onRemove, disabled }) => {
   const shown = values[2] !== undefined ? 3 : values[1] !== undefined ? 2 : 1;
   return (
-    <div className="mini">
-      <label>{label}</label>
-      <div className="row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+    <div className="mini fx-slots">
+      <label title={hint}>{label}</label>
+      <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         {([0, 1, 2] as const).slice(0, shown).map((i) => (
-          <div key={i} className="row" style={{ gap: 2, alignItems: "center" }}>
-            <span className="tag" style={{ fontSize: 10, padding: "1px 4px" }}>FX{i + 1}</span>
+          <div key={i} className="row" style={{ gap: 5, alignItems: "center" }}>
+            <span className="tag" style={{ padding: "2px 5px" }}>FX{i + 1}</span>
             {/* `disabled` means "can't combine more effects yet" (e.g. OUT's
                 FX1 is still "none") — it must never lock FX1 itself, or
                 there'd be no way to ever set it away from "none" at all. */}
@@ -1900,7 +1901,7 @@ const ElementMotion: React.FC<{
                 onChange={(hex) => onChange((l) => { l.textColor = hex; })}
                 swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} /></div>
           </div>
-          <div className="grid3 mini" style={{ marginTop: 4 }}>
+          <div className="grid2 mini" style={{ marginTop: 4 }}>
             {/* Text align: where the TEXT sits inside its own box (CSS
                 text-align). Not the same as Box align below — deliberately
                 different icon style so the two are never confused. */}
@@ -1918,36 +1919,6 @@ const ElementMotion: React.FC<{
                 })}
               </div>
             </div>
-            {/* Box align: snaps the text box itself to the frame (like
-                Illustrator's align-to-artboard) — a one-off action, not a
-                stored state, so no button stays "pressed". */}
-            <div><label title="Snaps this text box to the frame — not the text alignment on the left">Box align</label>
-              {/* Horizontal (left/center/right, against canvas width) */}
-              <div className="row" style={{ gap: 4 }}>
-                {(["left", "center", "right"] as const).map((a) => (
-                  <button key={a} className="btn small icon"
-                    title={`Align box to the ${a} of the frame`} aria-label={`Align text box to the ${a} of the frame`}
-                    onClick={() => onChange((l) => {
-                      l.left = a === "left" ? 0 : a === "right" ? canvas[0] - l.width : Math.round((canvas[0] - l.width) / 2);
-                    })}>
-                    <AlignBoxIcon align={a} />
-                  </button>
-                ))}
-              </div>
-              {/* Vertical (top/middle/bottom, against canvas height) — same
-                  one-off "snap it there" behavior, just the other axis. */}
-              <div className="row" style={{ gap: 4, marginTop: 4 }}>
-                {(["top", "middle", "bottom"] as const).map((a) => (
-                  <button key={a} className="btn small icon"
-                    title={`Align box to the ${a} of the frame`} aria-label={`Align text box to the ${a} of the frame`}
-                    onClick={() => onChange((l) => {
-                      l.top = a === "top" ? 0 : a === "bottom" ? canvas[1] - l.height : Math.round((canvas[1] - l.height) / 2);
-                    })}>
-                    <AlignBoxIconV align={a} />
-                  </button>
-                ))}
-              </div>
-            </div>
             <div><label>Direction</label>
               <div className="segmented">
                 {(["rtl", "ltr"] as const).map((d) => {
@@ -1963,6 +1934,34 @@ const ElementMotion: React.FC<{
                   );
                 })}
               </div>
+            </div>
+          </div>
+          {/* Box align: snaps the text box itself to the frame (like
+              Illustrator's align-to-artboard) — a one-off action, not a
+              stored state, so no button stays "pressed". Own full-width row
+              (not squeezed into a third grid column) so its 6 icons get the
+              same breathing room as Text align/Direction above. */}
+          <div className="mini" style={{ marginTop: 10 }}>
+            <label title="Snaps this text box to the frame — not the text alignment above">Box align</label>
+            <div className="row" style={{ gap: 6 }}>
+              {(["left", "center", "right"] as const).map((a) => (
+                <button key={a} className="btn small icon"
+                  title={`Align box to the ${a} of the frame`} aria-label={`Align text box to the ${a} of the frame`}
+                  onClick={() => onChange((l) => {
+                    l.left = a === "left" ? 0 : a === "right" ? canvas[0] - l.width : Math.round((canvas[0] - l.width) / 2);
+                  })}>
+                  <AlignBoxIcon align={a} />
+                </button>
+              ))}
+              {(["top", "middle", "bottom"] as const).map((a) => (
+                <button key={a} className="btn small icon"
+                  title={`Align box to the ${a} of the frame`} aria-label={`Align text box to the ${a} of the frame`}
+                  onClick={() => onChange((l) => {
+                    l.top = a === "top" ? 0 : a === "bottom" ? canvas[1] - l.height : Math.round((canvas[1] - l.height) / 2);
+                  })}>
+                  <AlignBoxIconV align={a} />
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -2060,7 +2059,7 @@ const ElementMotion: React.FC<{
         )}
 
         <FxSlots
-          label="IN effect (combine up to 3)"
+          label="In effect" hint="Combine up to 3"
           options={inOptions}
           values={[layer.entrance, layer.entrance2, layer.entrance3]}
           disabled={layer.entrance === "wordReveal" || layer.entrance === "lineReveal"}
@@ -2079,7 +2078,7 @@ const ElementMotion: React.FC<{
           })}
         />
         <FxSlots
-          label="OUT effect (combine up to 3)"
+          label="Out effect" hint="Combine up to 3"
           options={EXIT_NAMES}
           values={[layer.exit ?? "none", layer.exit2, layer.exit3]}
           disabled={(layer.exit ?? "none") === "none"}

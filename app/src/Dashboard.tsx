@@ -2,6 +2,7 @@ import React from "react";
 import {
   listProjects, createProject, deleteProject, type ProjectSummary,
   listFonts, uploadFontToLibrary, deleteFont, type FontEntry,
+  listSizePresets, saveSizePreset, deleteSizePreset, type SizePresetEntry,
 } from "./api";
 
 const FONT_STYLES = [
@@ -190,17 +191,67 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
   const [err, setErr] = React.useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState<string | null>(null);
   const [managingFonts, setManagingFonts] = React.useState(false);
-  const [sizeIdx, setSizeIdx] = React.useState(0); // index into SIZE_PRESETS, or -1 for custom
+  const [sizeIdx, setSizeIdx] = React.useState(0); // index into SIZE_PRESETS, or -1 for custom (customW/customH)
   const [customW, setCustomW] = React.useState(1080);
   const [customH, setCustomH] = React.useState(1920);
   const nameInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Custom size presets, saved once from the "+ Custom size" card, reusable
+  // afterward as their own card — same reusable-library pattern as the
+  // motion presets in the editor. Kept separate from the "creating" flow's
+  // own customW/customH (which is just "whatever size is chosen right now,
+  // preset or not") so defining a new one doesn't get tangled with picking
+  // an existing one.
+  const [customSizes, setCustomSizes] = React.useState<SizePresetEntry[] | null>(null);
+  const [addingCustomSize, setAddingCustomSize] = React.useState(false);
+  const [csW, setCsW] = React.useState(1080);
+  const [csH, setCsH] = React.useState(1920);
+  const [csName, setCsName] = React.useState("");
+  const [csBusy, setCsBusy] = React.useState(false);
+  const [csErr, setCsErr] = React.useState<string | null>(null);
+
   const refresh = React.useCallback(() => {
     listProjects().then(setProjects).catch(() => setProjects([]));
   }, []);
+  const refreshSizes = React.useCallback(() => {
+    listSizePresets().then(setCustomSizes).catch(() => setCustomSizes([]));
+  }, []);
 
-  React.useEffect(() => { refresh(); }, [refresh]);
+  React.useEffect(() => { refresh(); refreshSizes(); }, [refresh, refreshSizes]);
   React.useEffect(() => { if (creating) nameInputRef.current?.focus(); }, [creating]);
+
+  // Chosen once (a card, or the custom-size form) → opens the name-only
+  // "New project" dialog with the size already decided.
+  const startCreate = (width: number, height: number, presetIdx: number) => {
+    setSizeIdx(presetIdx);
+    setCustomW(width);
+    setCustomH(height);
+    setCreating(true);
+  };
+
+  const submitCustomSize = async () => {
+    const w = Math.max(16, Math.min(8192, Math.round(csW) || 1080));
+    const h = Math.max(16, Math.min(8192, Math.round(csH) || 1920));
+    setCsBusy(true); setCsErr(null);
+    try {
+      if (csName.trim()) {
+        const entry = await saveSizePreset(csName.trim(), w, h);
+        setCustomSizes((list) => [...(list ?? []), entry]);
+      }
+      setAddingCustomSize(false);
+      setCsName("");
+      startCreate(w, h, -1);
+    } catch (e: any) {
+      setCsErr(String(e.message || e));
+    } finally {
+      setCsBusy(false);
+    }
+  };
+
+  const doDeleteSize = async (id: string) => {
+    await deleteSizePreset(id);
+    setCustomSizes((list) => (list ?? []).filter((s) => s.id !== id));
+  };
 
   const submitCreate = async () => {
     const name = newName.trim() || "Untitled reel";
@@ -238,7 +289,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
         </div>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn" onClick={() => setManagingFonts(true)}>🔤 Fonts</button>
-          <button className="btn primary" onClick={() => setCreating(true)}>+ New project</button>
+          <button className="btn primary" onClick={() => startCreate(SIZE_PRESETS[0].w, SIZE_PRESETS[0].h, 0)}>+ New project</button>
         </div>
       </div>
 
@@ -248,13 +299,54 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
       <div className="size-preset-row">
         {SIZE_PRESETS.map((s, i) => (
           <button key={s.short} className="size-preset-card"
-            onClick={() => { setSizeIdx(i); setCreating(true); }}>
+            onClick={() => startCreate(s.w, s.h, i)}>
             <SizeShape w={s.w} h={s.h} />
             <span className="size-preset-name">{s.short}</span>
             <span className="size-preset-dims">{s.w} × {s.h}</span>
           </button>
         ))}
+        {(customSizes ?? []).map((s) => (
+          <button key={s.id} className="size-preset-card custom"
+            onClick={() => startCreate(s.w, s.h, -1)}>
+            <span className="size-preset-del" title={`Remove "${s.name}" preset`}
+              onClick={(e) => { e.stopPropagation(); doDeleteSize(s.id); }}>✕</span>
+            <SizeShape w={s.w} h={s.h} />
+            <span className="size-preset-name">{s.name}</span>
+            <span className="size-preset-dims">{s.w} × {s.h}</span>
+          </button>
+        ))}
+        <button className="size-preset-card add" onClick={() => setAddingCustomSize(true)}>
+          <span className="size-preset-add-icon">+</span>
+          <span className="size-preset-name">Custom size</span>
+        </button>
       </div>
+
+      {addingCustomSize && (
+        <div className="modal-backdrop" onClick={() => !csBusy && setAddingCustomSize(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>Custom size</h2>
+            <div className="grid2 mini">
+              <div><label>Width</label>
+                <input type="number" min={16} max={8192} value={csW} autoFocus
+                  onChange={(e) => setCsW(Math.round(Number(e.target.value) || 1080))} /></div>
+              <div><label>Height</label>
+                <input type="number" min={16} max={8192} value={csH}
+                  onChange={(e) => setCsH(Math.round(Number(e.target.value) || 1920))} /></div>
+            </div>
+            <label style={{ marginTop: 10 }}>Save as a preset (optional) — leave blank to just use it once</label>
+            <input type="text" value={csName} placeholder="e.g. Podcast clip"
+              onChange={(e) => setCsName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") submitCustomSize(); if (e.key === "Escape") setAddingCustomSize(false); }} />
+            {csErr && <p className="err">{csErr}</p>}
+            <div className="row" style={{ gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
+              <button className="btn" disabled={csBusy} onClick={() => setAddingCustomSize(false)}>Cancel</button>
+              <button className="btn primary" disabled={csBusy} onClick={submitCustomSize}>
+                {csBusy ? "…" : "Continue"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {projects === null && <p className="sub" style={{ padding: "40px 0" }}>Loading…</p>}
 
@@ -263,7 +355,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
           <div className="dash-empty-icon">🎬</div>
           <h2>No projects yet</h2>
           <p className="sub">Create your first project to start turning a PSD/SVG design into a reel.</p>
-          <button className="btn primary" onClick={() => setCreating(true)}>+ New project</button>
+          <button className="btn primary" onClick={() => startCreate(SIZE_PRESETS[0].w, SIZE_PRESETS[0].h, 0)}>+ New project</button>
         </div>
       )}
 
@@ -320,21 +412,11 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submitCreate(); if (e.key === "Escape") setCreating(false); }}
             />
-            <label style={{ marginTop: 10 }}>Size</label>
-            <select value={sizeIdx} onChange={(e) => setSizeIdx(Number(e.target.value))}>
-              {SIZE_PRESETS.map((s, i) => <option key={i} value={i}>{s.label} — {s.w}×{s.h}</option>)}
-              <option value={-1}>Custom…</option>
-            </select>
-            {sizeIdx === -1 && (
-              <div className="grid2 mini" style={{ marginTop: 6 }}>
-                <div><label>Width</label>
-                  <input type="number" min={16} max={8192} value={customW}
-                    onChange={(e) => setCustomW(Math.round(Number(e.target.value) || 1080))} /></div>
-                <div><label>Height</label>
-                  <input type="number" min={16} max={8192} value={customH}
-                    onChange={(e) => setCustomH(Math.round(Number(e.target.value) || 1920))} /></div>
-              </div>
-            )}
+            {/* Size was already decided by whichever card opened this dialog
+                — a read-only confirmation, not another control to fill in. */}
+            <p className="sub" style={{ margin: "8px 0 0" }}>
+              {(SIZE_PRESETS[sizeIdx]?.w ?? customW)} × {(SIZE_PRESETS[sizeIdx]?.h ?? customH)}
+            </p>
             {err && <p className="err">{err}</p>}
             <div className="row" style={{ gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
               <button className="btn" disabled={busy} onClick={() => setCreating(false)}>Cancel</button>

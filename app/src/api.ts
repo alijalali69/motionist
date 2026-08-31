@@ -160,6 +160,35 @@ export async function deleteMotionPreset(id: string): Promise<void> {
   await fetch(`/api/motion-presets/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+// --- Custom canvas-size presets: same pattern as the motion preset library
+// above — saved once from the Dashboard, reusable as its own size card.
+export type SizePresetEntry = {
+  id: string;
+  name: string;
+  w: number;
+  h: number;
+  createdAt: string;
+};
+
+export async function listSizePresets(): Promise<SizePresetEntry[]> {
+  const r = await fetch("/api/size-presets");
+  return r.json();
+}
+
+export async function saveSizePreset(name: string, w: number, h: number): Promise<SizePresetEntry> {
+  const r = await fetch("/api/size-presets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, w, h }),
+  });
+  if (!r.ok) throw new Error((await r.json()).error || "saving size preset failed");
+  return r.json();
+}
+
+export async function deleteSizePreset(id: string): Promise<void> {
+  await fetch(`/api/size-presets/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 // Cleans up an uploaded asset (or a whole PSD/SVG-extracted page folder)
 // once nothing references it any more — a deleted layer, a deleted page, or
 // the old file an upload just replaced. Fire-and-forget from the caller's

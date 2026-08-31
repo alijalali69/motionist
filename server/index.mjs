@@ -312,6 +312,47 @@ app.delete("/api/motion-presets/:id", (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Custom canvas-size presets: same pattern as motion presets above — a
+// named width/height saved once from the Dashboard's "+ Custom size" card,
+// reusable as its own size-preset card afterward.
+const SIZE_PRESETS_JSON = path.join(ROOT, "data", "size-presets.json");
+
+function readSizePresets() {
+  if (!fs.existsSync(SIZE_PRESETS_JSON)) return [];
+  try { return JSON.parse(fs.readFileSync(SIZE_PRESETS_JSON, "utf-8")); } catch { return []; }
+}
+function writeSizePresets(list) {
+  fs.writeFileSync(SIZE_PRESETS_JSON, JSON.stringify(list, null, 2), "utf-8");
+}
+
+app.get("/api/size-presets", (_req, res) => res.json(readSizePresets()));
+
+app.post("/api/size-presets", (req, res) => {
+  try {
+    const name = (req.body?.name || "").trim();
+    const w = Math.round(Number(req.body?.w));
+    const h = Math.round(Number(req.body?.h));
+    if (!name) return res.status(400).json({ error: "name required" });
+    if (!(w > 0 && h > 0)) return res.status(400).json({ error: "width/height required" });
+    const entry = {
+      id: "size_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name, w, h,
+      createdAt: new Date().toISOString(),
+    };
+    const list = readSizePresets();
+    list.push(entry);
+    writeSizePresets(list);
+    res.json(entry);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.delete("/api/size-presets/:id", (req, res) => {
+  writeSizePresets(readSizePresets().filter((p) => p.id !== req.params.id));
+  res.json({ ok: true });
+});
+
 // --- Dashboard: list / create / delete projects -------------------------------
 app.get("/api/projects", (_req, res) => {
   const files = fs.readdirSync(DATA_DIR).filter((f) => f.endsWith(".json"));
