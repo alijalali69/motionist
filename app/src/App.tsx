@@ -15,6 +15,7 @@ import { CanvasHandles, type Handle } from "./CanvasHandles";
 import { PhotoPanHandles, type PhotoPanTarget } from "./PhotoPanHandles";
 import { SafeZoneOverlay } from "./SafeZoneOverlay";
 import { InstagramUIOverlay } from "./InstagramUIOverlay";
+import { TextPlacementOverlay } from "./TextPlacementOverlay";
 
 const ENTRANCES = ENTRANCE_NAMES;
 const AMBIENTS = AMBIENT_NAMES;
@@ -350,8 +351,18 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const logoInput = React.useRef<HTMLInputElement>(null);
   const bgInput = React.useRef<HTMLInputElement>(null);
   const titleInput = React.useRef<HTMLInputElement>(null);
+  const newPhotoInput = React.useRef<HTMLInputElement>(null);
   const playerRef = React.useRef<PlayerRef>(null);
   const playerWrapRef = React.useRef<HTMLDivElement>(null);
+
+  // Add-element toolbar: Text is a real canvas tool (armed, then a click or
+  // drag on the preview places it — see TextPlacementOverlay); Photo/Shape
+  // create on click same as before, just from a toolbar icon now instead of
+  // a full-width button. `newestLayerIndex` lets the freshly-placed text
+  // layer auto-focus its own textarea once — set right after creating it,
+  // read once by that one layer's own mount effect.
+  const [textTool, setTextTool] = React.useState(false);
+  const [newestLayerIndex, setNewestLayerIndex] = React.useState<number | null>(null);
 
   // Undo/redo history. Kept as refs (not state) since they change on nearly
   // every edit and don't need to trigger a re-render themselves — forceTick
@@ -604,24 +615,39 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
 
   // Text layers are created directly in the app (not extracted from a PSD/SVG)
   // — a live Farsi (or any) text box with a sensible default box + fade-in.
-  const onAddTextLayer = (pageIndex: number) => {
-    if (!project) return;
+  // `box` overrides the default position/size — the text tool passes one in
+  // (drawn from a click or drag on the canvas); callers with no placement of
+  // their own get the old canvas-centered default. Returns the new layer's
+  // `index` so a caller (the text tool) can auto-focus it once it mounts.
+  const onAddTextLayer = (pageIndex: number, box?: { left: number; top: number; width: number; height: number }) => {
+    if (!project) return null;
+    const newIndex = -Date.now();
     update((p) => {
       const page = p.pages[pageIndex];
-      const w = Math.round(p.width * 0.8);
-      const h = Math.round(p.height * 0.14);
+      const w = box?.width ?? Math.round(p.width * 0.8);
+      const h = box?.height ?? Math.round(p.height * 0.14);
       // push (not unshift) — layers later in the array paint on top in
       // PageScene, so a freshly added text layer defaults to sitting ON TOP
       // of whatever's already on the page (e.g. a photo), not hidden behind it.
       page.layers.push({
-        index: -Date.now(),
+        index: newIndex,
         file: "", role: "text",
-        left: Math.round((p.width - w) / 2), top: Math.round(p.height * 0.4),
+        left: box?.left ?? Math.round((p.width - w) / 2), top: box?.top ?? Math.round(p.height * 0.4),
         width: w, height: h, opacity: 1,
         entrance: "none", delay: 0, inDuration: 26,
         assetKind: "text", text: "", fontSize: 48, textColor: "#1a1a1a", textAlign: "right",
       } as any);
     });
+    return newIndex;
+  };
+
+  // Text tool: called once the placement overlay reports a click or drag —
+  // creates the layer at that exact spot, disarms the tool, and marks it as
+  // the one to auto-focus once it mounts.
+  const onPlaceText = (pageIndex: number, box: { left: number; top: number; width: number; height: number }) => {
+    const idx = onAddTextLayer(pageIndex, box);
+    setTextTool(false);
+    setNewestLayerIndex(idx);
   };
 
   // A page with no photo/PSD at all — just a solid color (defaults to the
@@ -653,24 +679,33 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     });
   };
 
-  // Adds an empty photo slot to ANY page — including one that started blank
-  // (text/color only) or has never had a photo — instead of a photo being
-  // something only a fresh page can start with. Placed at the BACK of the
-  // stack (unlike text, which defaults to front): a photo is usually meant
-  // as the backdrop for whatever's already on the page, not covering it.
-  // No file yet — the layer's own "Upload photo/video" button (already
-  // shown for any role:"photo" layer) is how it actually gets filled in.
-  const onAddPhotoLayer = (pageIndex: number) => {
+  // Photo tool: browse -> upload -> the layer is created ALREADY filled in,
+  // one action instead of "add an empty slot, then click again inside it to
+  // upload." Placed at the BACK of the stack (unlike text, which defaults to
+  // front): a photo is usually meant as the backdrop for whatever's already
+  // on the page, not covering it. Nothing is added to the page at all until
+  // the upload actually succeeds — backing out of the file dialog used to
+  // leave an empty, easy-to-forget-about photo slot behind; now it just does
+  // nothing, same as cancelling any other file picker in the app.
+  const onAddPhotoLayerFromFile = async (pageIndex: number, file: File) => {
     if (!project) return;
-    update((p) => {
-      const page = p.pages[pageIndex];
-      page.layers.unshift({
-        index: -Date.now(),
-        file: "", role: "photo",
-        left: 0, top: 0, width: p.width, height: p.height,
-        opacity: 1, entrance: "none", delay: 0, fit: "cover",
+    const pageId = project.pages[pageIndex].id;
+    setBusy("Uploading photo…"); setErr(null);
+    try {
+      const { file: f, kind, width, height } = await uploadAsset(file, `photo_${pageId}_${Date.now()}`, projectId);
+      update((p) => {
+        const page = p.pages[pageIndex];
+        page.layers.unshift({
+          index: -Date.now(),
+          file: f, role: "photo",
+          left: 0, top: 0, width: p.width, height: p.height,
+          opacity: 1, entrance: "none", delay: 0, fit: "cover",
+          assetKind: kind, naturalWidth: width, naturalHeight: height,
+          photoPanX: 50, photoPanY: 50, photoZoom: 1,
+        } as any);
       });
-    });
+    } catch (e: any) { setErr(String(e.message || e)); }
+    finally { setBusy(null); }
   };
 
   // A plain color box — no upload needed, unlike photo. Defaults to a
@@ -941,6 +976,11 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         <input ref={psdInput} className="hidden-file" type="file" accept=".psd,.svg,.png,.jpg,.jpeg,.webp,.gif" multiple
           onChange={(e) => { if (e.target.files) onAddPages(e.target.files); e.target.value = ""; }} />
         <button className="btn" style={{ width: "100%", marginTop: 6 }} onClick={onAddBlankPage}>+ Add blank page (color + text only)</button>
+        {/* The Photo toolbar icon (in the Elements tab, below) triggers this
+            same hidden input — one file input shared by every page, since
+            only one page's toolbar can be visible/armed at a time. */}
+        <input ref={newPhotoInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.webp,.svg,.gif,.webm,.mov,.mp4"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onAddPhotoLayerFromFile(sel, f); e.target.value = ""; }} />
 
         <h2>Pages</h2>
         <div
@@ -1138,6 +1178,15 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               canvas={[project.width, project.height]}
               targets={photoPanTargets}
             />
+            {textTool && (
+              <TextPlacementOverlay
+                wrapperRef={playerWrapRef}
+                canvas={[project.width, project.height]}
+                defaultSize={[Math.round(project.width * 0.8), Math.round(project.height * 0.14)]}
+                onPlace={(box) => onPlaceText(sel, box)}
+                onCancel={() => setTextTool(false)}
+              />
+            )}
             {showSafeZone && project.height > project.width && <SafeZoneOverlay canvas={[project.width, project.height]} />}
             {showInstagramUI && project.height > project.width && <InstagramUIOverlay canvas={[project.width, project.height]} />}
           </div>
@@ -1190,8 +1239,9 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             onCopyClip={setMotionClip}
             onChange={(fn) => update((p) => fn(p.pages[sel]))}
             onUploadPhoto={(li, file) => onUploadPhoto(sel, li, file)}
-            onAddText={() => onAddTextLayer(sel)}
-            onAddPhoto={() => onAddPhotoLayer(sel)}
+            onToggleTextTool={() => setTextTool((v) => !v)}
+            textToolArmed={textTool}
+            onAddPhoto={() => newPhotoInput.current?.click()}
             onAddShape={() => onAddShapeLayer(sel)}
             onDeleteLayer={(li) => onDeleteLayer(sel, li)}
             fonts={fonts}
@@ -1199,6 +1249,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             onUploadNewFont={(li, file, family, style) => onUploadNewFont(sel, li, file, family, style)}
             swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch}
             motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
+            newestLayerIndex={newestLayerIndex}
           />
         ) : <p className="sub">Select a page.</p>}
       </div>
@@ -1493,6 +1544,29 @@ const InstagramUiToggleIcon: React.FC = () => (
   </svg>
 );
 
+// Add-element toolbar (Text/Photo/Shape) — same 15x15/currentColor thin-
+// outline convention as every other icon in the app. Text uses a plain "T"
+// glyph (the universal text-tool convention in Figma/Canva/PowerPoint,
+// distinct in meaning from ContentIcon's "document" — a whole panel — used
+// elsewhere); Photo is the standard frame+sun+mountain "image" glyph.
+const TextToolIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <path d="M2.5 3.2h10M7.5 3.2v8.6" />
+  </svg>
+);
+const PhotoToolIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="1.5" y="2.5" width="12" height="10" rx="1.4" />
+    <circle cx="5.2" cy="6" r="1.1" fill="currentColor" stroke="none" />
+    <path d="M2.2 10.8 6 7l2 2 2.3-2.3 2.5 2.5" />
+  </svg>
+);
+const ShapeToolIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4">
+    <rect x="1.8" y="1.8" width="11.4" height="11.4" rx="2" />
+  </svg>
+);
+
 // The element panel's rail (Content/Effects/Keyframes) — thin outline glyphs,
 // same 15x15/currentColor convention as the align/direction icons above, kept
 // visually distinct from those (this rail picks a whole SECTION, not a
@@ -1618,11 +1692,23 @@ const ElementMotion: React.FC<{
   onSaveMotionPreset?: (name: string, clip: MotionClip) => void;
   onDeleteMotionPreset?: (id: string) => void;
   canvas: [number, number];
-}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onUploadNewFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas }) => {
+  // True for exactly the one layer the text tool just placed — focuses its
+  // textarea once, on mount, so placing text and typing is one continuous
+  // motion instead of place-then-hunt-for-the-field.
+  autoFocus?: boolean;
+}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onUploadNewFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, autoFocus }) => {
   const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
   const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
   const photoInput = React.useRef<HTMLInputElement>(null);
   const newFontInput = React.useRef<HTMLInputElement>(null);
+  const textContentRef = React.useRef<HTMLTextAreaElement>(null);
+  // Runs once, on mount — a freshly-placed text layer is a genuinely new
+  // ElementMotion instance (key={l.index}), so this never re-fires later
+  // and never steals focus from unrelated edits.
+  React.useEffect(() => {
+    if (autoFocus) textContentRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [addingFont, setAddingFont] = React.useState(false);
   const [newFamily, setNewFamily] = React.useState("");
   const [newStyle, setNewStyle] = React.useState("Regular");
@@ -1850,7 +1936,7 @@ const ElementMotion: React.FC<{
       {isTextLayer && (
         <div className="card compact group" style={{ marginTop: 8 }}>
           <div className="subhead">Text</div>
-          <textarea dir={layer.direction ?? "rtl"}
+          <textarea ref={textContentRef} dir={layer.direction ?? "rtl"}
             placeholder={(layer.direction ?? "rtl") === "ltr" ? "Text…" : "متن فارسی…"}
             value={layer.text ?? ""}
             onChange={(e) => onChange((l) => { l.text = e.target.value; })} />
@@ -2196,7 +2282,8 @@ const PageInspector: React.FC<{
   onCopyClip: (clip: MotionClip) => void;
   onChange: (fn: (pg: PageT) => void) => void;
   onUploadPhoto: (layerIndex: number, file: File) => void;
-  onAddText: () => void;
+  onToggleTextTool: () => void;
+  textToolArmed: boolean;
   onAddPhoto: () => void;
   onAddShape: () => void;
   onDeleteLayer: (layerIndex: number) => void;
@@ -2209,7 +2296,8 @@ const PageInspector: React.FC<{
   motionPresets: MotionPresetEntry[];
   onSaveMotionPreset: (name: string, clip: MotionClip) => void;
   onDeleteMotionPreset: (id: string) => void;
-}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onAddText, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, onUploadNewFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset }) => {
+  newestLayerIndex: number | null;
+}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, onUploadNewFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex }) => {
   // Duration/bg/ambient/transition/subtitle vs. the layer list were one long
   // stacked scroll before — split so each is reachable without scrolling
   // past the other. Resets to "Page" on every page switch (this component
@@ -2280,10 +2368,22 @@ const PageInspector: React.FC<{
               Paste to all
             </button>
           </div>
+          {/* Text is a real tool, not an instant action — arming it and
+              cancelling (Esc, or clicking it again) both toggle textToolArmed,
+              same "click again to turn it off" convention as everywhere else
+              in the app that shows an active state. */}
           <div className="row" style={{ gap: 6, marginTop: 10, marginBottom: 8 }}>
-            <button className="btn small" style={{ flex: 1 }} onClick={onAddPhoto}>+ Add photo</button>
-            <button className="btn small" style={{ flex: 1 }} onClick={onAddText}>+ Add text</button>
-            <button className="btn small" style={{ flex: 1 }} onClick={onAddShape}>+ Add shape</button>
+            <button className={"btn small" + (textToolArmed ? " active" : "")} style={{ flex: 1 }}
+              title={textToolArmed ? "Click again to cancel (or press Esc)" : "Click, or drag on the canvas to draw a text box"}
+              aria-pressed={textToolArmed} onClick={onToggleTextTool}>
+              <TextToolIcon /><span>Text</span>
+            </button>
+            <button className="btn small" style={{ flex: 1 }} title="Choose a photo/video to add" onClick={onAddPhoto}>
+              <PhotoToolIcon /><span>Photo</span>
+            </button>
+            <button className="btn small" style={{ flex: 1 }} title="Add a shape" onClick={onAddShape}>
+              <ShapeToolIcon /><span>Shape</span>
+            </button>
           </div>
           {/* Rendered top-to-bottom = front-to-back (Photoshop/Figma convention)
               — reverses the DISPLAY order only; `li` stays the real array index
@@ -2305,6 +2405,7 @@ const PageInspector: React.FC<{
               onUploadNewFont={(file, family, style) => onUploadNewFont(li, file, family, style)}
               swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch}
               motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
+              autoFocus={l.index === newestLayerIndex}
               canvas={canvas}
               onDelete={() => onDeleteLayer(li)} />
           )).reverse()}
