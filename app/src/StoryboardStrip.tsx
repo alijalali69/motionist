@@ -3,9 +3,9 @@ import { Thumbnail } from "@remotion/player";
 import { PageThumb } from "../../src/PageThumb";
 import type { Project } from "../../src/types";
 
-const CARD_W = 100; // fixed — this is what the carousel's horizontal math (VIEW_W, GAP, clamping) is built around
-const GAP = 6;
-const VIEW_W = 620; // scaled up with CARD_W so roughly the same number of cards stay visible at once
+const CARD_W = 50; // fixed — this is what the carousel's horizontal math (VIEW_W, GAP, clamping) is built around
+const GAP = 3;
+const VIEW_W = 310; // scaled up with CARD_W so roughly the same number of cards stay visible at once
 
 // One page's live-content thumbnail — a single static Remotion frame (not a
 // running Player), cheap enough to have many on screen. Falls back to a
