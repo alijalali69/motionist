@@ -365,6 +365,33 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     loadProject(projectId).then(setProject).catch(() => {});
   }, [projectId]);
 
+  // Autosave — every edit (via `update()`, below) lands in `project` state,
+  // and this debounces that into a real save so work is never lost to a
+  // forgotten "Save" click. Debounced (900ms of no further edits) rather
+  // than firing per-keystroke, so typing a caption doesn't hammer the
+  // server with a request per character. The explicit "Save" button still
+  // exists for "save right now, no wait" (e.g. right before closing the
+  // tab) — this doesn't replace it, just means it's no longer required.
+  const [autosaveState, setAutosaveState] = React.useState<"saved" | "saving" | "unsaved">("saved");
+  const autosaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipNextAutosaveRef = React.useRef(true); // the load above isn't an edit
+  React.useEffect(() => {
+    skipNextAutosaveRef.current = true;
+  }, [projectId]);
+  React.useEffect(() => {
+    if (!project) return;
+    if (skipNextAutosaveRef.current) { skipNextAutosaveRef.current = false; return; }
+    setAutosaveState("unsaved");
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      setAutosaveState("saving");
+      saveProject(project)
+        .then(() => setAutosaveState("saved"))
+        .catch(() => setAutosaveState("unsaved")); // stays "unsaved" — next edit or the manual Save button will retry
+    }, 900);
+    return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
+  }, [project]);
+
   // Ref mutations happen HERE, in plain synchronous handler code — never
   // inside a setState updater function. React.StrictMode double-invokes
   // updater functions in dev to catch impure ones; a ref push/pop living
@@ -622,6 +649,29 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     });
   };
 
+  // A plain color box — no upload needed, unlike photo. Defaults to a
+  // translucent dark bar sized/placed like a text layer's own default box
+  // (the most common use: a scrim behind text) and sent to the BACK like
+  // photo, since "background panel" is the primary use — sitting in front
+  // of everything is one click away (bring-forward) if it's a divider
+  // that should show on top instead.
+  const onAddShapeLayer = (pageIndex: number) => {
+    if (!project) return;
+    update((p) => {
+      const page = p.pages[pageIndex];
+      const w = Math.round(p.width * 0.8);
+      const h = Math.round(p.height * 0.14);
+      page.layers.unshift({
+        index: -Date.now(),
+        file: "", role: "shape",
+        left: Math.round((p.width - w) / 2), top: Math.round(p.height * 0.4),
+        width: w, height: h, opacity: 0.55,
+        entrance: "none", delay: 0,
+        assetKind: "shape", shapeType: "rect", shapeFill: "#000000", shapeCornerRadius: 0,
+      } as any);
+    });
+  };
+
   const onDeleteLayer = (pageIndex: number, layerIndex: number) => {
     if (!project) return;
     const file = project.pages[pageIndex]?.layers[layerIndex]?.file;
@@ -794,7 +844,14 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       <div className="col" style={{ width: leftW, flex: `0 0 ${leftW}px` }}>
         <div className="editor-header">
           <button className="btn back-btn" onClick={onBack}>← Dashboard</button>
-          <div className="row" style={{ gap: 4 }}>
+          <div className="row" style={{ gap: 8 }}>
+            {project && (
+              <span className="autosave-status" title="Every change saves on its own a moment after you stop editing">
+                {autosaveState === "saved" && <><span className="dot good" />Saved</>}
+                {autosaveState === "saving" && <><span className="dot" />Saving…</>}
+                {autosaveState === "unsaved" && <><span className="dot warn" />Unsaved</>}
+              </span>
+            )}
             <button className="btn small" title="Undo (Ctrl+Z)" disabled={historyRef.current.length === 0} onClick={undo}>↶</button>
             <button className="btn small" title="Redo (Ctrl+Shift+Z)" disabled={futureRef.current.length === 0} onClick={redo}>↷</button>
           </div>
@@ -1039,6 +1096,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             onUploadPhoto={(li, file) => onUploadPhoto(sel, li, file)}
             onAddText={() => onAddTextLayer(sel)}
             onAddPhoto={() => onAddPhotoLayer(sel)}
+            onAddShape={() => onAddShapeLayer(sel)}
             onDeleteLayer={(li) => onDeleteLayer(sel, li)}
             fonts={fonts}
             onSelectFont={(li, entry) => onSelectFont(sel, li, entry)}
@@ -1212,6 +1270,12 @@ export type MotionClip = {
   photoPanX?: LayerT["photoPanX"];
   photoPanY?: LayerT["photoPanY"];
   photoZoom?: LayerT["photoZoom"];
+  // Shape fill/stroke.
+  shapeType?: LayerT["shapeType"];
+  shapeFill?: LayerT["shapeFill"];
+  shapeCornerRadius?: LayerT["shapeCornerRadius"];
+  shapeStrokeColor?: LayerT["shapeStrokeColor"];
+  shapeStrokeWidth?: LayerT["shapeStrokeWidth"];
 };
 
 function clipFromLayer(l: LayerT): MotionClip {
@@ -1224,6 +1288,8 @@ function clipFromLayer(l: LayerT): MotionClip {
     textColor: l.textColor, textAlign: l.textAlign, direction: l.direction,
     fit: l.fit, photoMotion: l.photoMotion,
     photoPanX: l.photoPanX, photoPanY: l.photoPanY, photoZoom: l.photoZoom,
+    shapeType: l.shapeType, shapeFill: l.shapeFill, shapeCornerRadius: l.shapeCornerRadius,
+    shapeStrokeColor: l.shapeStrokeColor, shapeStrokeWidth: l.shapeStrokeWidth,
   };
 }
 
@@ -1253,6 +1319,11 @@ function applyClip(l: LayerT, clip: MotionClip) {
   if (clip.photoPanX !== undefined) l.photoPanX = clip.photoPanX;
   if (clip.photoPanY !== undefined) l.photoPanY = clip.photoPanY;
   if (clip.photoZoom !== undefined) l.photoZoom = clip.photoZoom;
+  if (clip.shapeType !== undefined) l.shapeType = clip.shapeType;
+  if (clip.shapeFill !== undefined) l.shapeFill = clip.shapeFill;
+  if (clip.shapeCornerRadius !== undefined) l.shapeCornerRadius = clip.shapeCornerRadius;
+  if (clip.shapeStrokeColor !== undefined) l.shapeStrokeColor = clip.shapeStrokeColor;
+  if (clip.shapeStrokeWidth !== undefined) l.shapeStrokeWidth = clip.shapeStrokeWidth;
 }
 
 // Small inline icon set for the icon-only alignment/direction controls below
@@ -1441,6 +1512,7 @@ const ElementMotion: React.FC<{
   };
   const isPhotoSlot = layer.role === "photo";
   const isTextLayer = layer.assetKind === "text";
+  const isShapeLayer = layer.assetKind === "shape";
   const inOptions = isTextLayer ? [...ENTRANCES, ...TEXT_ENTRANCE_NAMES] : ENTRANCES;
 
   // Group the shared library by family name, for the two-step Font -> Style pickers.
@@ -1549,6 +1621,40 @@ const ElementMotion: React.FC<{
               onChange={(e) => onChange((l) => { l.photoMotion = e.target.value as any; })}>
               {AMBIENTS.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
+          </div>
+        </div>
+      )}
+
+      {isShapeLayer && (
+        <div className="card compact group" style={{ marginTop: 8 }}>
+          <div className="subhead">Shape</div>
+          <div className="grid2 mini">
+            <div><label>Type</label>
+              <select value={layer.shapeType ?? "rect"}
+                onChange={(e) => onChange((l) => { l.shapeType = e.target.value as any; })}>
+                <option value="rect">Rectangle</option>
+                <option value="ellipse">Ellipse</option>
+              </select></div>
+            <div><label>Corner radius</label>
+              <input type="number" min={0} value={layer.shapeCornerRadius ?? 0}
+                disabled={(layer.shapeType ?? "rect") === "ellipse"}
+                title={(layer.shapeType ?? "rect") === "ellipse" ? "Ellipses are already round" : undefined}
+                onChange={(e) => onChange((l) => { l.shapeCornerRadius = Math.max(0, Math.round(parseFloat(e.target.value || "0"))); })} /></div>
+          </div>
+          <div className="mini" style={{ marginTop: 4 }}>
+            <label>Fill</label>
+            <ColorField value={layer.shapeFill ?? "#000000"}
+              onChange={(hex) => onChange((l) => { l.shapeFill = hex; })}
+              swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+          </div>
+          <div className="grid2 mini" style={{ marginTop: 4 }}>
+            <div><label>Stroke width</label>
+              <input type="number" min={0} value={layer.shapeStrokeWidth ?? 0}
+                onChange={(e) => onChange((l) => { l.shapeStrokeWidth = Math.max(0, Math.round(parseFloat(e.target.value || "0"))); })} /></div>
+            <div><label>Stroke color</label>
+              <ColorField value={layer.shapeStrokeColor ?? "#000000"}
+                onChange={(hex) => onChange((l) => { l.shapeStrokeColor = hex; })}
+                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} /></div>
           </div>
         </div>
       )}
@@ -1861,6 +1967,7 @@ const PageInspector: React.FC<{
   onUploadPhoto: (layerIndex: number, file: File) => void;
   onAddText: () => void;
   onAddPhoto: () => void;
+  onAddShape: () => void;
   onDeleteLayer: (layerIndex: number) => void;
   fonts: FontEntry[];
   onSelectFont: (layerIndex: number, entry: FontEntry | null) => void;
@@ -1871,7 +1978,7 @@ const PageInspector: React.FC<{
   motionPresets: MotionPresetEntry[];
   onSaveMotionPreset: (name: string, clip: MotionClip) => void;
   onDeleteMotionPreset: (id: string) => void;
-}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onAddText, onAddPhoto, onDeleteLayer, fonts, onSelectFont, onUploadNewFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset }) => {
+}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onAddText, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, onUploadNewFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset }) => {
   // Duration/bg/ambient/transition/subtitle vs. the layer list were one long
   // stacked scroll before — split so each is reachable without scrolling
   // past the other. Resets to "Page" on every page switch (this component
@@ -1944,6 +2051,7 @@ const PageInspector: React.FC<{
           <div className="row" style={{ gap: 6, marginTop: 10, marginBottom: 8 }}>
             <button className="btn small" style={{ flex: 1 }} onClick={onAddPhoto}>+ Add photo</button>
             <button className="btn small" style={{ flex: 1 }} onClick={onAddText}>+ Add text</button>
+            <button className="btn small" style={{ flex: 1 }} onClick={onAddShape}>+ Add shape</button>
           </div>
           {/* Rendered top-to-bottom = front-to-back (Photoshop/Figma convention)
               — reverses the DISPLAY order only; `li` stays the real array index

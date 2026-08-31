@@ -370,6 +370,19 @@ a.dl { color: var(--accent2); }
 .back-btn {
   width: auto; padding: 5px 10px; font-size: 12px;
 }
+/* Autosave status — small and ambient (Google Docs/Figma style), not a
+   banner: "Saved" is the calm/expected state, "Unsaved" is transient
+   (the debounce window before the next autosave fires), never an error. */
+.autosave-status {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--muted);
+}
+.autosave-status .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent2);
+}
+.autosave-status .dot.good { background: var(--good); }
+.autosave-status .dot.warn { background: var(--warn); }
 /* Upload buttons — stand out from regular buttons (dashed accent border,
    subtle icon) while empty; turn solid green once something is uploaded, so
    filled-vs-empty is visible at a glance without reading the label text. */

@@ -36,7 +36,7 @@ export type ContentLayer = {
   // Optional uploaded replacement asset (BG/Title "like the logo"). When kind is
   // video/gif/lottie the layer plays that asset in place of the static image,
   // keeping its box + motion. Absent => render `file` as a still image.
-  assetKind?: "image" | "video" | "gif" | "lottie" | "text";
+  assetKind?: "image" | "video" | "gif" | "lottie" | "text" | "shape";
   fit?: "contain" | "cover";
   // Live text layer (assetKind "text") — typed directly in the app instead of
   // baked into the PSD/SVG. `file` is unused for these. Word/line-stagger
@@ -72,6 +72,16 @@ export type ContentLayer = {
   // background layer drifting slower than the rest, for real parallax depth
   // instead of every layer moving as one rigid unit.
   parallaxDepth?: number;
+  // Plain vector shape (assetKind "shape") — a solid-color box for text
+  // backgrounds, separators, or a colored panel behind other layers.
+  // `file` is unused for these, same as text. Uses the box's own
+  // left/top/width/height + the normal entrance/exit/parallax pipeline —
+  // it's a layer like any other, just with no image/text content.
+  shapeType?: "rect" | "ellipse";
+  shapeFill?: string;
+  shapeCornerRadius?: number; // rect only; ellipse ignores this (already round)
+  shapeStrokeColor?: string;
+  shapeStrokeWidth?: number; // 0/undefined = no stroke
 };
 
 export type TemplateLayer = {

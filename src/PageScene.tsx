@@ -204,7 +204,8 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
     m = combinedEntranceMotion(layer, frame, fps, inDuration);
   }
   const opacity = m.opacity * layer.opacity;
-  const url = staticFile(layer.file);
+  const isShape = layer.assetKind === "shape";
+  const url = isShape ? "" : staticFile(layer.file);
   // Original PSD/SVG-extracted art is pre-cropped to exactly its box's pixel
   // size, so "cover" vs "fill" looks identical there — but a freshly uploaded
   // replacement photo can be any aspect ratio, and "cover" is what keeps it
@@ -226,8 +227,21 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
   const objectPosition = `${panX}% ${panY}%`;
 
   // BG/Title/photo slots can be replaced by an uploaded asset; render it by
-  // kind but keep the layer's box + entrance + page ambient motion.
-  const media =
+  // kind but keep the layer's box + entrance + page ambient motion. A shape
+  // layer has no asset at all — just a solid-color (or stroked) box, same
+  // pipeline otherwise.
+  const media = isShape ? (
+    <div
+      style={{
+        width: "100%", height: "100%", boxSizing: "border-box",
+        background: layer.shapeFill ?? "#000000",
+        borderRadius: layer.shapeType === "ellipse" ? "50%" : (layer.shapeCornerRadius ?? 0),
+        border: layer.shapeStrokeWidth
+          ? `${layer.shapeStrokeWidth}px solid ${layer.shapeStrokeColor ?? "#000000"}`
+          : undefined,
+      }}
+    />
+  ) :
     layer.assetKind === "video" ? (
       <OffthreadVideo src={url} transparent muted
         style={{ width: "100%", height: "100%", objectFit: fit, objectPosition, transform: `scale(${zoom})` }} />
