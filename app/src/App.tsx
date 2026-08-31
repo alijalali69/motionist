@@ -1160,20 +1160,20 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         {project && (canvasHandles.length > 0 || photoPanTargets.length > 0 || project.height > project.width) && (
           <div className="card compact" style={{ maxWidth: 420, width: "100%" }}>
             {project.height > project.width && (
-              <label className="row" style={{ gap: 6, fontSize: 12, color: "var(--muted)", cursor: "pointer" }}>
-                <input type="checkbox" checked={showSafeZone}
-                  onChange={(e) => setShowSafeZone(e.target.checked)}
-                  style={{ width: "auto" }} />
-                Show Instagram Reels safe zone (guide only — never rendered in export)
-              </label>
-            )}
-            {project.height > project.width && (
-              <label className="row" style={{ gap: 6, fontSize: 12, color: "var(--muted)", cursor: "pointer", marginTop: 4 }}>
-                <input type="checkbox" checked={showInstagramUI}
-                  onChange={(e) => setShowInstagramUI(e.target.checked)}
-                  style={{ width: "auto" }} />
-                Show Instagram Reels UI preview (stylized mockup — never rendered in export)
-              </label>
+              <div className="row" style={{ gap: 4 }}>
+                <button className={"btn small icon" + (showSafeZone ? " active" : "")}
+                  title={showSafeZone ? "Hide Instagram Reels safe zone (guide only — never rendered in export)" : "Show Instagram Reels safe zone (guide only — never rendered in export)"}
+                  aria-label="Toggle Instagram Reels safe zone guide" aria-pressed={showSafeZone}
+                  onClick={() => setShowSafeZone((v) => !v)}>
+                  <SafeZoneToggleIcon />
+                </button>
+                <button className={"btn small icon" + (showInstagramUI ? " active" : "")}
+                  title={showInstagramUI ? "Hide Instagram Reels UI preview (stylized mockup — never rendered in export)" : "Show Instagram Reels UI preview (stylized mockup — never rendered in export)"}
+                  aria-label="Toggle Instagram Reels UI preview" aria-pressed={showInstagramUI}
+                  onClick={() => setShowInstagramUI((v) => !v)}>
+                  <InstagramUiToggleIcon />
+                </button>
+              </div>
             )}
             {canvasHandles.length > 0 && (
               <p className="hint" style={{ margin: project.height > project.width ? "6px 0 0" : 0, textAlign: "center" }}>
@@ -1488,6 +1488,20 @@ const DirectionIcon: React.FC<{ dir: "ltr" | "rtl" }> = ({ dir }) => (
     <rect x="1" y="3" width="9" height="1.6" rx="0.6" fill="currentColor" />
     <rect x="1" y="10" width="6" height="1.6" rx="0.6" fill="currentColor" />
     <path d="M10 10.8 H14 M12 8.8 L14 10.8 L12 12.8" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+// Preview-overlay toggles (safe zone / Instagram UI mockup) — a crop-guide
+// corner-bracket glyph and a heart (echoing the IG overlay's own like icon),
+// same 15x15/currentColor convention as the icons above.
+const SafeZoneToggleIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+    <path d="M1.5 4.5v-3h3M13.5 4.5v-3h-3M1.5 10.5v3h3M13.5 10.5v3h-3" />
+  </svg>
+);
+const InstagramUiToggleIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7.5 12.5c-.13 0-.27-.03-.38-.11C4.4 10.8 1.5 8.7 1.5 5.9 1.5 3.9 3 2.5 4.9 2.5c1 0 1.9.5 2.6 1.3.7-.8 1.6-1.3 2.6-1.3 1.9 0 3.4 1.4 3.4 3.4 0 2.8-2.9 4.9-5.62 6.49-.11.08-.25.11-.38.11z" />
   </svg>
 );
 
