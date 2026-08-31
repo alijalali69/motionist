@@ -14,6 +14,7 @@ import { StoryboardStrip } from "./StoryboardStrip";
 import { CanvasHandles, type Handle } from "./CanvasHandles";
 import { PhotoPanHandles, type PhotoPanTarget } from "./PhotoPanHandles";
 import { SafeZoneOverlay } from "./SafeZoneOverlay";
+import { InstagramUIOverlay } from "./InstagramUIOverlay";
 
 const ENTRANCES = ENTRANCE_NAMES;
 const AMBIENTS = AMBIENT_NAMES;
@@ -267,6 +268,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [dragOver, setDragOver] = React.useState(false);
   const [motionClip, setMotionClip] = React.useState<MotionClip | null>(null);
   const [showSafeZone, setShowSafeZone] = React.useState(false);
+  const [showInstagramUI, setShowInstagramUI] = React.useState(false);
   // A photo layer's own frame is now freely draggable/resizable (plain drag)
   // same as text/shapes — but it ALSO has a pan-within-frame interaction
   // (drag the photo to choose its crop) that used to own the whole body-drag
@@ -1144,6 +1146,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               targets={photoPanTargets}
             />
             {showSafeZone && project.height > project.width && <SafeZoneOverlay canvas={[project.width, project.height]} />}
+            {showInstagramUI && project.height > project.width && <InstagramUIOverlay canvas={[project.width, project.height]} />}
           </div>
         ) : <p className="sub">Loading…</p>}
         {project && (
@@ -1162,6 +1165,14 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                   onChange={(e) => setShowSafeZone(e.target.checked)}
                   style={{ width: "auto" }} />
                 Show Instagram Reels safe zone (guide only — never rendered in export)
+              </label>
+            )}
+            {project.height > project.width && (
+              <label className="row" style={{ gap: 6, fontSize: 12, color: "var(--muted)", cursor: "pointer", marginTop: 4 }}>
+                <input type="checkbox" checked={showInstagramUI}
+                  onChange={(e) => setShowInstagramUI(e.target.checked)}
+                  style={{ width: "auto" }} />
+                Show Instagram Reels UI preview (stylized mockup — never rendered in export)
               </label>
             )}
             {canvasHandles.length > 0 && (
