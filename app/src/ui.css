@@ -539,8 +539,9 @@ input.project-name-input::placeholder { color: var(--muted); font-weight: 600; }
 .el-rail-btn span {
   font-family: var(--mono); font-size: 8px; text-transform: uppercase; letter-spacing: 0.03em;
 }
-.el-rail-btn:hover { color: var(--text); }
-.el-rail-btn.active { background: var(--accent); color: #fff; }
+.el-rail-btn:hover { color: var(--text); background: var(--panel2); }
+.el-rail-btn.active { background: none; color: var(--accent); }
+.el-rail-btn.active:hover { background: var(--panel2); color: var(--accent2); }
 .el-pane { flex: 1; min-width: 0; padding: 10px 12px; background: var(--panel2); }
 .el-pane .card.compact.group:first-child { margin-top: 0; }
 
