@@ -212,6 +212,15 @@ select, input[type="number"], input[type="text"], textarea {
   width: 100%; background: var(--panel2); color: var(--text);
   border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; font-size: 13px;
 }
+/* The OPEN dropdown list is OS/browser chrome, not something CSS fully
+   reaches — border-radius, padding, and the highlighted-row color stay
+   native no matter what. But Chromium DOES honor background-color/color on
+   <option>, which is the one thing that was actually jarring here (a
+   bright white system-default list popping out of an all-dark app). */
+option {
+  background: var(--panel2);
+  color: var(--text);
+}
 textarea { resize: vertical; min-height: 54px; font-family: inherit; }
 
 /* Native <input type="color"> ships its own border + inset padding around
