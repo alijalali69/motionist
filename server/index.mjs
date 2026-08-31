@@ -43,6 +43,39 @@ function run(cmd, args, opts = {}) {
   });
 }
 
+// Remotion downloads its own headless Chrome from Google's CDN on first
+// render — some regions get a flat 403 from that CDN entirely ("this
+// service is not available in your location", hit by a user rendering from
+// Iran). If a real Chrome/Edge is already installed, point Remotion at that
+// instead of downloading — skips the CDN dependency altogether.
+function findLocalBrowser() {
+  const candidates = [
+    path.join(process.env["PROGRAMFILES"] || "C:\\Program Files", "Google\\Chrome\\Application\\chrome.exe"),
+    path.join(process.env["PROGRAMFILES(X86)"] || "C:\\Program Files (x86)", "Google\\Chrome\\Application\\chrome.exe"),
+    path.join(process.env["LOCALAPPDATA"] || "", "Google\\Chrome\\Application\\chrome.exe"),
+    path.join(process.env["PROGRAMFILES(X86)"] || "C:\\Program Files (x86)", "Microsoft\\Edge\\Application\\msedge.exe"),
+    path.join(process.env["PROGRAMFILES"] || "C:\\Program Files", "Microsoft\\Edge\\Application\\msedge.exe"),
+  ];
+  return candidates.find((p) => p && fs.existsSync(p)) || null;
+}
+
+// Only kicks in when the render actually fails on a browser-download
+// problem — everyone whose download already works (this machine, today)
+// keeps using Remotion's own pinned Chrome build unchanged. Retries exactly
+// once, with `--browser-executable` pointing at whatever local browser
+// findLocalBrowser() found, if any.
+async function runRenderWithBrowserFallback(args) {
+  try {
+    return await run("npx", args);
+  } catch (e) {
+    const msg = String(e.message || e);
+    const looksLikeBrowserDownloadFailure = /chrome-for-testing|chrome-headless-shell|downloading file|AccessDenied/i.test(msg);
+    const localBrowser = looksLikeBrowserDownloadFailure ? findLocalBrowser() : null;
+    if (!localBrowser) throw e;
+    return await run("npx", [...args, `--browser-executable=${localBrowser}`]);
+  }
+}
+
 // --- Project storage: one JSON file per project under data/projects/<id>.json
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -515,7 +548,7 @@ app.post("/api/render", async (req, res) => {
     // yuva444p10le needs each rendered frame captured as PNG (Remotion's
     // default JPEG capture format has no alpha channel to carry through).
     if (transparent) args.push("--codec=prores", "--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png");
-    await run("npx", args);
+    await runRenderWithBrowserFallback(args);
     // `path` is the absolute filesystem path — the Resolve plugin's bridge
     // needs a real path (not a URL) to hand the file to Resolve's Media
     // Pool. Harmless to expose: this is a single-user local server, and the
