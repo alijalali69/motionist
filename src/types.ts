@@ -60,7 +60,7 @@ export type ContentLayer = {
   // 0-100 matches CSS object-position semantics (50 = centered, default).
   photoPanX?: number;
   photoPanY?: number;
-  photoZoom?: number; // >=1, default 1 (1 = exact cover fit, no extra zoom)
+  photoZoom?: number; // default 1 (exact cover fit) — >1 zooms in, <1 (down to 0.3) shrinks the photo inside its frame
   naturalWidth?: number | null;  // uploaded asset's real pixel size (for pan math)
   naturalHeight?: number | null;
   // How much of the PAGE's own ambient motion (kenburns, sway, etc. — set on

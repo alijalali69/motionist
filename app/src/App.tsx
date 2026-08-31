@@ -794,13 +794,17 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       id: "loader", label: "LOADER", color: "#c9a53b", box: project.loader,
       onChange: (b) => update((p) => { p.loader = b; }),
     });
-    // Text layers are user-created (not part of a template), so — unlike
-    // photo placeholder boxes — they're freely draggable/resizable too.
+    // Text and shape layers are user-created (not part of a PSD/SVG
+    // template), so — unlike photo placeholder boxes, whose frame comes from
+    // the design file (or defaults to the full page) and is only panned/
+    // zoomed within, never moved — they're freely draggable/resizable too.
     const page = project.pages[sel];
     page?.layers.forEach((l, li) => {
-      if (l.assetKind !== "text") return;
+      if (l.assetKind !== "text" && l.assetKind !== "shape") return;
       list.push({
-        id: `text-${li}`, label: l.text ? l.text.slice(0, 18) : "TEXT", color: "#c46be0",
+        id: `${l.assetKind}-${li}`,
+        label: l.assetKind === "text" ? (l.text ? l.text.slice(0, 18) : "TEXT") : "SHAPE",
+        color: l.assetKind === "text" ? "#c46be0" : "#3ea6ff",
         box: { left: l.left, top: l.top, width: l.width, height: l.height },
         onChange: (b) => update((p) => {
           const layer = p.pages[sel].layers[li];
@@ -1597,8 +1601,8 @@ const ElementMotion: React.FC<{
               <div className="row between mini" style={{ marginTop: 6 }}>
                 <span style={{ color: "var(--muted)" }}>Zoom {(layer.photoZoom ?? 1).toFixed(2)}×</span>
                 <div className="row" style={{ gap: 4 }}>
-                  <button className="btn small" title="Zoom out"
-                    onClick={() => onChange((l) => { l.photoZoom = Math.max(1, +((l.photoZoom ?? 1) - 0.1).toFixed(2)); })}>−</button>
+                  <button className="btn small" title="Zoom out — can shrink the photo smaller than its frame, revealing what's behind it"
+                    onClick={() => onChange((l) => { l.photoZoom = Math.max(0.3, +((l.photoZoom ?? 1) - 0.1).toFixed(2)); })}>−</button>
                   <button className="btn small" title="Zoom in"
                     onClick={() => onChange((l) => { l.photoZoom = Math.min(3, +((l.photoZoom ?? 1) + 0.1).toFixed(2)); })}>＋</button>
                   <button className="btn small" title="Reset crop to centered"
