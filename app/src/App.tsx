@@ -4,7 +4,7 @@ import { Reel } from "../../src/Reel";
 import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
 import { ENTRANCE_NAMES, TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, EXIT_NAMES, EASING_NAMES, TRANSITIONS } from "../../src/presets";
 import {
-  loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, renderReel,
+  loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus,
   listFonts, uploadFontToLibrary, deleteProjectFiles, type IngestResult, type FontEntry,
   listMotionPresets, saveMotionPreset, deleteMotionPreset, type MotionPresetEntry,
 } from "./api";
@@ -263,6 +263,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [busy, setBusy] = React.useState<string | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [renderUrl, setRenderUrl] = React.useState<string | null>(null);
+  const [renderProgress, setRenderProgress] = React.useState<{ percent: number; phase?: string; frame?: number; totalFrames?: number } | null>(null);
   const [dragOver, setDragOver] = React.useState(false);
   const [motionClip, setMotionClip] = React.useState<MotionClip | null>(null);
   const [showSafeZone, setShowSafeZone] = React.useState(false);
@@ -686,7 +687,13 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         index: -Date.now(),
         file: "", role: "shape",
         left: Math.round((p.width - w) / 2), top: Math.round(p.height * 0.4),
-        width: w, height: h, opacity: 0.55,
+        width: w, height: h,
+        // Fully opaque by default — the fill color you pick should be
+        // exactly what renders. Opacity is its own visible field in the
+        // Shape box now (below) for anyone who actually wants a translucent
+        // scrim; it was silently 0.55 before with no field showing it,
+        // which is why a chosen color looked wrong on canvas.
+        opacity: 1,
         entrance: "none", delay: 0,
         assetKind: "shape", shapeType: "rect", shapeFill: "#000000", shapeCornerRadius: 0,
       } as any);
@@ -733,13 +740,34 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
 
   const onRender = async () => {
     if (!project) return;
-    setBusy("Rendering… (this can take a while)"); setErr(null); setRenderUrl(null);
+    setErr(null); setRenderUrl(null); setRenderProgress({ percent: 0 });
     try {
       await saveProject(project); // keep the saved copy in sync with what's rendered
-      const url = await renderReel(project, transparentExport, exportName);
-      setRenderUrl(url);
+      const jobId = await startRenderJob(project, transparentExport, exportName);
+      // Poll until the job reports done/error — /api/render/start returns
+      // immediately instead of blocking for the whole render, specifically
+      // so this loop can show a real percentage instead of a static
+      // "Rendering… (this can take a while)".
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 600));
+        const status = await getRenderJobStatus(jobId);
+        if (status.status === "error") throw new Error(status.error || "render failed");
+        if (status.status === "done") {
+          setRenderUrl(status.url ?? null);
+          // Same Resolve Media Pool hand-off renderReel() used to do —
+          // fire-and-forget, a failure here shouldn't fail a render that
+          // already succeeded.
+          if (window.motionistResolveBridge && status.path) {
+            window.motionistResolveBridge.onRendered(status.path)
+              .then((res) => { if (!res?.ok) console.warn("Motionist → Resolve: not added to Media Pool —", res?.error); })
+              .catch((e) => console.warn("Motionist → Resolve bridge failed:", e));
+          }
+          break;
+        }
+        setRenderProgress({ percent: status.percent, phase: status.phase, frame: status.frame, totalFrames: status.totalFrames });
+      }
     } catch (e: any) { setErr(String(e.message || e)); }
-    finally { setBusy(null); }
+    finally { setRenderProgress(null); }
   };
 
   const movePage = (i: number, dir: -1 | 1) => {
@@ -1009,10 +1037,27 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           </label>
           <div className="row" style={{ gap: 8 }}>
             <button className="btn" onClick={onSave} disabled={!project}>Save</button>
-            <button className="btn primary" onClick={onRender} disabled={!project}>
+            <button className="btn primary" onClick={onRender} disabled={!project || !!renderProgress}>
               {transparentExport ? "Render ProRes (alpha)" : "Render MP4"}
             </button>
           </div>
+          {renderProgress && (
+            <div style={{ marginTop: 8 }}>
+              <div className="row between mini" style={{ marginBottom: 4 }}>
+                <span className="hint" style={{ margin: 0 }}>
+                  {renderProgress.phase === "bundling" && "Bundling…"}
+                  {renderProgress.phase === "rendering" &&
+                    (renderProgress.totalFrames ? `Rendering… ${renderProgress.frame}/${renderProgress.totalFrames} frames` : "Rendering…")}
+                  {renderProgress.phase === "encoding" && "Encoding…"}
+                  {!renderProgress.phase && "Starting…"}
+                </span>
+                <span className="hint" style={{ margin: 0, fontVariantNumeric: "tabular-nums" }}>{Math.round(renderProgress.percent)}%</span>
+              </div>
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${Math.min(100, Math.max(0, renderProgress.percent))}%` }} />
+              </div>
+            </div>
+          )}
           {renderUrl && <p className="hint">Done → <a className="dl" href={renderUrl} target="_blank" rel="noreferrer">download reel</a></p>}
           {busy && <p className="spin">{busy}</p>}
           {err && (
@@ -1656,27 +1701,48 @@ const ElementMotion: React.FC<{
         </div>
       )}
 
-      {isShapeLayer && (
+      {isShapeLayer && (() => {
+        const shapeType = layer.shapeType ?? "rect";
+        const isRound = shapeType === "ellipse" || shapeType === "circle";
+        return (
         <div className="card compact group" style={{ marginTop: 8 }}>
           <div className="subhead">Shape</div>
           <div className="grid2 mini">
             <div><label>Type</label>
-              <select value={layer.shapeType ?? "rect"}
-                onChange={(e) => onChange((l) => { l.shapeType = e.target.value as any; })}>
+              <select value={shapeType}
+                onChange={(e) => onChange((l) => {
+                  const next = e.target.value as NonNullable<LayerT["shapeType"]>;
+                  l.shapeType = next;
+                  // Square/circle/line are a convenience, not just a label —
+                  // snap the box to what the name promises right away instead
+                  // of leaving it however it happened to be sized before.
+                  if (next === "square" || next === "circle") {
+                    const side = Math.min(l.width, l.height);
+                    l.width = side; l.height = side;
+                  } else if (next === "line") {
+                    l.height = 6;
+                  }
+                })}>
                 <option value="rect">Rectangle</option>
+                <option value="square">Square</option>
                 <option value="ellipse">Ellipse</option>
+                <option value="circle">Circle</option>
+                <option value="line">Line</option>
               </select></div>
             <div><label>Corner radius</label>
               <input type="number" min={0} value={layer.shapeCornerRadius ?? 0}
-                disabled={(layer.shapeType ?? "rect") === "ellipse"}
-                title={(layer.shapeType ?? "rect") === "ellipse" ? "Ellipses are already round" : undefined}
+                disabled={isRound}
+                title={isRound ? "Already round — corner radius doesn't apply" : undefined}
                 onChange={(e) => onChange((l) => { l.shapeCornerRadius = Math.max(0, Math.round(parseFloat(e.target.value || "0"))); })} /></div>
           </div>
-          <div className="mini" style={{ marginTop: 4 }}>
-            <label>Fill</label>
-            <ColorField value={layer.shapeFill ?? "#000000"}
-              onChange={(hex) => onChange((l) => { l.shapeFill = hex; })}
-              swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+          <div className="grid2 mini" style={{ marginTop: 4 }}>
+            <div><label>Fill</label>
+              <ColorField value={layer.shapeFill ?? "#000000"}
+                onChange={(hex) => onChange((l) => { l.shapeFill = hex; })}
+                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} /></div>
+            <div><label title="How see-through the fill/stroke is — 100% is fully solid, the color you pick exactly">Opacity</label>
+              <input type="number" min={0} max={100} value={Math.round((layer.opacity ?? 1) * 100)}
+                onChange={(e) => onChange((l) => { l.opacity = Math.min(100, Math.max(0, Math.round(parseFloat(e.target.value || "100")))) / 100; })} /></div>
           </div>
           <div className="grid2 mini" style={{ marginTop: 4 }}>
             <div><label>Stroke width</label>
@@ -1688,7 +1754,8 @@ const ElementMotion: React.FC<{
                 swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} /></div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {isTextLayer && (
         <div className="card compact group" style={{ marginTop: 8 }}>
@@ -1826,7 +1893,19 @@ const ElementMotion: React.FC<{
       )}
 
       <div className="card compact group" style={{ marginTop: 8 }}>
-        <div className="subhead">Effects</div>
+        <div className="row between" style={{ alignItems: "center", marginBottom: 8 }}>
+          <div className="subhead" style={{ margin: 0 }}>Effects</div>
+          <button className="btn small" title="Clear every IN/OUT effect, easing, timing, and parallax setting on this element back to none"
+            onClick={() => onChange((l) => {
+              l.entrance = "none"; l.entrance2 = undefined; l.entrance3 = undefined;
+              l.entranceEasing = undefined; l.inDuration = undefined; l.delay = 0;
+              l.exit = undefined; l.exit2 = undefined; l.exit3 = undefined;
+              l.exitEasing = undefined; l.outDuration = undefined; l.outDelay = undefined;
+              l.parallaxDepth = undefined;
+            })}>
+            Reset
+          </button>
+        </div>
 
         {/* Motion presets — same MotionClip shape as Copy/Paste above, but
             named and saved server-side, so it's reusable in OTHER projects

@@ -235,7 +235,7 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
       style={{
         width: "100%", height: "100%", boxSizing: "border-box",
         background: layer.shapeFill ?? "#000000",
-        borderRadius: layer.shapeType === "ellipse" ? "50%" : (layer.shapeCornerRadius ?? 0),
+        borderRadius: (layer.shapeType === "ellipse" || layer.shapeType === "circle") ? "50%" : (layer.shapeCornerRadius ?? 0),
         border: layer.shapeStrokeWidth
           ? `${layer.shapeStrokeWidth}px solid ${layer.shapeStrokeColor ?? "#000000"}`
           : undefined,

@@ -383,6 +383,21 @@ a.dl { color: var(--accent2); }
 }
 .autosave-status .dot.good { background: var(--good); }
 .autosave-status .dot.warn { background: var(--warn); }
+
+/* --- Render progress bar ------------------------------------------------- */
+.progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
 /* Upload buttons — stand out from regular buttons (dashed accent border,
    subtle icon) while empty; turn solid green once something is uploaded, so
    filled-vs-empty is visible at a glance without reading the label text. */

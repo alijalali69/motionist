@@ -43,6 +43,49 @@ function run(cmd, args, opts = {}) {
   });
 }
 
+// Same as run(), but calls onLine(line) for every complete stdout line as it
+// streams in, instead of only handing back the full output at the end —
+// needed to report render progress while the process is still running.
+function runStreaming(cmd, args, onLine, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const p = spawn(cmd, args, { cwd: ROOT, shell: true, ...opts });
+    let err = "", buf = "";
+    p.stdout.on("data", (d) => {
+      buf += d.toString();
+      let idx;
+      while ((idx = buf.indexOf("\n")) >= 0) {
+        onLine(buf.slice(0, idx));
+        buf = buf.slice(idx + 1);
+      }
+    });
+    p.stderr.on("data", (d) => (err += d));
+    p.on("close", (code) => {
+      if (buf) onLine(buf); // trailing partial line with no final newline
+      code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}\n${err}`));
+    });
+  });
+}
+
+// Remotion's CLI prints its own progress to stdout as plain text — parse the
+// three phases it goes through into one continuous 0-100 for the UI. Weights
+// are a guess at relative real-world duration (rendering is the bulk of it),
+// not measured — good enough for a progress bar, not meant to be exact.
+function parseProgressLine(line) {
+  let m;
+  if ((m = line.match(/^Bundling (\d+)%/))) {
+    return { phase: "bundling", percent: (+m[1] / 100) * 10 };
+  }
+  if ((m = line.match(/^Rendered (\d+)\/(\d+)/))) {
+    const frame = +m[1], totalFrames = +m[2];
+    return { phase: "rendering", percent: 10 + (frame / totalFrames) * 75, frame, totalFrames };
+  }
+  if ((m = line.match(/^Encoded (\d+)\/(\d+)/))) {
+    const frame = +m[1], totalFrames = +m[2];
+    return { phase: "encoding", percent: 85 + (frame / totalFrames) * 15, frame, totalFrames };
+  }
+  return null;
+}
+
 // Remotion downloads its own headless Chrome from Google's CDN on first
 // render — some regions get a flat 403 from that CDN entirely ("this
 // service is not available in your location", hit by a user rendering from
@@ -63,23 +106,24 @@ function findLocalBrowser() {
 // problem — everyone whose download already works (this machine, today)
 // keeps using Remotion's own pinned Chrome build unchanged. Retries exactly
 // once, with `--browser-executable` pointing at whatever local browser
-// findLocalBrowser() found, if any.
-async function runRenderWithBrowserFallback(args) {
+// findLocalBrowser() found, if any. `onLine` gets every stdout line from
+// whichever attempt is currently running, for progress reporting.
+async function runRenderWithBrowserFallback(args, onLine) {
   try {
-    return await run("npx", args);
+    return await runStreaming("npx", args, onLine);
   } catch (e) {
     const msg = String(e.message || e);
     const looksLikeBrowserDownloadFailure = /chrome-for-testing|chrome-headless-shell|downloading file|AccessDenied/i.test(msg);
     const localBrowser = looksLikeBrowserDownloadFailure ? findLocalBrowser() : null;
     if (!localBrowser) throw e;
-    // `run()` spawns with `shell: true`, which (per Node's own docs/
-    // deprecation warning) does NOT escape array args — it just
+    // `run()`/`runStreaming()` spawn with `shell: true`, which (per Node's
+    // own docs/deprecation warning) does NOT escape array args — it just
     // concatenates them into one command line for cmd.exe to split on
     // whitespace again. An unquoted Program Files path truncates at the
     // first space ("browserExecutable" was specified as 'C:\Program' but
     // the path doesn't exist — the exact failure this hit in the wild).
     // Quoting the whole flag=value argument keeps it one token.
-    return await run("npx", [...args, `"--browser-executable=${localBrowser}"`]);
+    return await runStreaming("npx", [...args, `"--browser-executable=${localBrowser}"`], onLine);
   }
 }
 
@@ -529,33 +573,40 @@ app.post("/api/asset", upload.single("asset"), async (req, res) => {
   }
 });
 
+// Shared by both the old synchronous /api/render (kept as-is — the Resolve
+// plugin calls it directly and expects the finished {url, path} in one
+// response, not a job to poll) and the new job-based /api/render/start
+// (what the app's own UI uses for a real progress bar).
+function buildRenderArgs(project) {
+  // `transparent`/`exportName` are transient flags riding on the same
+  // body, not real Project fields — never persisted anywhere but this
+  // scratch file.
+  const transparent = !!project.transparent;
+  // Mirror into src/project.json — that's what Root.tsx's defaultProps and
+  // the Remotion CLI's --props flag read from.
+  fs.writeFileSync(LEGACY_PROJECT_JSON, JSON.stringify(project, null, 2), "utf-8");
+  const safeName = (project.exportName || project.name || project.projectId || "reel").replace(/[^a-z0-9]/gi, "_");
+  // MP4/H.264 can't carry an alpha channel at all. ProRes 4444 (.mov) is
+  // what NLEs — DaVinci Resolve included, which is this app's actual alpha
+  // destination via the Resolve plugin — decode correctly; VP8/VP9 WebM
+  // alpha is web-playback-oriented and Resolve's decoder mishandles it,
+  // which showed up as a colored glow/halo around soft edges and broken
+  // transparency once imported. ProRes 4444 doesn't have that problem.
+  const outName = `${safeName}_${Date.now()}.${transparent ? "mov" : "mp4"}`;
+  const args = ["remotion", "render", "Reel", `out/${outName}`, "--props=src/project.json"];
+  // yuva444p10le needs each rendered frame captured as PNG (Remotion's
+  // default JPEG capture format has no alpha channel to carry through).
+  if (transparent) args.push("--codec=prores", "--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png");
+  return { args, outName };
+}
+
 // --- Render the reel to MP4 (or, for an alpha export, a transparent WebM) ---
+// Kept synchronous on purpose — the Resolve plugin's bridge calls this
+// directly and expects the finished file's {url, path} in one response.
 app.post("/api/render", async (req, res) => {
   try {
-    const project = req.body;
-    // `transparent`/`exportName` are transient flags riding on the same
-    // body, not real Project fields — never persisted anywhere but this
-    // scratch file.
-    const transparent = !!project.transparent;
-    // Mirror into src/project.json — that's what Root.tsx's defaultProps and
-    // the Remotion CLI's --props flag read from.
-    fs.writeFileSync(LEGACY_PROJECT_JSON, JSON.stringify(project, null, 2), "utf-8");
-    const safeName = (project.exportName || project.name || project.projectId || "reel").replace(/[^a-z0-9]/gi, "_");
-    // MP4/H.264 can't carry an alpha channel at all. ProRes 4444 (.mov) is
-    // what NLEs — DaVinci Resolve included, which is this app's actual alpha
-    // destination via the Resolve plugin — decode correctly; VP8/VP9 WebM
-    // alpha is web-playback-oriented and Resolve's decoder mishandles it,
-    // which showed up as a colored glow/halo around soft edges and broken
-    // transparency once imported. ProRes 4444 doesn't have that problem.
-    const outName = `${safeName}_${Date.now()}.${transparent ? "mov" : "mp4"}`;
-    const args = [
-      "remotion", "render", "Reel", `out/${outName}`,
-      "--props=src/project.json",
-    ];
-    // yuva444p10le needs each rendered frame captured as PNG (Remotion's
-    // default JPEG capture format has no alpha channel to carry through).
-    if (transparent) args.push("--codec=prores", "--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png");
-    await runRenderWithBrowserFallback(args);
+    const { args, outName } = buildRenderArgs(req.body);
+    await runRenderWithBrowserFallback(args, () => {});
     // `path` is the absolute filesystem path — the Resolve plugin's bridge
     // needs a real path (not a URL) to hand the file to Resolve's Media
     // Pool. Harmless to expose: this is a single-user local server, and the
@@ -564,6 +615,51 @@ app.post("/api/render", async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
+});
+
+// --- Same render, but as a background job the app's own UI can poll for a
+// real progress percentage instead of staring at a static "Rendering…". ---
+const renderJobs = new Map(); // jobId -> { status, percent, phase, frame, totalFrames, url, path, error }
+let renderJobSeq = 0;
+
+app.post("/api/render/start", (req, res) => {
+  let outName;
+  let args;
+  try {
+    ({ args, outName } = buildRenderArgs(req.body));
+  } catch (e) {
+    return res.status(500).json({ error: String(e.message || e) });
+  }
+  const jobId = "job_" + Date.now().toString(36) + "_" + (renderJobSeq++);
+  const job = { status: "running", percent: 0, phase: "bundling", frame: 0, totalFrames: 0 };
+  renderJobs.set(jobId, job);
+  res.json({ jobId });
+
+  runRenderWithBrowserFallback(args, (line) => {
+    const progress = parseProgressLine(line);
+    if (progress) Object.assign(job, progress);
+  })
+    .then(() => {
+      job.status = "done"; job.percent = 100;
+      job.url = `/out/${outName}`;
+      job.path = path.join(ROOT, "out", outName);
+    })
+    .catch((e) => {
+      job.status = "error";
+      job.error = String(e.message || e);
+    })
+    .finally(() => {
+      // Jobs are only ever read right after they finish (the client stops
+      // polling once it sees "done"/"error") — a few minutes of headroom
+      // covers a slow client without leaking memory across a long session.
+      setTimeout(() => renderJobs.delete(jobId), 5 * 60 * 1000);
+    });
+});
+
+app.get("/api/render/status/:jobId", (req, res) => {
+  const job = renderJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "unknown or expired render job" });
+  res.json(job);
 });
 
 app.listen(PORT, () => console.log(`Motionist server on http://localhost:${PORT}`));

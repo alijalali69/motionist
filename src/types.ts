@@ -77,9 +77,13 @@ export type ContentLayer = {
   // `file` is unused for these, same as text. Uses the box's own
   // left/top/width/height + the normal entrance/exit/parallax pipeline —
   // it's a layer like any other, just with no image/text content.
-  shapeType?: "rect" | "ellipse";
+  // "square"/"circle" render exactly like rect/ellipse — they're a
+  // convenience in the picker (snap the box to equal width/height on
+  // selection) rather than a distinct render primitive. "line" also renders
+  // as a plain rect; picking it just seeds a thin default box.
+  shapeType?: "rect" | "ellipse" | "square" | "circle" | "line";
   shapeFill?: string;
-  shapeCornerRadius?: number; // rect only; ellipse ignores this (already round)
+  shapeCornerRadius?: number; // rect/square/line only; ellipse/circle ignore it (already round)
   shapeStrokeColor?: string;
   shapeStrokeWidth?: number; // 0/undefined = no stroke
 };

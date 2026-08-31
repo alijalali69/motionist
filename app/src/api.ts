@@ -214,3 +214,39 @@ export async function renderReel(project: Project, transparent?: boolean, export
 
   return data.url as string;
 }
+
+// Job-based render — same server-side work as renderReel() above, but
+// /api/render/start returns immediately with a job id instead of blocking
+// until the whole render finishes, so the UI can poll for a real progress
+// percentage instead of showing a static "Rendering…" the whole time.
+export type RenderJobStatus = {
+  status: "running" | "done" | "error";
+  percent: number;
+  phase?: "bundling" | "rendering" | "encoding";
+  frame?: number;
+  totalFrames?: number;
+  url?: string;
+  path?: string;
+  error?: string;
+};
+
+export async function startRenderJob(project: Project, transparent?: boolean, exportName?: string): Promise<string> {
+  const extra: Record<string, unknown> = {};
+  if (transparent) extra.transparent = true;
+  if (exportName && exportName.trim()) extra.exportName = exportName.trim();
+  const body = Object.keys(extra).length ? { ...project, ...extra } : project;
+  const r = await fetch("/api/render/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json()).error || "render failed to start");
+  const data = await r.json();
+  return data.jobId as string;
+}
+
+export async function getRenderJobStatus(jobId: string): Promise<RenderJobStatus> {
+  const r = await fetch(`/api/render/status/${jobId}`);
+  if (!r.ok) throw new Error((await r.json()).error || "render status unavailable");
+  return r.json();
+}
