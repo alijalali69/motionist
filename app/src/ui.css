@@ -170,13 +170,19 @@ h2 {
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn.small { width: auto; padding: 4px 8px; font-size: 12px; }
 /* Icon-only buttons (alignment/direction toggles) — square-ish padding, no
-   text baseline to account for, so the svg centers cleanly. */
-.btn.icon { padding: 5px 7px; line-height: 0; }
+   text baseline to account for, so the svg centers cleanly. Small and
+   transparent by default — these sit in a row of several, not a single
+   call-to-action, so they shouldn't read as buttons until touched. */
+.btn.icon { padding: 3px 5px; line-height: 0; background: none; border-color: transparent; }
 .btn.icon svg { display: block; }
-/* Selected state for icon toggles (text align / direction) — same weight as
-   .btn.primary, separate name because these aren't a call-to-action. */
+.btn.icon:hover { border-color: var(--line); }
+/* Selected state for icon toggles (text align / direction) — the icon
+   itself carries the selected state via color, not a filled box; no
+   background/border swap needed since .btn.icon is already transparent. */
 .btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn.active:hover { background: var(--accent2); border-color: var(--accent2); }
+.btn.icon.active { background: none; border-color: transparent; color: var(--accent); }
+.btn.icon.active:hover { background: none; border-color: var(--line); color: var(--accent2); }
 
 .row { display: flex; gap: 8px; align-items: center; }
 .row.between { justify-content: space-between; }
@@ -542,8 +548,7 @@ input.project-name-input::placeholder { color: var(--muted); font-weight: 600; }
   margin: 0 0 6px;
 }
 .el-body .grid2, .el-body .grid3 { gap: 10px; }
-.el-body .segmented { gap: 6px; padding: 5px; }
-.el-body .btn.icon { padding: 7px 8px; }
+.el-body .segmented { gap: 4px; padding: 4px; }
 .el-body .fx-slots select { min-width: 116px; }
 
 /* --- Motion preset list -------------------------------------------------- */
