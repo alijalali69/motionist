@@ -1157,7 +1157,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             would just be wrong, not merely irrelevant. */}
         {/* One grouped box instead of 2-3 loose paragraphs floating under the
             player — same tips, just an actual section instead of stray text. */}
-        {project && (canvasHandles.length > 0 || photoPanTargets.length > 0 || project.height > project.width) && (
+        {project && (photoPanTargets.length > 0 || project.height > project.width) && (
           <div className="card compact" style={{ maxWidth: 420, width: "100%" }}>
             {project.height > project.width && (
               <div className="row" style={{ gap: 4 }}>
@@ -1174,11 +1174,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                   <InstagramUiToggleIcon />
                 </button>
               </div>
-            )}
-            {canvasHandles.length > 0 && (
-              <p className="hint" style={{ margin: project.height > project.width ? "6px 0 0" : 0, textAlign: "center" }}>
-                BG/Logo/Title/Text/Shape/Photo — drag to reposition, corner grip to resize · arrow keys to nudge (Shift = 10px)
-              </p>
             )}
             {photoPanTargets.length > 0 && (
               <p className="hint" style={{ margin: "6px 0 0", textAlign: "center" }}>
@@ -2319,7 +2314,6 @@ const PageInspector: React.FC<{
               canvas={canvas}
               onDelete={() => onDeleteLayer(li)} />
           )).reverse()}
-          <p className="hint">Fixed chrome, logo, loader and the subtitle zone are not listed — they are handled separately and don't get page motion.</p>
         </>
       )}
     </div>
