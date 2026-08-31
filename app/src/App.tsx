@@ -1879,7 +1879,12 @@ const ElementMotion: React.FC<{
 
       {isShapeLayer && (() => {
         const shapeType = layer.shapeType ?? "rect";
+        // "ellipse" isn't offered as a choice any more (circle covers round
+        // shapes) — still treated as round here so a project saved before
+        // this change doesn't suddenly render square corners on an existing
+        // ellipse layer.
         const isRound = shapeType === "ellipse" || shapeType === "circle";
+        const isLine = shapeType === "line";
         return (
         <div className="card compact group" style={{ marginTop: 8 }}>
           <div className="subhead">Shape</div>
@@ -1901,15 +1906,25 @@ const ElementMotion: React.FC<{
                 })}>
                 <option value="rect">Rectangle</option>
                 <option value="square">Square</option>
-                <option value="ellipse">Ellipse</option>
                 <option value="circle">Circle</option>
                 <option value="line">Line</option>
               </select></div>
-            <div><label>Corner radius</label>
-              <input type="number" min={0} value={layer.shapeCornerRadius ?? 0}
-                disabled={isRound}
-                title={isRound ? "Already round — corner radius doesn't apply" : undefined}
-                onChange={(e) => onChange((l) => { l.shapeCornerRadius = Math.max(0, Math.round(parseFloat(e.target.value || "0"))); })} /></div>
+            {/* Corner radius doesn't mean anything on a line — that grid slot
+                becomes Thickness instead, the actual control this shape type
+                was missing (a line's "thickness" is just its own height, but
+                there was no field for it — only a corner-drag resize, which
+                fights the width at the same time). */}
+            {isLine ? (
+              <div><label title="How thick the line is, in pixels">Thickness</label>
+                <input type="number" min={1} value={layer.height}
+                  onChange={(e) => onChange((l) => { l.height = Math.max(1, Math.round(parseFloat(e.target.value || "6"))); })} /></div>
+            ) : (
+              <div><label>Corner radius</label>
+                <input type="number" min={0} value={layer.shapeCornerRadius ?? 0}
+                  disabled={isRound}
+                  title={isRound ? "Already round — corner radius doesn't apply" : undefined}
+                  onChange={(e) => onChange((l) => { l.shapeCornerRadius = Math.max(0, Math.round(parseFloat(e.target.value || "0"))); })} /></div>
+            )}
           </div>
           <div className="grid2 mini" style={{ marginTop: 4 }}>
             <div><label>Fill</label>
