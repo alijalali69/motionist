@@ -164,9 +164,15 @@ h2 {
   padding: 8px 12px; cursor: pointer; font-size: 13px;
   width: 100%; justify-content: center;
 }
-.btn:hover { border-color: var(--accent); }
+/* Plain buttons pick up accent color on hover (border + text), same
+   "color carries the state" language as the upload buttons and icon
+   toggles. Solid CTA buttons (.primary — Render, New project, Create — and
+   .danger — Stop, Delete) are excluded: they're already accent/warn-filled
+   at rest, so a text-color shift on top would either vanish against their
+   own background or fight the color that's doing the actual signaling. */
+.btn:hover { border-color: var(--accent); color: var(--accent2); }
 .btn.primary { background: var(--accent); border-color: var(--accent); }
-.btn.primary:hover { background: var(--accent2); }
+.btn.primary:hover { background: var(--accent2); color: var(--text); }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn.small { width: auto; padding: 4px 8px; font-size: 12px; }
 /* Icon-only buttons (alignment/direction toggles) — square-ish padding, no
@@ -397,7 +403,7 @@ a.dl { color: var(--accent2); }
 }
 .thumb-confirm span { font-size: 13px; color: var(--text); }
 .btn.danger { background: var(--warn); border-color: var(--warn); }
-.btn.danger:hover { background: #c4573f; }
+.btn.danger:hover { background: #c4573f; color: var(--text); }
 
 .project-meta { padding: 12px 14px 14px; }
 .project-name {
