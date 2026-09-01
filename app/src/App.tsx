@@ -1255,12 +1255,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         {project && (
           <div className="row" style={{ gap: 8, alignItems: "center", flexShrink: 0 }}>
             <PlayerControls playerRef={playerRef} durationInFrames={reelDuration(project)} fps={project.fps} />
-            {zoom !== 1 && (
-              <button className="btn small" title="Reset zoom to fit (Ctrl+wheel to zoom)"
-                onClick={() => setZoom(1)}>
-                {Math.round(zoom * 100)}%
-              </button>
-            )}
           </div>
         )}
         {/* Meta's published Reels/Stories safe margins only mean anything on
@@ -1268,24 +1262,36 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             would just be wrong, not merely irrelevant. */}
         {/* One grouped box instead of 2-3 loose paragraphs floating under the
             player — same tips, just an actual section instead of stray text. */}
-        {project && (photoPanTargets.length > 0 || project.height > project.width) && (
+        {/* Always rendered (not just for portrait/photo-pan projects) —
+            the zoom% readout on its right edge is the one place the user
+            can always see the artboard's current zoom, at any project
+            shape, at any zoom level including 100%. */}
+        {project && (
           <div className="card compact" style={{ maxWidth: 420, width: "100%", flexShrink: 0 }}>
-            {project.height > project.width && (
+            <div className="row" style={{ gap: 4, justifyContent: "space-between", alignItems: "center" }}>
               <div className="row" style={{ gap: 4 }}>
-                <button className={"btn small icon" + (showSafeZone ? " active" : "")}
-                  title={showSafeZone ? "Hide Instagram Reels safe zone (guide only — never rendered in export)" : "Show Instagram Reels safe zone (guide only — never rendered in export)"}
-                  aria-label="Toggle Instagram Reels safe zone guide" aria-pressed={showSafeZone}
-                  onClick={() => setShowSafeZone((v) => !v)}>
-                  <SafeZoneToggleIcon />
-                </button>
-                <button className={"btn small icon" + (showInstagramUI ? " active" : "")}
-                  title={showInstagramUI ? "Hide Instagram Reels UI preview (stylized mockup — never rendered in export)" : "Show Instagram Reels UI preview (stylized mockup — never rendered in export)"}
-                  aria-label="Toggle Instagram Reels UI preview" aria-pressed={showInstagramUI}
-                  onClick={() => setShowInstagramUI((v) => !v)}>
-                  <InstagramUiToggleIcon />
-                </button>
+                {project.height > project.width && (
+                  <>
+                    <button className={"btn small icon" + (showSafeZone ? " active" : "")}
+                      title={showSafeZone ? "Hide Instagram Reels safe zone (guide only — never rendered in export)" : "Show Instagram Reels safe zone (guide only — never rendered in export)"}
+                      aria-label="Toggle Instagram Reels safe zone guide" aria-pressed={showSafeZone}
+                      onClick={() => setShowSafeZone((v) => !v)}>
+                      <SafeZoneToggleIcon />
+                    </button>
+                    <button className={"btn small icon" + (showInstagramUI ? " active" : "")}
+                      title={showInstagramUI ? "Hide Instagram Reels UI preview (stylized mockup — never rendered in export)" : "Show Instagram Reels UI preview (stylized mockup — never rendered in export)"}
+                      aria-label="Toggle Instagram Reels UI preview" aria-pressed={showInstagramUI}
+                      onClick={() => setShowInstagramUI((v) => !v)}>
+                      <InstagramUiToggleIcon />
+                    </button>
+                  </>
+                )}
               </div>
-            )}
+              <button className="btn small" title="Canvas zoom — Ctrl+wheel over the preview to adjust, click to reset to 100%"
+                onClick={() => setZoom(1)} style={{ fontVariantNumeric: "tabular-nums" }}>
+                {Math.round(zoom * 100)}%
+              </button>
+            </div>
             {photoPanTargets.length > 0 && (
               <p className="hint" style={{ margin: "6px 0 0", textAlign: "center" }}>
                 Hold <b>Alt</b> and drag a photo to reposition its crop inside its frame instead of moving the frame itself
