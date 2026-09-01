@@ -23,11 +23,14 @@ const SIZE_PRESETS: { label: string; short: string; w: number; h: number }[] = [
   { label: "YouTube standard, landscape (16:9)", short: "YouTube landscape", w: 1920, h: 1080 },
 ];
 
-// A small outline box in the preset's own aspect ratio — capped to a 40px
+// A small outline box in the preset's own aspect ratio — capped to a 32px
 // bounding square so portrait/square/landscape presets read as visibly
-// different shapes at a glance, not just different caption text.
+// different shapes at a glance, not just different caption text. Square
+// hits this cap on BOTH axes (portrait/landscape only hit it on one), so
+// it was the biggest shape in the row and sat right up against its own
+// card's padding — was 40, shrunk for real breathing room on all sides.
 const SizeShape: React.FC<{ w: number; h: number }> = ({ w, h }) => {
-  const max = 40;
+  const max = 32;
   const ratio = w / h;
   const boxW = ratio >= 1 ? max : Math.round(max * ratio);
   const boxH = ratio >= 1 ? Math.round(max / ratio) : max;
