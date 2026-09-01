@@ -127,7 +127,9 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
     color: layer.textColor ?? "#1a1a1a",
     textAlign: layer.textAlign ?? "right",
     direction: layer.direction ?? "rtl",
-    lineHeight: 1.5,
+    lineHeight: layer.lineHeight ?? 1.5,
+    letterSpacing: layer.letterSpacing ? `${layer.letterSpacing}px` : undefined,
+    textTransform: layer.uppercase ? "uppercase" : undefined,
     whiteSpace: "pre-wrap",
   };
 

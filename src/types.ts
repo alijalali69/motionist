@@ -50,6 +50,9 @@ export type ContentLayer = {
   textColor?: string;
   textAlign?: "right" | "center" | "left"; // default "right" (Farsi)
   direction?: "rtl" | "ltr"; // default "rtl" (Farsi) — set "ltr" for English/Latin text
+  letterSpacing?: number; // px, default 0
+  lineHeight?: number; // multiple of font size, default 1.5
+  uppercase?: boolean; // CSS text-transform only — the stored `text` itself is untouched
   // In-frame pan/zoom ("cinematic" motion) — moves the PHOTO inside its fixed
   // box, independent of the box's own entrance/exit. Reuses the page-level
   // ambient vocabulary (kenburns, panLeft, etc.); "none"/undefined = static.

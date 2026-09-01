@@ -5,7 +5,7 @@ import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type
 import { ENTRANCE_NAMES, TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, EXIT_NAMES, EASING_NAMES, TRANSITIONS } from "../../src/presets";
 import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
-  listFonts, uploadFontToLibrary, deleteProjectFiles, type IngestResult, type FontEntry,
+  listFonts, deleteProjectFiles, type IngestResult, type FontEntry,
   listMotionPresets, saveMotionPreset, deleteMotionPreset, type MotionPresetEntry,
 } from "./api";
 import { BUILT_IN_PRESETS } from "./builtinPresets";
@@ -755,20 +755,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     });
   };
 
-  // Uploads a NEW font straight into the shared library (same one the
-  // Dashboard's Font manager writes to) and immediately applies it to this
-  // layer — so a first-time font doesn't require a trip back to the Dashboard.
-  const onUploadNewFont = async (pageIndex: number, layerIndex: number, file: File, family: string, style: string) => {
-    if (!project) return;
-    setBusy("Uploading font…"); setErr(null);
-    try {
-      const entry = await uploadFontToLibrary(file, family, style);
-      setFonts((prev) => [...prev, entry]);
-      onSelectFont(pageIndex, layerIndex, entry);
-    } catch (e: any) { setErr(String(e.message || e)); }
-    finally { setBusy(null); }
-  };
-
   const onSave = async () => {
     if (!project) return;
     setBusy("Saving…"); setErr(null);
@@ -1260,7 +1246,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             onDeleteLayer={(li) => onDeleteLayer(sel, li)}
             fonts={fonts}
             onSelectFont={(li, entry) => onSelectFont(sel, li, entry)}
-            onUploadNewFont={(li, file, family, style) => onUploadNewFont(sel, li, file, family, style)}
             swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch}
             motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
             newestLayerIndex={newestLayerIndex}
@@ -1425,6 +1410,9 @@ export type MotionClip = {
   textColor?: LayerT["textColor"];
   textAlign?: LayerT["textAlign"];
   direction?: LayerT["direction"];
+  letterSpacing?: LayerT["letterSpacing"];
+  lineHeight?: LayerT["lineHeight"];
+  uppercase?: LayerT["uppercase"];
   // Photo/video crop + in-frame motion.
   fit?: LayerT["fit"];
   photoMotion?: LayerT["photoMotion"];
@@ -1447,6 +1435,7 @@ function clipFromLayer(l: LayerT): MotionClip {
     outDuration: l.outDuration, exitEasing: l.exitEasing,
     fontFamily: l.fontFamily, fontFile: l.fontFile, fontSize: l.fontSize,
     textColor: l.textColor, textAlign: l.textAlign, direction: l.direction,
+    letterSpacing: l.letterSpacing, lineHeight: l.lineHeight, uppercase: l.uppercase,
     fit: l.fit, photoMotion: l.photoMotion,
     photoPanX: l.photoPanX, photoPanY: l.photoPanY, photoZoom: l.photoZoom,
     shapeType: l.shapeType, shapeFill: l.shapeFill, shapeCornerRadius: l.shapeCornerRadius,
@@ -1475,6 +1464,9 @@ function applyClip(l: LayerT, clip: MotionClip) {
   if (clip.textColor !== undefined) l.textColor = clip.textColor;
   if (clip.textAlign !== undefined) l.textAlign = clip.textAlign;
   if (clip.direction !== undefined) l.direction = clip.direction;
+  if (clip.letterSpacing !== undefined) l.letterSpacing = clip.letterSpacing;
+  if (clip.lineHeight !== undefined) l.lineHeight = clip.lineHeight;
+  if (clip.uppercase !== undefined) l.uppercase = clip.uppercase;
   if (clip.fit !== undefined) l.fit = clip.fit;
   if (clip.photoMotion !== undefined) l.photoMotion = clip.photoMotion;
   if (clip.photoPanX !== undefined) l.photoPanX = clip.photoPanX;
@@ -1541,6 +1533,16 @@ const DirectionIcon: React.FC<{ dir: "ltr" | "rtl" }> = ({ dir }) => (
     <rect x="1" y="3" width="9" height="1.6" rx="0.6" fill="currentColor" />
     <rect x="1" y="10" width="6" height="1.6" rx="0.6" fill="currentColor" />
     <path d="M10 10.8 H14 M12 8.8 L14 10.8 L12 12.8" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+// A big cap + small cap, side by side — the standard "toggle all-caps" glyph
+// (same idea Google Docs/Word use), rendered as real SVG text rather than
+// hand-drawn letterform paths since a literal "Aa" reads unambiguously at
+// this size where a path approximation wouldn't.
+const UppercaseIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+    <text x="7.5" y="11.3" textAnchor="middle" fontSize="10" fontWeight="700" fontFamily="Arial, sans-serif" fill="currentColor">Aa</text>
   </svg>
 );
 
@@ -1714,7 +1716,6 @@ const ElementMotion: React.FC<{
   onUploadPhoto?: (file: File) => void;
   fonts?: FontEntry[];
   onSelectFont?: (entry: FontEntry | null) => void;
-  onUploadNewFont?: (file: File, family: string, style: string) => void;
   onDelete: () => void;
   onMove?: (dir: -1 | 1) => void;
   canMoveUp?: boolean;
@@ -1730,11 +1731,10 @@ const ElementMotion: React.FC<{
   // textarea once, on mount, so placing text and typing is one continuous
   // motion instead of place-then-hunt-for-the-field.
   autoFocus?: boolean;
-}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onUploadNewFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, autoFocus }) => {
+}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, autoFocus }) => {
   const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
   const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
   const photoInput = React.useRef<HTMLInputElement>(null);
-  const newFontInput = React.useRef<HTMLInputElement>(null);
   const textContentRef = React.useRef<HTMLTextAreaElement>(null);
   // Runs once, on mount — a freshly-placed text layer is a genuinely new
   // ElementMotion instance (key={l.index}), so this never re-fires later
@@ -1743,9 +1743,6 @@ const ElementMotion: React.FC<{
     if (autoFocus) textContentRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [addingFont, setAddingFont] = React.useState(false);
-  const [newFamily, setNewFamily] = React.useState("");
-  const [newStyle, setNewStyle] = React.useState("Regular");
   const [savingPreset, setSavingPreset] = React.useState(false);
   const [presetName, setPresetName] = React.useState("");
   const commitSavePreset = () => {
@@ -2010,37 +2007,10 @@ const ElementMotion: React.FC<{
                 {currentFamilyVariants.map((v) => <option key={v.id} value={v.id}>{v.style}</option>)}
               </select></div>
           </div>
-          {!addingFont ? (
-            <button className="btn small" style={{ width: "100%", marginTop: 6 }} onClick={() => setAddingFont(true)}>
-              + Upload a new font
-            </button>
-          ) : (
-            <div className="card compact" style={{ marginTop: 6 }}>
-              <div className="grid2 mini">
-                <div><label>Family name</label>
-                  <input type="text" value={newFamily} placeholder="e.g. Vazirmatn"
-                    onChange={(e) => setNewFamily(e.target.value)} /></div>
-                <div><label>Style</label>
-                  <select value={newStyle} onChange={(e) => setNewStyle(e.target.value)}>
-                    {["Regular", "Bold", "Italic", "Bold Italic", "Light", "Medium", "SemiBold", "Black"].map((s) =>
-                      <option key={s} value={s}>{s}</option>)}
-                  </select></div>
-              </div>
-              <input ref={newFontInput} className="hidden-file" type="file" accept=".ttf,.otf,.woff,.woff2"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f && onUploadNewFont && newFamily.trim()) onUploadNewFont(f, newFamily.trim(), newStyle);
-                  e.target.value = "";
-                  setAddingFont(false); setNewFamily("");
-                }} />
-              <div className="row" style={{ gap: 6, marginTop: 6 }}>
-                <button className="btn small primary" disabled={!newFamily.trim()}
-                  onClick={() => newFontInput.current?.click()}>Choose file…</button>
-                <button className="btn small" onClick={() => setAddingFont(false)}>Cancel</button>
-              </div>
-            </div>
-          )}
-          <div className="grid3 mini" style={{ marginTop: 4 }}>
+          {/* Uploading a NEW font file lives only in the Dashboard's Font
+              manager now (one place, not two) — this picks from whatever's
+              already in that shared library, via Font/Style above. */}
+          <div className="grid3 mini" style={{ marginTop: 6 }}>
             <div><label>Size</label>
               <NumField min={8} value={layer.fontSize ?? 48}
                 onChange={(e) => onChange((l) => { l.fontSize = Math.max(8, Math.round(parseFloat(e.target.value || "48"))); })} /></div>
@@ -2048,6 +2018,21 @@ const ElementMotion: React.FC<{
               <ColorField value={layer.textColor ?? "#1a1a1a"}
                 onChange={(hex) => onChange((l) => { l.textColor = hex; })}
                 swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} /></div>
+          </div>
+          <div className="grid3 mini" style={{ marginTop: 4 }}>
+            <div><label title="Extra space between letters, in pixels">Letter spacing</label>
+              <NumField step={0.5} value={layer.letterSpacing ?? 0}
+                onChange={(e) => onChange((l) => { l.letterSpacing = parseFloat(e.target.value || "0"); })} /></div>
+            <div><label title="Space between lines — a multiple of the font size, not a fixed pixel value">Line height</label>
+              <NumField step={0.1} min={0.8} value={layer.lineHeight ?? 1.5}
+                onChange={(e) => onChange((l) => { l.lineHeight = Math.max(0.8, parseFloat(e.target.value || "1.5")); })} /></div>
+            <div><label>Case</label>
+              <button className={"btn small icon" + (layer.uppercase ? " active" : "")}
+                title={layer.uppercase ? "Turn off ALL CAPS" : "ALL CAPS — display only, the text itself is untouched"}
+                aria-label="Toggle all-caps" aria-pressed={!!layer.uppercase}
+                onClick={() => onChange((l) => { l.uppercase = !l.uppercase; })}>
+                <UppercaseIcon />
+              </button></div>
           </div>
           <div className="grid2 mini" style={{ marginTop: 4 }}>
             {/* Text align: where the TEXT sits inside its own box (CSS
@@ -2338,7 +2323,6 @@ const PageInspector: React.FC<{
   onDeleteLayer: (layerIndex: number) => void;
   fonts: FontEntry[];
   onSelectFont: (layerIndex: number, entry: FontEntry | null) => void;
-  onUploadNewFont: (layerIndex: number, file: File, family: string, style: string) => void;
   swatches: string[];
   onAddSwatch: (hex: string) => void;
   onRemoveSwatch: (hex: string) => void;
@@ -2346,7 +2330,7 @@ const PageInspector: React.FC<{
   onSaveMotionPreset: (name: string, clip: MotionClip) => void;
   onDeleteMotionPreset: (id: string) => void;
   newestLayerIndex: number | null;
-}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, onUploadNewFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex }) => {
+}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex }) => {
   // Duration/bg/ambient/transition/subtitle vs. the layer list were one long
   // stacked scroll before — split so each is reachable without scrolling
   // past the other. Resets to "Page" on every page switch (this component
@@ -2451,7 +2435,6 @@ const PageInspector: React.FC<{
               onUploadPhoto={(file) => onUploadPhoto(li, file)}
               fonts={fonts}
               onSelectFont={(entry) => onSelectFont(li, entry)}
-              onUploadNewFont={(file, family, style) => onUploadNewFont(li, file, family, style)}
               swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch}
               motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
               autoFocus={l.index === newestLayerIndex}
