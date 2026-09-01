@@ -109,6 +109,11 @@ export type Page = {
   layers: ContentLayer[];
   subtitle?: string; // per-page English caption; empty/absent => nothing shows
   bgColor?: string;  // per-page solid backdrop (e.g. a text-only page with no photo) — falls back to the project's bgColor when unset
+  // Only meaningful on a kind:"webpage" project — that project's "pages" are
+  // stacked scrollable sections (space slices) instead of a reel's time
+  // slices, so each one needs its own height instead of sharing the
+  // project's single width/height frame. Ignored entirely by a reel.
+  heightPx?: number;
 };
 
 // Pre-animated logo. `file` is the uploaded animation; `fallback` is the static
