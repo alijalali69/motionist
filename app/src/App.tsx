@@ -356,6 +356,24 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const playerRef = React.useRef<PlayerRef>(null);
   const playerWrapRef = React.useRef<HTMLDivElement>(null);
 
+  // Canvas zoom — 1 = today's fit-to-panel size, adjustable with Ctrl+wheel
+  // over the preview. Session-only (not persisted): opening a project always
+  // starts at a predictable fit, not wherever a past session's zoom happened
+  // to land.
+  const [zoom, setZoom] = React.useState(1);
+  const ZOOM_MIN = 0.25, ZOOM_MAX = 3;
+  React.useEffect(() => {
+    const el = playerWrapRef.current;
+    if (!el || !project) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return; // a plain scroll over the preview still just scrolls the page
+      e.preventDefault();
+      setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z - e.deltaY * 0.001)));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [project?.width, project?.height]);
+
   // Add-element toolbar: Text is a real canvas tool (armed, then a click or
   // drag on the preview places it — see TextPlacementOverlay); Photo/Shape
   // create on click same as before, just from a toolbar icon now instead of
@@ -1146,8 +1164,13 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               position: "relative",
               // Matches the storyboard's own >2 threshold above — otherwise
               // hiding the strip at 1-2 pages just leaves dead space instead
-              // of giving it back to the player.
-              height: project.pages.length > 2 ? "66vh" : "80vh",
+              // of giving it back to the player. zoom scales this "fit"
+              // height directly (not a CSS transform) so CanvasHandles/
+              // PhotoPanHandles/TextPlacementOverlay — which all derive their
+              // own scale from this wrapper's real rendered width via
+              // ResizeObserver — pick the new size up automatically, no
+              // changes needed in any of them.
+              height: `calc(${project.pages.length > 2 ? 66 : 80}vh * ${zoom})`,
               aspectRatio: `${project.width} / ${project.height}`,
             }}
           >
@@ -1192,7 +1215,15 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           </div>
         ) : <p className="sub">Loading…</p>}
         {project && (
-          <PlayerControls playerRef={playerRef} durationInFrames={reelDuration(project)} fps={project.fps} />
+          <div className="row" style={{ gap: 8, alignItems: "center" }}>
+            <PlayerControls playerRef={playerRef} durationInFrames={reelDuration(project)} fps={project.fps} />
+            {zoom !== 1 && (
+              <button className="btn small" title="Reset zoom to fit (Ctrl+wheel to zoom)"
+                onClick={() => setZoom(1)}>
+                {Math.round(zoom * 100)}%
+              </button>
+            )}
+          </div>
         )}
         {/* Meta's published Reels/Stories safe margins only mean anything on
             a portrait canvas — showing them over a landscape/square project

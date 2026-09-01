@@ -92,7 +92,10 @@ body {
   gap: 12px;
   padding: 24px;
   background: #0e1013;
-  overflow: hidden;
+  /* auto, not hidden — zoomed-in (Ctrl+wheel) content can be taller/wider
+     than the panel; this is what lets it pan via scroll instead of just
+     getting clipped at the edges. */
+  overflow: auto;
 }
 
 h1 { font-size: 16px; margin: 0 0 4px; letter-spacing: 0.5px; }
