@@ -16,7 +16,6 @@ import { PhotoPanHandles, type PhotoPanTarget } from "./PhotoPanHandles";
 import { SafeZoneOverlay } from "./SafeZoneOverlay";
 import { InstagramUIOverlay } from "./InstagramUIOverlay";
 import { TextPlacementOverlay } from "./TextPlacementOverlay";
-import { WebpageCanvas, DEFAULT_SECTION_HEIGHT } from "./WebpageCanvas";
 
 const ENTRANCES = ENTRANCE_NAMES;
 const AMBIENTS = AMBIENT_NAMES;
@@ -140,11 +139,6 @@ function pageFromImage(
         naturalHeight: upload.height,
       },
     ],
-    // Same default-height simplification as a blank Page for now — sizing a
-    // webpage section to the imported photo's own aspect ratio would be
-    // nicer, but isn't needed to prove out the stacked-canvas editor itself;
-    // "Section height" in the Page tab covers it manually in the meantime.
-    heightPx: project.kind === "webpage" ? DEFAULT_SECTION_HEIGHT : undefined,
   };
 }
 
@@ -189,12 +183,7 @@ function defaultSlot(
 
 function mergeIngestedPage(prev: Project, res: IngestResult, sourceName: string): Project {
   const next = clone(prev);
-  next.pages.push({
-    ...res.page,
-    name: niceName(sourceName),
-    // Same default-height simplification noted in pageFromImage above.
-    heightPx: next.kind === "webpage" ? DEFAULT_SECTION_HEIGHT : undefined,
-  });
+  next.pages.push({ ...res.page, name: niceName(sourceName) });
   // merge chrome only if not already set
   if (!next.template.layers.length && res.fixed.length) next.template.layers = res.fixed;
   if (!next.logo && res.logo) next.logo = res.logo;
@@ -671,13 +660,12 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       const id = "p" + Date.now().toString(36) + Math.round(Math.random() * 1e4).toString(36);
       p.pages.push({
         id,
-        name: p.kind === "webpage" ? "Section" : "Text page",
+        name: "Text page",
         durationInFrames: 150,
         ambient: "none",
         // durationInFrames must be >=1 — 0 crashes @remotion/transitions the
         // moment a second page exists (its interpolate() needs a strictly
-        // increasing range; 0 collapses to [x,x]). Meaningless for a webpage
-        // section (nothing plays through it) but harmless to leave set.
+        // increasing range; 0 collapses to [x,x]).
         transition: { type: "none" as any, durationInFrames: 1 },
         layers: [],
         // No bgColor here on purpose — undefined means "follow the
@@ -687,7 +675,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         // page's own fill is opaque and sits on top — so changing the
         // project color visibly did nothing, which is exactly the bug
         // report this fixes.
-        heightPx: p.kind === "webpage" ? DEFAULT_SECTION_HEIGHT : undefined,
       });
     });
   };
@@ -887,29 +874,22 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const canvasHandles: Handle[] = React.useMemo(() => {
     if (!project) return [];
     const list: Handle[] = [];
-    // Global bg/logo/title/loader are ONE shared box positioned for the
-    // project's single fixed frame — meaningless (and actively wrong, since
-    // the box coordinates assume a reel-sized canvas) on a webpage project,
-    // where every section has its own independent height. Skipped entirely
-    // for now; each section is its own layers only. See WebpageSectionThumb.
-    if (project.kind !== "webpage") {
-      if (project.bg) list.push({
-        id: "bg", label: "BG", color: "#7ed6a5", box: project.bg.box,
-        onChange: (b) => update((p) => { if (p.bg) p.bg.box = b; }),
-      });
-      if (project.logo) list.push({
-        id: "logo", label: "LOGO", color: "#5aa9ff", box: project.logo.box,
-        onChange: (b) => update((p) => { if (p.logo) p.logo.box = b; }),
-      });
-      if (project.title) list.push({
-        id: "title", label: "TITLE", color: "#f2b84b", box: project.title.box,
-        onChange: (b) => update((p) => { if (p.title) p.title.box = b; }),
-      });
-      if (project.loaderVisible ?? true) list.push({
-        id: "loader", label: "LOADER", color: "#c9a53b", box: project.loader,
-        onChange: (b) => update((p) => { p.loader = b; }),
-      });
-    }
+    if (project.bg) list.push({
+      id: "bg", label: "BG", color: "#7ed6a5", box: project.bg.box,
+      onChange: (b) => update((p) => { if (p.bg) p.bg.box = b; }),
+    });
+    if (project.logo) list.push({
+      id: "logo", label: "LOGO", color: "#5aa9ff", box: project.logo.box,
+      onChange: (b) => update((p) => { if (p.logo) p.logo.box = b; }),
+    });
+    if (project.title) list.push({
+      id: "title", label: "TITLE", color: "#f2b84b", box: project.title.box,
+      onChange: (b) => update((p) => { if (p.title) p.title.box = b; }),
+    });
+    if (project.loaderVisible ?? true) list.push({
+      id: "loader", label: "LOADER", color: "#c9a53b", box: project.loader,
+      onChange: (b) => update((p) => { p.loader = b; }),
+    });
     // Text, shape, and photo layers are all freely draggable/resizable — a
     // photo's box used to be treated as fixed (only pan/zoom the content
     // within it, never move the frame itself), on the theory that a
@@ -1162,19 +1142,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
 
       {/* CENTER: live preview */}
       <div className="center" style={{ flex: "1 1 auto", minWidth: 320 }}>
-        {project && project.kind === "webpage" ? (
-          <WebpageCanvas
-            project={project}
-            selected={sel}
-            onSelect={selectPage}
-            handles={canvasHandles}
-            photoPanTargets={photoPanTargets}
-            textTool={textTool}
-            onPlaceText={(box) => onPlaceText(sel, box)}
-            onCancelTextTool={() => setTextTool(false)}
-          />
-        ) : (
-        <>
         {/* A strip showing 1-2 thumbnails isn't a storyboard, it's noise —
             only earns its space once there's an actual sequence to scan. */}
         {project && project.pages.length > 2 && (
@@ -1240,8 +1207,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         {project && (
           <PlayerControls playerRef={playerRef} durationInFrames={reelDuration(project)} fps={project.fps} />
         )}
-        </>
-        )}
         {/* Meta's published Reels/Stories safe margins only mean anything on
             a portrait canvas — showing them over a landscape/square project
             would just be wrong, not merely irrelevant. */}
@@ -1282,7 +1247,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           <PageInspector
             key={project.pages[sel].id}
             page={project.pages[sel]}
-            kind={project.kind ?? "reel"}
             canvas={[project.width, project.height]}
             clip={motionClip}
             onCopyClip={setMotionClip}
@@ -2361,7 +2325,6 @@ const ElementMotion: React.FC<{
 
 const PageInspector: React.FC<{
   page: PageT;
-  kind: "reel" | "webpage";
   canvas: [number, number];
   clip: MotionClip | null;
   onCopyClip: (clip: MotionClip) => void;
@@ -2382,7 +2345,7 @@ const PageInspector: React.FC<{
   onSaveMotionPreset: (name: string, clip: MotionClip) => void;
   onDeleteMotionPreset: (id: string) => void;
   newestLayerIndex: number | null;
-}> = ({ page, kind, canvas, clip, onCopyClip, onChange, onUploadPhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, onUploadNewFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex }) => {
+}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, onUploadNewFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex }) => {
   // Duration/bg/ambient/transition/subtitle vs. the layer list were one long
   // stacked scroll before — split so each is reachable without scrolling
   // past the other. Resets to "Page" on every page switch (this component
@@ -2403,28 +2366,15 @@ const PageInspector: React.FC<{
 
       {tab === "page" && (
         <>
-          {kind === "webpage" ? (
-            <>
-              <label title="How tall this section is — sections stack top to bottom, there's no fixed project height to fit inside">Section height (px)</label>
-              <input type="number" min={40} step={10}
-                value={page.heightPx ?? DEFAULT_SECTION_HEIGHT}
-                onChange={(e) => onChange((pg) => {
-                  pg.heightPx = Math.max(40, Math.round(parseFloat(e.target.value || String(DEFAULT_SECTION_HEIGHT))));
-                })} />
-            </>
-          ) : (
-            <>
-              <label>Duration (seconds)</label>
-              <input type="number" min={1} step={0.5}
-                value={+(page.durationInFrames / 30).toFixed(2)}
-                onChange={(e) => onChange((pg) => {
-                  // Remotion's <TransitionSeries.Sequence> throws outright at 0 (and
-                  // presumably chokes on negative) — clamp to at least 1 frame so a
-                  // stray "0" in this field can't crash the whole player.
-                  pg.durationInFrames = Math.max(1, Math.round(parseFloat(e.target.value || "1") * 30));
-                })} />
-            </>
-          )}
+          <label>Duration (seconds)</label>
+          <input type="number" min={1} step={0.5}
+            value={+(page.durationInFrames / 30).toFixed(2)}
+            onChange={(e) => onChange((pg) => {
+              // Remotion's <TransitionSeries.Sequence> throws outright at 0 (and
+              // presumably chokes on negative) — clamp to at least 1 frame so a
+              // stray "0" in this field can't crash the whole player.
+              pg.durationInFrames = Math.max(1, Math.round(parseFloat(e.target.value || "1") * 30));
+            })} />
 
           <div>
             <label style={{ margin: "10px 0 4px" }}>Background color (this page only — empty follows the project's)</label>
@@ -2444,19 +2394,15 @@ const PageInspector: React.FC<{
             </div>
           </div>
 
-          {kind !== "webpage" && (
-            <>
-              <label>Ambient motion</label>
-              <select value={page.ambient} onChange={(e) => onChange((pg) => { pg.ambient = e.target.value as any; })}>
-                {AMBIENTS.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
+          <label>Ambient motion</label>
+          <select value={page.ambient} onChange={(e) => onChange((pg) => { pg.ambient = e.target.value as any; })}>
+            {AMBIENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
 
-              <label>Transition to next page</label>
-              <select value={page.transition.type} onChange={(e) => onChange((pg) => { pg.transition.type = e.target.value as any; })}>
-                {TRANSITIONS.map((t) => <option key={t.name} value={t.name}>{t.label}</option>)}
-              </select>
-            </>
-          )}
+          <label>Transition to next page</label>
+          <select value={page.transition.type} onChange={(e) => onChange((pg) => { pg.transition.type = e.target.value as any; })}>
+            {TRANSITIONS.map((t) => <option key={t.name} value={t.name}>{t.label}</option>)}
+          </select>
         </>
       )}
 
