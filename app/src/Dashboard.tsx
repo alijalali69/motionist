@@ -30,7 +30,7 @@ const SIZE_PRESETS: { label: string; short: string; w: number; h: number }[] = [
 // it was the biggest shape in the row and sat right up against its own
 // card's padding — was 40, shrunk for real breathing room on all sides.
 const SizeShape: React.FC<{ w: number; h: number }> = ({ w, h }) => {
-  const max = 32;
+  const max = 26;
   const ratio = w / h;
   const boxW = ratio >= 1 ? max : Math.round(max * ratio);
   const boxH = ratio >= 1 ? Math.round(max / ratio) : max;
