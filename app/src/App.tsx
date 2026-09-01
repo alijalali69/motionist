@@ -1159,6 +1159,18 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
 
       {/* CENTER: live preview */}
       <div ref={centerRef} className="center" style={{ flex: "1 1 auto", minWidth: 320 }}>
+        {/* Everything zoomable (storyboard + artboard) lives in its own
+            scroll region, separate from PlayerControls/the safe-zone row
+            below — those two must stay visually docked in place as zoom
+            changes, never resized or shifted by it. flex:1 lets this take
+            all the space .center isn't spending on the two fixed rows
+            below it; minHeight:0 is the standard flex fix that lets its
+            own overflow:auto actually clip/scroll instead of forcing
+            .center itself to grow taller than the viewport. */}
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          gap: 12, width: "100%", flex: "1 1 auto", minHeight: 0, overflow: "auto",
+        }}>
         {/* A strip showing 1-2 thumbnails isn't a storyboard, it's noise —
             only earns its space once there's an actual sequence to scan. */}
         {project && project.pages.length > 2 && (
@@ -1239,6 +1251,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             {showInstagramUI && project.height > project.width && <InstagramUIOverlay canvas={[project.width, project.height]} />}
           </div>
         ) : <p className="sub">Loading…</p>}
+        </div>
         {project && (
           <div className="row" style={{ gap: 8, alignItems: "center", flexShrink: 0 }}>
             <PlayerControls playerRef={playerRef} durationInFrames={reelDuration(project)} fps={project.fps} />

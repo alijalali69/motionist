@@ -92,10 +92,12 @@ body {
   gap: 12px;
   padding: 24px;
   background: #0e1013;
-  /* auto, not hidden — zoomed-in (Ctrl+wheel) content can be taller/wider
-     than the panel; this is what lets it pan via scroll instead of just
-     getting clipped at the edges. */
-  overflow: auto;
+  /* Zoomed-in (Ctrl+wheel) storyboard+artboard content now scrolls inside
+     its own nested region (see App.tsx) so PlayerControls/the safe-zone
+     row stay put below it — this outer box no longer needs to scroll
+     itself, but hidden (not visible) still guards against the inner
+     region's padding/gap rounding pushing it a pixel over. */
+  overflow: hidden;
 }
 
 h1 { font-size: 16px; margin: 0 0 4px; letter-spacing: 0.5px; }
