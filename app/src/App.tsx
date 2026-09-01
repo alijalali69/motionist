@@ -355,15 +355,27 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const newPhotoInput = React.useRef<HTMLInputElement>(null);
   const playerRef = React.useRef<PlayerRef>(null);
   const playerWrapRef = React.useRef<HTMLDivElement>(null);
+  const centerRef = React.useRef<HTMLDivElement>(null);
 
   // Canvas zoom — 1 = today's fit-to-panel size, adjustable with Ctrl+wheel
   // over the preview. Session-only (not persisted): opening a project always
   // starts at a predictable fit, not wherever a past session's zoom happened
   // to land.
+  //
+  // Listener lives on the whole `.center` column (centerRef), not just
+  // playerWrapRef — Ctrl+wheel is also the browser's OWN page-zoom shortcut,
+  // and a listener scoped to only the canvas box would miss preventDefault()
+  // whenever the cursor sat slightly off it (over PlayerControls, the
+  // safe-zone toggle row, the whitespace around the player, etc). That gap
+  // let the browser's native zoom fire instead, which scales the ENTIRE
+  // page — exactly the "everything zooms, not just the video" bug reported.
+  // Widening the listener's target (while still only resizing playerWrapRef
+  // below) means Ctrl+wheel anywhere over the preview column always resizes
+  // just the canvas, and never falls through to native page zoom.
   const [zoom, setZoom] = React.useState(1);
   const ZOOM_MIN = 0.25, ZOOM_MAX = 3;
   React.useEffect(() => {
-    const el = playerWrapRef.current;
+    const el = centerRef.current;
     if (!el || !project) return;
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return; // a plain scroll over the preview still just scrolls the page
@@ -1146,7 +1158,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       <div className="panel-resizer" onMouseDown={startPanelDrag("left")} title="Drag to resize" />
 
       {/* CENTER: live preview */}
-      <div className="center" style={{ flex: "1 1 auto", minWidth: 320 }}>
+      <div ref={centerRef} className="center" style={{ flex: "1 1 auto", minWidth: 320 }}>
         {/* A strip showing 1-2 thumbnails isn't a storyboard, it's noise —
             only earns its space once there's an actual sequence to scan. */}
         {project && project.pages.length > 2 && (
