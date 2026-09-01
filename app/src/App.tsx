@@ -1184,6 +1184,19 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               // changes needed in any of them.
               height: `calc(${project.pages.length > 2 ? 66 : 80}vh * ${zoom})`,
               aspectRatio: `${project.width} / ${project.height}`,
+              // .center is a column flex container, so every child (this
+              // wrapper, the PlayerControls row, the safe-zone tab row
+              // below) defaults to flex-shrink:1 — once zoom pushes this
+              // wrapper's height past what .center has room for, the flex
+              // algorithm was shrinking ALL of them back down to fit
+              // (including squeezing PlayerControls/the safe-zone row,
+              // which read as "everything zooming"), while clamping THIS
+              // element hardest since it's the one asking for the most
+              // extra space — net effect: zooming in visibly did nothing.
+              // flexShrink:0 here (and on those sibling rows below) opts
+              // every one of them out of that squeeze; .center's own
+              // overflow:auto is what actually absorbs the extra height.
+              flexShrink: 0,
             }}
           >
             <Player
@@ -1227,7 +1240,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           </div>
         ) : <p className="sub">Loading…</p>}
         {project && (
-          <div className="row" style={{ gap: 8, alignItems: "center" }}>
+          <div className="row" style={{ gap: 8, alignItems: "center", flexShrink: 0 }}>
             <PlayerControls playerRef={playerRef} durationInFrames={reelDuration(project)} fps={project.fps} />
             {zoom !== 1 && (
               <button className="btn small" title="Reset zoom to fit (Ctrl+wheel to zoom)"
@@ -1243,7 +1256,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         {/* One grouped box instead of 2-3 loose paragraphs floating under the
             player — same tips, just an actual section instead of stray text. */}
         {project && (photoPanTargets.length > 0 || project.height > project.width) && (
-          <div className="card compact" style={{ maxWidth: 420, width: "100%" }}>
+          <div className="card compact" style={{ maxWidth: 420, width: "100%", flexShrink: 0 }}>
             {project.height > project.width && (
               <div className="row" style={{ gap: 4 }}>
                 <button className={"btn small icon" + (showSafeZone ? " active" : "")}

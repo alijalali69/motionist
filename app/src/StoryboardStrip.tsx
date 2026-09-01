@@ -218,7 +218,7 @@ export const StoryboardStrip: React.FC<{
   }, [maxOffset]);
 
   return (
-    <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+    <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 10, padding: 12, marginBottom: 12, flexShrink: 0 }}>
       <div className="row between" style={{ marginBottom: 8 }}>
         <span className="hint" style={{ margin: 0 }}>Storyboard — drag to reorder, wheel or arrows to scroll</span>
         <button className="btn small" onClick={() => { setShowAll((s) => !s); setOffset(0); }}>
