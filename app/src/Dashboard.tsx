@@ -3,6 +3,7 @@ import {
   listProjects, createProject, deleteProject, type ProjectSummary,
   listFonts, uploadFontToLibrary, deleteFont, type FontEntry,
   listSizePresets, saveSizePreset, deleteSizePreset, type SizePresetEntry,
+  type ProjectKind,
 } from "./api";
 
 const FONT_STYLES = [
@@ -194,6 +195,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
   const [sizeIdx, setSizeIdx] = React.useState(0); // index into SIZE_PRESETS, or -1 for custom (customW/customH)
   const [customW, setCustomW] = React.useState(1080);
   const [customH, setCustomH] = React.useState(1920);
+  const [pendingKind, setPendingKind] = React.useState<ProjectKind>("reel");
   const nameInputRef = React.useRef<HTMLInputElement>(null);
 
   // Custom size presets, saved once from the "+ Custom size" card, reusable
@@ -222,10 +224,11 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
 
   // Chosen once (a card, or the custom-size form) → opens the name-only
   // "New project" dialog with the size already decided.
-  const startCreate = (width: number, height: number, presetIdx: number) => {
+  const startCreate = (width: number, height: number, presetIdx: number, kind: ProjectKind = "reel") => {
     setSizeIdx(presetIdx);
     setCustomW(width);
     setCustomH(height);
+    setPendingKind(kind);
     setCreating(true);
   };
 
@@ -254,13 +257,13 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
   };
 
   const submitCreate = async () => {
-    const name = newName.trim() || "Untitled reel";
+    const name = newName.trim() || (pendingKind === "webpage" ? "Untitled page" : "Untitled reel");
     const preset = SIZE_PRESETS[sizeIdx];
     const width = preset ? preset.w : customW;
     const height = preset ? preset.h : customH;
     setBusy(true); setErr(null);
     try {
-      const project = await createProject(name, width, height);
+      const project = await createProject(name, width, height, pendingKind);
       setCreating(false);
       setNewName("");
       onOpen(project.projectId);
@@ -305,6 +308,22 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
             <span className="size-preset-dims">{s.w} × {s.h}</span>
           </button>
         ))}
+        {/* A different KIND of project, not another size — width matters,
+            height doesn't (it grows as you add sections), so it gets its own
+            icon instead of an aspect-ratio box. Opens the current reel
+            editor for now (the stacked-canvas view is separate follow-up
+            work); this just tags the project so that editor knows to route
+            differently once it exists. */}
+        <button className="size-preset-card" onClick={() => startCreate(1440, 900, -1, "webpage")}>
+          <svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" strokeWidth="1.6" style={{ opacity: 0.85 }}>
+            <rect x="3" y="5" width="28" height="24" rx="2.5" />
+            <line x1="3" y1="11" x2="31" y2="11" />
+            <circle cx="7" cy="8" r="0.9" fill="currentColor" stroke="none" />
+            <circle cx="10.2" cy="8" r="0.9" fill="currentColor" stroke="none" />
+          </svg>
+          <span className="size-preset-name">Web page</span>
+          <span className="size-preset-dims">Scrolling · auto height</span>
+        </button>
         {(customSizes ?? []).map((s) => (
           <button key={s.id} className="size-preset-card custom"
             onClick={() => startCreate(s.w, s.h, -1)}>

@@ -136,6 +136,12 @@ export type SubtitleStyle = {
 };
 
 export type Project = {
+  // "reel" (default, missing = "reel" on anything saved before this field
+  // existed) is the existing time-sliced video pipeline, unchanged.
+  // "webpage" tags a project for the new design-canvas + scroll-driven HTML
+  // export direction — for now this is metadata only, the stacked-section
+  // canvas editor itself is separate follow-up work.
+  kind?: "reel" | "webpage";
   fps: number;
   width: number;
   height: number;

@@ -155,10 +155,15 @@ function newProjectId() {
   return "proj_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-function emptyProject(id, name, w = 1080, h = 1920) {
+function emptyProject(id, name, w = 1080, h = 1920, kind = "reel") {
   const now = new Date().toISOString();
   return {
-    fps: FPS, width: w, height: h, projectId: id, name,
+    // "reel" = the existing time-sliced video pipeline, unchanged. "webpage"
+    // is the new project kind (Motionist as a design-canvas + scroll-driven
+    // HTML export) — for now this only tags the project; the actual
+    // stacked-section canvas editor is separate follow-up work, so a
+    // webpage-kind project still opens in today's reel editor.
+    kind, fps: FPS, width: w, height: h, projectId: id, name,
     createdAt: now, updatedAt: now,
     template: { layers: [] },
     logo: null, bg: null, title: null, // `title` here = the global Title asset slot
@@ -197,6 +202,10 @@ function summarize(project) {
   return {
     id: project.projectId,
     name: project.name || project.projectId,
+    // Missing on any project saved before this field existed — those are
+    // all reels (it's the only kind that's ever existed), so default here
+    // rather than requiring a migration pass over every saved project.
+    kind: project.kind ?? "reel",
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
     pageCount: project.pages?.length ?? 0,
@@ -377,7 +386,8 @@ app.post("/api/projects", (req, res) => {
   };
   const width = clampDim(req.body?.width, 1080);
   const height = clampDim(req.body?.height, 1920);
-  const project = emptyProject(id, name, width, height);
+  const kind = req.body?.kind === "webpage" ? "webpage" : "reel";
+  const project = emptyProject(id, name, width, height, kind);
   writeProject(project);
   res.json(project);
 });

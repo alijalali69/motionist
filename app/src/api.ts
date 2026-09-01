@@ -1,8 +1,11 @@
 import type { Project } from "../../src/types";
 
+export type ProjectKind = "reel" | "webpage";
+
 export type ProjectSummary = {
   id: string;
   name: string;
+  kind: ProjectKind;
   createdAt?: string;
   updatedAt?: string;
   pageCount: number;
@@ -16,11 +19,11 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   return r.json();
 }
 
-export async function createProject(name: string, width?: number, height?: number): Promise<Project> {
+export async function createProject(name: string, width?: number, height?: number, kind?: ProjectKind): Promise<Project> {
   const r = await fetch("/api/projects", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, width, height }),
+    body: JSON.stringify({ name, width, height, kind }),
   });
   if (!r.ok) throw new Error("failed to create project");
   return r.json();
