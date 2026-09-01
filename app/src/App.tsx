@@ -16,6 +16,7 @@ import { PhotoPanHandles, type PhotoPanTarget } from "./PhotoPanHandles";
 import { SafeZoneOverlay } from "./SafeZoneOverlay";
 import { InstagramUIOverlay } from "./InstagramUIOverlay";
 import { TextPlacementOverlay } from "./TextPlacementOverlay";
+import { NumField } from "./NumField";
 
 const ENTRANCES = ENTRANCE_NAMES;
 const AMBIENTS = AMBIENT_NAMES;
@@ -1307,13 +1308,13 @@ const AssetControls: React.FC<{
         </div>
       </div>
       <div className="grid2 mini" style={{ marginTop: 6 }}>
-        <div><label>X</label><input type="number" value={slot.box.left}
+        <div><label>X</label><NumField value={slot.box.left}
           onChange={(e) => onChange((s) => { s.box.left = num(e.target.value); })} /></div>
-        <div><label>Y</label><input type="number" value={slot.box.top}
+        <div><label>Y</label><NumField value={slot.box.top}
           onChange={(e) => onChange((s) => { s.box.top = num(e.target.value); })} /></div>
-        <div><label>Width</label><input type="number" value={slot.box.width}
+        <div><label>Width</label><NumField value={slot.box.width}
           onChange={(e) => onChange((s) => { s.box.width = num(e.target.value); })} /></div>
-        <div><label>Height</label><input type="number" value={slot.box.height}
+        <div><label>Height</label><NumField value={slot.box.height}
           onChange={(e) => onChange((s) => { s.box.height = num(e.target.value); })} /></div>
       </div>
       <div className="row" style={{ gap: 6, marginTop: 6 }}>
@@ -1377,15 +1378,15 @@ const LoaderControls: React.FC<{
         </div>
       )}
       <div className="grid2 mini" style={{ marginTop: 6 }}>
-        <div><label>X</label><input type="number" value={loader.left}
+        <div><label>X</label><NumField value={loader.left}
           onChange={(e) => onChangeBox((b) => { b.left = num(e.target.value); })} /></div>
-        <div><label>Y</label><input type="number" value={loader.top}
+        <div><label>Y</label><NumField value={loader.top}
           onChange={(e) => onChangeBox((b) => { b.top = num(e.target.value); })} /></div>
         {style !== "folio" && (
           <>
-            <div><label>Width</label><input type="number" value={loader.width}
+            <div><label>Width</label><NumField value={loader.width}
               onChange={(e) => onChangeBox((b) => { b.width = num(e.target.value); })} /></div>
-            <div><label>Height</label><input type="number" value={loader.height}
+            <div><label>Height</label><NumField value={loader.height}
               onChange={(e) => onChangeBox((b) => { b.height = num(e.target.value); })} /></div>
           </>
         )}
@@ -1699,7 +1700,7 @@ const DurationPresetField: React.FC<{
         {DURATION_PRESETS.map((p) => <option key={p.frames} value={p.frames}>{p.label}</option>)}
         <option value="custom">Custom…</option>
       </select>
-      <input type="number" step={0.1} min={0.1} value={secVal} disabled={disabled} style={{ width: 64 }}
+      <NumField step={0.1} min={0.1} value={secVal} disabled={disabled} style={{ width: 64 }}
         onChange={(e) => onChange(Math.max(1, Math.round(parseFloat(e.target.value || "0") * 30)))} />
     </div>
   );
@@ -1949,11 +1950,11 @@ const ElementMotion: React.FC<{
                 fights the width at the same time). */}
             {isLine ? (
               <div><label title="How thick the line is, in pixels">Thickness</label>
-                <input type="number" min={1} value={layer.height}
+                <NumField min={1} value={layer.height}
                   onChange={(e) => onChange((l) => { l.height = Math.max(1, Math.round(parseFloat(e.target.value || "6"))); })} /></div>
             ) : (
               <div><label>Corner radius</label>
-                <input type="number" min={0} value={layer.shapeCornerRadius ?? 0}
+                <NumField min={0} value={layer.shapeCornerRadius ?? 0}
                   disabled={isRound}
                   title={isRound ? "Already round — corner radius doesn't apply" : undefined}
                   onChange={(e) => onChange((l) => { l.shapeCornerRadius = Math.max(0, Math.round(parseFloat(e.target.value || "0"))); })} /></div>
@@ -1965,12 +1966,12 @@ const ElementMotion: React.FC<{
                 onChange={(hex) => onChange((l) => { l.shapeFill = hex; })}
                 swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} /></div>
             <div><label title="How see-through the fill/stroke is — 100% is fully solid, the color you pick exactly">Opacity</label>
-              <input type="number" min={0} max={100} value={Math.round((layer.opacity ?? 1) * 100)}
+              <NumField min={0} max={100} value={Math.round((layer.opacity ?? 1) * 100)}
                 onChange={(e) => onChange((l) => { l.opacity = Math.min(100, Math.max(0, Math.round(parseFloat(e.target.value || "100")))) / 100; })} /></div>
           </div>
           <div className="grid2 mini" style={{ marginTop: 4 }}>
             <div><label>Stroke width</label>
-              <input type="number" min={0} value={layer.shapeStrokeWidth ?? 0}
+              <NumField min={0} value={layer.shapeStrokeWidth ?? 0}
                 onChange={(e) => onChange((l) => { l.shapeStrokeWidth = Math.max(0, Math.round(parseFloat(e.target.value || "0"))); })} /></div>
             <div><label>Stroke color</label>
               <ColorField value={layer.shapeStrokeColor ?? "#000000"}
@@ -2041,7 +2042,7 @@ const ElementMotion: React.FC<{
           )}
           <div className="grid3 mini" style={{ marginTop: 4 }}>
             <div><label>Size</label>
-              <input type="number" min={8} value={layer.fontSize ?? 48}
+              <NumField min={8} value={layer.fontSize ?? 48}
                 onChange={(e) => onChange((l) => { l.fontSize = Math.max(8, Math.round(parseFloat(e.target.value || "48"))); })} /></div>
             <div style={{ gridColumn: "span 2" }}><label>Color</label>
               <ColorField value={layer.textColor ?? "#1a1a1a"}
@@ -2267,7 +2268,7 @@ const ElementMotion: React.FC<{
         <div className="subhead">Keyframes</div>
         <div className="grid2 mini">
           <div><label>in delay (s) &mdash; when it starts</label>
-            <input type="number" step={0.1} min={0} value={sec(layer.delay)}
+            <NumField step={0.1} min={0} value={sec(layer.delay)}
               onChange={(e) => onChange((l) => { l.delay = toFr(e.target.value); })} /></div>
           <div><label>in dur (s)</label>
             {/* spring() throws outright at durationInFrames 0 (unlike delay/out
@@ -2285,7 +2286,7 @@ const ElementMotion: React.FC<{
                 back to "auto" instead of fighting the field's own text
                 selection. */}
             <div className="row" style={{ gap: 4 }}>
-              <input type="number" step={0.1} min={0} value={layer.outDelay != null ? sec(layer.outDelay) : ""}
+              <NumField step={0.1} min={0} value={layer.outDelay != null ? sec(layer.outDelay) : ""}
                 placeholder="auto"
                 disabled={(layer.exit ?? "none") === "none"}
                 style={{ flex: 1 }}
@@ -2309,7 +2310,7 @@ const ElementMotion: React.FC<{
           <label title="How much of the PAGE's own ambient motion (set on the Page tab, e.g. kenburns/sway) this layer follows. 1 = moves with it normally, 0 = stays still while everything else drifts, below 1 = drifts slower (background feel), above 1 = drifts more (foreground feel). No effect if the page's ambient is “none”.">
             Parallax depth (page ambient)
           </label>
-          <input type="number" step={0.1} min={0} value={layer.parallaxDepth ?? 1}
+          <NumField step={0.1} min={0} value={layer.parallaxDepth ?? 1}
             onChange={(e) => onChange((l) => { l.parallaxDepth = Math.max(0, parseFloat(e.target.value || "1")); })} />
         </div>
       </div>
@@ -2367,7 +2368,7 @@ const PageInspector: React.FC<{
       {tab === "page" && (
         <>
           <label>Duration (seconds)</label>
-          <input type="number" min={1} step={0.5}
+          <NumField min={1} step={0.5}
             value={+(page.durationInFrames / 30).toFixed(2)}
             onChange={(e) => onChange((pg) => {
               // Remotion's <TransitionSeries.Sequence> throws outright at 0 (and

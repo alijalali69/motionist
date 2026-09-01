@@ -646,11 +646,25 @@ input.project-name-input::placeholder { color: var(--muted); font-weight: 600; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent2); background-clip: padding-box; }
 ::-webkit-scrollbar-corner { background: var(--panel); }
 
-/* Number input spin arrows are left at Chrome's plain default. A CSS filter
-   was tried to recolor them toward the app's accent, but Chrome/Windows
-   paints an opaque light box behind the arrows as part of the native widget
-   itself — not a CSS `background` — so the filter recolored that whole box
-   solid orange instead of just tinting the two arrow glyphs. Getting real
-   "just the arrows, no box" requires replacing the native control with a
-   custom-built stepper (its own component, wired to every numeric field) —
-   parked as a follow-up, not done here. */
+/* NumField's custom stepper — the follow-up the note above used to point
+   at. Native spin buttons hidden outright; two small buttons take their
+   place, transparent by default (color carries hover/disabled state, same
+   language as every other icon button in the app), no opaque native box
+   to fight with because there isn't one any more. */
+.num-field { position: relative; display: inline-flex; width: 100%; }
+.num-field input[type="number"] { width: 100%; padding-right: 20px !important; }
+.num-field input[type="number"]::-webkit-inner-spin-button,
+.num-field input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.num-field input[type="number"] { -moz-appearance: textfield; }
+.num-field-spin {
+  position: absolute; right: 3px; top: 2px; bottom: 2px;
+  display: flex; flex-direction: column; justify-content: center; width: 16px;
+}
+.num-field-spin button {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 0; border: none; background: none; color: var(--muted); cursor: pointer;
+  border-radius: 3px;
+}
+.num-field-spin button:hover { color: var(--accent); background: var(--line); }
+.num-field-spin button:disabled { opacity: 0.35; cursor: default; }
+.num-field-spin button:disabled:hover { background: none; color: var(--muted); }

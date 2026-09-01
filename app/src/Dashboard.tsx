@@ -4,6 +4,7 @@ import {
   listFonts, uploadFontToLibrary, deleteFont, type FontEntry,
   listSizePresets, saveSizePreset, deleteSizePreset, type SizePresetEntry,
 } from "./api";
+import { NumField } from "./NumField";
 
 const FONT_STYLES = [
   "Regular", "Bold", "Italic", "Bold Italic",
@@ -327,10 +328,10 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
             <h2 style={{ marginTop: 0 }}>Custom size</h2>
             <div className="grid2 mini">
               <div><label>Width</label>
-                <input type="number" min={16} max={8192} value={csW} autoFocus
+                <NumField min={16} max={8192} value={csW} autoFocus
                   onChange={(e) => setCsW(Math.round(Number(e.target.value) || 1080))} /></div>
               <div><label>Height</label>
-                <input type="number" min={16} max={8192} value={csH}
+                <NumField min={16} max={8192} value={csH}
                   onChange={(e) => setCsH(Math.round(Number(e.target.value) || 1920))} /></div>
             </div>
             <label style={{ marginTop: 10 }}>Save as a preset (optional) — leave blank to just use it once</label>
