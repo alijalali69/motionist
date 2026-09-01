@@ -7,7 +7,6 @@ import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
   listFonts, uploadFontToLibrary, deleteProjectFiles, type IngestResult, type FontEntry,
   listMotionPresets, saveMotionPreset, deleteMotionPreset, type MotionPresetEntry,
-  exportHtml,
 } from "./api";
 import { BUILT_IN_PRESETS } from "./builtinPresets";
 import { Dashboard } from "./Dashboard";
@@ -304,10 +303,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     };
   }, []);
   const [transparentExport, setTransparentExport] = React.useState(false);
-  const [exportFolder, setExportFolder] = React.useState("");
-  const [htmlExportState, setHtmlExportState] = React.useState<
-    null | { status: "exporting" } | { status: "done"; path: string } | { status: "error"; error: string }
-  >(null);
   // Export file name — seeded once per project load from the project's own
   // name (so it's never blank by default), then left alone: a later project
   // rename shouldn't silently overwrite a name the user already typed here.
@@ -838,19 +833,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     cancelRenderJob(renderJobIdRef.current).catch((e) => setErr(String(e.message || e)));
   };
 
-  const onExportHtml = async () => {
-    if (!project) return;
-    const safeName = (project.name || project.projectId || "page").replace(/[^a-z0-9]/gi, "_");
-    const folder = exportFolder.trim() || `out/${safeName}-web`;
-    setHtmlExportState({ status: "exporting" });
-    try {
-      const result = await exportHtml(project, folder);
-      setHtmlExportState({ status: "done", path: result.path });
-    } catch (e: any) {
-      setHtmlExportState({ status: "error", error: String(e.message || e) });
-    }
-  };
-
   const movePage = (i: number, dir: -1 | 1) => {
     update((p) => {
       const j = i + dir;
@@ -1125,74 +1107,47 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
 
         <h2>Export</h2>
         <div className="card compact">
-          {project?.kind === "webpage" ? (
-            <>
-              <label style={{ margin: "0 0 4px" }} title="Full folder path on this computer — created if it doesn't already exist">
-                Export folder
-              </label>
-              <input type="text" value={exportFolder}
-                placeholder={`out/${(project?.name || project?.projectId || "page").replace(/[^a-z0-9]/gi, "_")}-web`}
-                style={{ marginBottom: 8 }}
-                onChange={(e) => setExportFolder(e.target.value)} />
-              <div className="row" style={{ gap: 8 }}>
-                <button className="btn" onClick={onSave} disabled={!project}>Save</button>
-                <button className="btn primary" onClick={onExportHtml}
-                  disabled={!project || htmlExportState?.status === "exporting"}>
-                  {htmlExportState?.status === "exporting" ? "Exporting…" : "Export HTML"}
-                </button>
+          <label style={{ margin: "0 0 4px" }}>File name</label>
+          <input type="text" value={exportName} placeholder={project?.name || project?.projectId || "reel"}
+            style={{ marginBottom: 8 }}
+            onChange={(e) => setExportName(e.target.value)} />
+          <label className="row" style={{ gap: 6, alignItems: "center", marginBottom: 8 }}>
+            <input type="checkbox" checked={transparentExport}
+              onChange={(e) => setTransparentExport(e.target.checked)} />
+            Transparent background (alpha export, ProRes .mov — for Resolve/editors)
+          </label>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn" onClick={onSave} disabled={!project}>Save</button>
+            {renderProgress ? (
+              <button className="btn danger" onClick={onStopRender}
+                disabled={renderProgress.status === "cancelling"}
+                title="Stop this render — the partial file gets deleted, nothing is saved">
+                {renderProgress.status === "cancelling" ? "Stopping…" : "■ Stop"}
+              </button>
+            ) : (
+              <button className="btn primary" onClick={onRender} disabled={!project}>
+                {transparentExport ? "Render ProRes (alpha)" : "Render MP4"}
+              </button>
+            )}
+          </div>
+          {renderProgress && (
+            <div style={{ marginTop: 8 }}>
+              <div className="row between mini" style={{ marginBottom: 4 }}>
+                <span className="hint" style={{ margin: 0 }}>
+                  {renderProgress.phase === "bundling" && "Bundling…"}
+                  {renderProgress.phase === "rendering" &&
+                    (renderProgress.totalFrames ? `Rendering… ${renderProgress.frame}/${renderProgress.totalFrames} frames` : "Rendering…")}
+                  {renderProgress.phase === "encoding" && "Encoding…"}
+                  {!renderProgress.phase && "Starting…"}
+                </span>
+                <span className="hint" style={{ margin: 0, fontVariantNumeric: "tabular-nums" }}>{Math.round(renderProgress.percent)}%</span>
               </div>
-              {htmlExportState?.status === "done" && (
-                <p className="hint">Done → <code>{htmlExportState.path}</code> (index.html + assets/)</p>
-              )}
-              {htmlExportState?.status === "error" && (
-                <p className="err">{htmlExportState.error}</p>
-              )}
-            </>
-          ) : (
-            <>
-              <label style={{ margin: "0 0 4px" }}>File name</label>
-              <input type="text" value={exportName} placeholder={project?.name || project?.projectId || "reel"}
-                style={{ marginBottom: 8 }}
-                onChange={(e) => setExportName(e.target.value)} />
-              <label className="row" style={{ gap: 6, alignItems: "center", marginBottom: 8 }}>
-                <input type="checkbox" checked={transparentExport}
-                  onChange={(e) => setTransparentExport(e.target.checked)} />
-                Transparent background (alpha export, ProRes .mov — for Resolve/editors)
-              </label>
-              <div className="row" style={{ gap: 8 }}>
-                <button className="btn" onClick={onSave} disabled={!project}>Save</button>
-                {renderProgress ? (
-                  <button className="btn danger" onClick={onStopRender}
-                    disabled={renderProgress.status === "cancelling"}
-                    title="Stop this render — the partial file gets deleted, nothing is saved">
-                    {renderProgress.status === "cancelling" ? "Stopping…" : "■ Stop"}
-                  </button>
-                ) : (
-                  <button className="btn primary" onClick={onRender} disabled={!project}>
-                    {transparentExport ? "Render ProRes (alpha)" : "Render MP4"}
-                  </button>
-                )}
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${Math.min(100, Math.max(0, renderProgress.percent))}%` }} />
               </div>
-              {renderProgress && (
-                <div style={{ marginTop: 8 }}>
-                  <div className="row between mini" style={{ marginBottom: 4 }}>
-                    <span className="hint" style={{ margin: 0 }}>
-                      {renderProgress.phase === "bundling" && "Bundling…"}
-                      {renderProgress.phase === "rendering" &&
-                        (renderProgress.totalFrames ? `Rendering… ${renderProgress.frame}/${renderProgress.totalFrames} frames` : "Rendering…")}
-                      {renderProgress.phase === "encoding" && "Encoding…"}
-                      {!renderProgress.phase && "Starting…"}
-                    </span>
-                    <span className="hint" style={{ margin: 0, fontVariantNumeric: "tabular-nums" }}>{Math.round(renderProgress.percent)}%</span>
-                  </div>
-                  <div className="progress-track">
-                    <div className="progress-fill" style={{ width: `${Math.min(100, Math.max(0, renderProgress.percent))}%` }} />
-                  </div>
-                </div>
-              )}
-              {renderUrl && <p className="hint">Done → <a className="dl" href={renderUrl} target="_blank" rel="noreferrer">download reel</a></p>}
-            </>
+            </div>
           )}
+          {renderUrl && <p className="hint">Done → <a className="dl" href={renderUrl} target="_blank" rel="noreferrer">download reel</a></p>}
           {busy && <p className="spin">{busy}</p>}
           {err && (
             <p className="err row between" style={{ alignItems: "center", gap: 8 }}>
