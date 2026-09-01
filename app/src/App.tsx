@@ -972,10 +972,23 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           disabled={!project}
           onChange={(e) => update((p) => { p.name = e.target.value; })}
         />
-        <button className="btn" style={{ marginTop: 10 }} onClick={() => psdInput.current?.click()}>+ Add pages (PSD / SVG / photo)</button>
+        {/* Where the content comes from, not what it looks like when you're
+            done: Sequence pulls in already-designed pages (PSD/SVG/photo,
+            in filename order); Page starts one empty page you build here
+            with the Text/Photo/Shape toolbar below. Equal weight now that
+            neither is more "primary" than the other. */}
+        <div className="row" style={{ gap: 6, marginTop: 10 }}>
+          <button className="btn" style={{ flex: 1 }} title="Add sequence — import PSD/SVG/photo files as pre-designed pages, in filename order"
+            onClick={() => psdInput.current?.click()}>
+            <SequenceIcon /><span>Sequence</span>
+          </button>
+          <button className="btn" style={{ flex: 1 }} title="Add page — start blank, then add text, photo, or shapes yourself"
+            onClick={onAddBlankPage}>
+            <PageIcon /><span>Page</span>
+          </button>
+        </div>
         <input ref={psdInput} className="hidden-file" type="file" accept=".psd,.svg,.png,.jpg,.jpeg,.webp,.gif" multiple
           onChange={(e) => { if (e.target.files) onAddPages(e.target.files); e.target.value = ""; }} />
-        <button className="btn" style={{ width: "100%", marginTop: 6 }} onClick={onAddBlankPage}>+ Add blank page (color + text only)</button>
         {/* The Photo toolbar icon (in the Elements tab, below) triggers this
             same hidden input — one file input shared by every page, since
             only one page's toolbar can be visible/armed at a time. */}
@@ -1541,6 +1554,26 @@ const SafeZoneToggleIcon: React.FC = () => (
 const InstagramUiToggleIcon: React.FC = () => (
   <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
     <path d="M7.5 12.5c-.13 0-.27-.03-.38-.11C4.4 10.8 1.5 8.7 1.5 5.9 1.5 3.9 3 2.5 4.9 2.5c1 0 1.9.5 2.6 1.3.7-.8 1.6-1.3 2.6-1.3 1.9 0 3.4 1.4 3.4 3.4 0 2.8-2.9 4.9-5.62 6.49-.11.08-.25.11-.38.11z" />
+  </svg>
+);
+
+// "Add sequence" vs "Add page" — the split is where the content comes from
+// (imported/pre-designed vs. built here), not what it looks like when
+// you're done, so the icons lean into that: a stack for "already-made
+// pages coming in," a single page + a "+" for "one empty page, build it
+// here." fill uses --panel2 directly (not currentColor) so the back
+// rect's overlap with the front one reads as a real stack, not a solid
+// blob — safe since every plain .btn shares that same background.
+const SequenceIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+    <rect x="4.5" y="1" width="9" height="10.5" rx="1.2" fill="var(--panel2, #1c2126)" stroke="currentColor" strokeWidth="1.3" />
+    <rect x="1.5" y="3.5" width="9" height="10.5" rx="1.2" fill="var(--panel2, #1c2126)" stroke="currentColor" strokeWidth="1.3" />
+  </svg>
+);
+const PageIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+    <rect x="2" y="1.5" width="11" height="12" rx="1.4" />
+    <path d="M7.5 6.2v3.6M5.7 8h3.6" />
   </svg>
 );
 
