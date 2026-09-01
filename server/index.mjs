@@ -629,6 +629,164 @@ app.post("/api/asset", upload.single("asset"), async (req, res) => {
   }
 });
 
+// --- Webpage export: a real folder of static files (index.html + assets/),
+// not a video. No ffmpeg/headless-Chrome involved — this is plain string-
+// building + file copies, so it's synchronous and fast enough to answer in
+// one request. Every layer box is expressed as a percentage of the
+// PROJECT's width (not each axis independently) via CSS container query
+// units (cqw) — deliberately using ONE scale factor for both x and y so the
+// whole design scales as a locked-aspect unit on any viewport, same as
+// what the editor's own canvas already shows.
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+function buildWebpageExport(project) {
+  const cw = project.width || 1440;
+  const pct = (n) => `${(Number(n) / cw) * 100}cqw`;
+  const fontsUsed = new Map(); // cssFamily -> {ext, srcAbs}
+  const allFonts = readFonts();
+
+  const layerHtml = (l) => {
+    const pos = `left:${pct(l.left)};top:${pct(l.top)};width:${pct(l.width)};height:${pct(l.height)};opacity:${l.opacity ?? 1};`;
+    if (l.assetKind === "text") {
+      let fontFamily = "inherit";
+      if (l.fontFamily) {
+        const entry = allFonts.find((f) => f.cssFamily === l.fontFamily);
+        if (entry) {
+          const srcAbs = path.join(PUBLIC, entry.file);
+          if (fs.existsSync(srcAbs)) {
+            fontsUsed.set(entry.cssFamily, { ext: path.extname(entry.file), srcAbs });
+            fontFamily = `"${entry.cssFamily}", sans-serif`;
+          }
+        }
+      }
+      const style = `${pos} font-size:${pct(l.fontSize ?? 48)};color:${l.textColor ?? "#1a1a1a"};` +
+        `text-align:${l.textAlign ?? "right"};font-family:${fontFamily};` +
+        `white-space:pre-wrap;line-height:1.3;`;
+      return `<div class="m-el reveal" dir="${l.direction ?? "rtl"}" style="${style}">${escapeHtml(l.text)}</div>`;
+    }
+    if (l.assetKind === "shape") {
+      const isRound = l.shapeType === "circle" || l.shapeType === "ellipse";
+      const radius = isRound ? "50%" : pct(l.shapeCornerRadius ?? 0);
+      const border = l.shapeStrokeWidth ? `${pct(l.shapeStrokeWidth)} solid ${l.shapeStrokeColor ?? "#000"}` : "none";
+      const style = `${pos} background:${l.shapeFill ?? "#000"};border-radius:${radius};border:${border};box-sizing:border-box;`;
+      return `<div class="m-el reveal" style="${style}"></div>`;
+    }
+    if (l.role === "photo" && l.file) {
+      const srcAbs = path.join(PUBLIC, l.file);
+      if (!fs.existsSync(srcAbs)) return "";
+      const fit = l.fit === "contain" ? "contain" : "cover";
+      const assetHref = `assets/${path.basename(l.file)}`;
+      const style = `${pos} object-fit:${fit};`;
+      if (l.assetKind === "video" || l.assetKind === "gif") {
+        return `<video class="m-el reveal" style="${style}" src="${assetHref}" autoplay muted loop playsinline></video>`;
+      }
+      return `<img class="m-el reveal" style="${style}" src="${assetHref}" alt="" />`;
+    }
+    return "";
+  };
+
+  const sectionsHtml = (project.pages || []).map((page) => {
+    const heightPx = page.heightPx || 480;
+    // Same default as WebpageSectionThumb's own fallback — was "#ffffff"
+    // here, which silently disagreed with what the editor actually shows
+    // for an unset bgColor (#e8e4dd), so an export didn't match its own
+    // preview until a color was explicitly picked.
+    const bg = page.bgColor || project.bgColor || "#e8e4dd";
+    const layers = (page.layers || []).map(layerHtml).join("\n");
+    return `<section class="m-section" style="height:${pct(heightPx)};background:${bg};">\n${layers}\n</section>`;
+  }).join("\n");
+
+  const fontFaceCss = Array.from(fontsUsed.entries())
+    .map(([family, { ext }]) => `@font-face { font-family: "${family}"; src: url("assets/fonts/${family}${ext}"); }`)
+    .join("\n");
+
+  const html = `<!doctype html>
+<html lang="fa">
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(project.name || "Motionist page")}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="assets/style.css">
+${fontFaceCss ? `<style>${fontFaceCss}</style>` : ""}
+</head>
+<body>
+<div class="motionist-page">
+${sectionsHtml}
+</div>
+<script src="assets/script.js"></script>
+</body>
+</html>
+`;
+
+  const css = `* { box-sizing: border-box; }
+body { margin: 0; background: #fff; }
+.motionist-page { container-type: inline-size; width: 100%; }
+.m-section { position: relative; width: 100%; overflow: hidden; }
+.m-el { position: absolute; margin: 0; }
+img.m-el, video.m-el { display: block; }
+.m-el.reveal { opacity: 0; transform: translateY(2.5cqw); transition: opacity 0.7s ease, transform 0.7s ease; }
+.m-el.reveal.in-view { opacity: 1; transform: translateY(0); }
+`;
+
+  const js = `document.addEventListener("DOMContentLoaded", () => {
+  const els = document.querySelectorAll(".reveal");
+  if (!("IntersectionObserver" in window)) { els.forEach((el) => el.classList.add("in-view")); return; }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => { if (entry.isIntersecting) entry.target.classList.add("in-view"); });
+  }, { threshold: 0.15 });
+  els.forEach((el) => io.observe(el));
+});
+`;
+
+  return { html, css, js, fontsUsed, photoFiles: collectPhotoFiles(project) };
+}
+
+function collectPhotoFiles(project) {
+  const files = [];
+  (project.pages || []).forEach((page) => {
+    (page.layers || []).forEach((l) => {
+      if (l.role === "photo" && l.file) files.push(l.file);
+    });
+  });
+  return files;
+}
+
+app.post("/api/export-html", (req, res) => {
+  try {
+    const project = req.body?.project;
+    const destFolder = (req.body?.destFolder || "").trim();
+    if (!project) return res.status(400).json({ error: "project required" });
+    if (!destFolder) return res.status(400).json({ error: "destination folder required" });
+
+    const { html, css, js, fontsUsed, photoFiles } = buildWebpageExport(project);
+
+    const assetsDir = path.join(destFolder, "assets");
+    fs.mkdirSync(assetsDir, { recursive: true });
+    fs.writeFileSync(path.join(destFolder, "index.html"), html, "utf-8");
+    fs.writeFileSync(path.join(assetsDir, "style.css"), css, "utf-8");
+    fs.writeFileSync(path.join(assetsDir, "script.js"), js, "utf-8");
+
+    for (const file of photoFiles) {
+      const src = path.join(PUBLIC, file);
+      if (fs.existsSync(src)) fs.copyFileSync(src, path.join(assetsDir, path.basename(file)));
+    }
+    if (fontsUsed.size > 0) {
+      fs.mkdirSync(path.join(assetsDir, "fonts"), { recursive: true });
+      for (const [family, { ext, srcAbs }] of fontsUsed) {
+        fs.copyFileSync(srcAbs, path.join(assetsDir, "fonts", `${family}${ext}`));
+      }
+    }
+
+    res.json({ ok: true, path: path.resolve(destFolder) });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
 // Shared by both the old synchronous /api/render (kept as-is — the Resolve
 // plugin calls it directly and expects the finished {url, path} in one
 // response, not a job to poll) and the new job-based /api/render/start

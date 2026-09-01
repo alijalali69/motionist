@@ -287,3 +287,16 @@ export async function cancelRenderJob(jobId: string): Promise<void> {
   const r = await fetch(`/api/render/${jobId}/cancel`, { method: "POST" });
   if (!r.ok) throw new Error((await r.json()).error || "couldn't stop the render");
 }
+
+// Webpage export — a folder of static files (index.html + assets/), not a
+// video. Synchronous: no ffmpeg/headless-Chrome step, just string-building
+// and file copies on the server, fast enough to answer in one request.
+export async function exportHtml(project: Project, destFolder: string): Promise<{ ok: boolean; path: string }> {
+  const r = await fetch("/api/export-html", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project, destFolder }),
+  });
+  if (!r.ok) throw new Error((await r.json()).error || "export failed");
+  return r.json();
+}
