@@ -35,9 +35,18 @@ export const NumField: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (
     dir === 1 ? el.stepUp() : el.stepDown();
     el.dispatchEvent(new Event("input", { bubbles: true }));
   };
+  // Double-click selects the whole value — a native number input's default
+  // double-click selection is inconsistent (a decimal point or minus sign
+  // can split it into "words"), so typing right after doesn't reliably
+  // replace the whole thing. Runs whatever onDoubleClick a call site passed
+  // in first, so this only adds behavior, never silently drops one.
+  const handleDoubleClick = (e: React.MouseEvent<HTMLInputElement>) => {
+    props.onDoubleClick?.(e);
+    e.currentTarget.select();
+  };
   return (
     <span className="num-field">
-      <input {...props} type="number" ref={ref} />
+      <input {...props} type="number" ref={ref} onDoubleClick={handleDoubleClick} />
       <span className="num-field-spin">
         <button type="button" tabIndex={-1} disabled={props.disabled}
           onMouseDown={(e) => e.preventDefault()} onClick={() => step(1)} aria-label="Increase">
