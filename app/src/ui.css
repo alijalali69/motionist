@@ -740,10 +740,16 @@ input.project-name-input::placeholder { color: var(--muted); font-weight: 600; }
   padding: 1px 6px; cursor: pointer; white-space: nowrap; z-index: 1;
 }
 .kf-chip:hover { border-color: var(--accent); color: var(--accent2); }
+/* Sits in the exact same flex-centered spot the ease chip normally occupies
+   (swapped in during a drag, see KeyframeEditor.tsx) — NOT floating above
+   the block the way a real tooltip would, because .kf-stack's own
+   overflow:hidden silently clipped that invisible on every row (this spot
+   is already proven to render correctly, on every row including the very
+   first/last). */
 .kf-drag-readout {
-  position: absolute; left: 50%; bottom: calc(100% + 5px); transform: translateX(-50%);
+  position: relative;
   font-family: var(--mono); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums;
-  color: var(--bg); background: var(--text); border-radius: 4px; padding: 2px 7px;
-  white-space: nowrap; pointer-events: none; z-index: 2;
+  color: var(--bg); background: var(--text); border-radius: 999px; padding: 1px 7px;
+  white-space: nowrap; z-index: 1;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }

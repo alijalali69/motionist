@@ -241,17 +241,26 @@ const TrackRow: React.FC<{ row: Row; pageDuration: number }> = ({ row, pageDurat
             <polyline points={curveD} fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
           </svg>
           <div className="kf-handle-r" onPointerDown={onHandleDown} onPointerMove={onMove} onPointerUp={onUp} />
-          {dragLive && (
+          {/* Floating ABOVE the block (like a real tooltip) got silently
+              clipped invisible by .kf-stack's own overflow:hidden — never
+              caught it because the earlier check only confirmed the
+              element existed in the DOM, not that it actually painted
+              on screen. Showing it in the ease chip's own spot instead
+              (swapped in during the drag) guarantees it's inside bounds
+              that are already proven to render, on every row including
+              the first/last. */}
+          {dragLive ? (
             <div className="kf-drag-readout">
               {dragLive.mode === "move" ? "start " : "dur "}{fmtSec(dragLive.frames)}
             </div>
+          ) : (
+            <div className="kf-chip"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); row.onCycleEase(); }}
+              title="Click to cycle this effect's own easing">
+              {row.ease}
+            </div>
           )}
-          <div className="kf-chip"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); row.onCycleEase(); }}
-            title="Click to cycle this effect's own easing">
-            {row.ease}
-          </div>
         </div>
       </div>
     </div>
