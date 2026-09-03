@@ -2,7 +2,7 @@ import React from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { Reel } from "../../src/Reel";
 import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
-import { ENTRANCE_NAMES, TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, EXIT_NAMES, EASING_NAMES, TRANSITIONS } from "../../src/presets";
+import { ENTRANCE_NAMES, TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, EXIT_NAMES, EASING_NAMES, TRANSITIONS, hasMotionKeyframes } from "../../src/presets";
 import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
   listFonts, deleteProjectFiles, type IngestResult, type FontEntry,
@@ -17,6 +17,7 @@ import { SafeZoneOverlay } from "./SafeZoneOverlay";
 import { InstagramUIOverlay } from "./InstagramUIOverlay";
 import { TextPlacementOverlay } from "./TextPlacementOverlay";
 import { NumField } from "./NumField";
+import { KeyframeEditor } from "./KeyframeEditor";
 
 const ENTRANCES = ENTRANCE_NAMES;
 const AMBIENTS = AMBIENT_NAMES;
@@ -1802,11 +1803,14 @@ const ElementMotion: React.FC<{
   onSaveMotionPreset?: (name: string, clip: MotionClip) => void;
   onDeleteMotionPreset?: (id: string) => void;
   canvas: [number, number];
+  // Page length (frames) — the Keyframes tab's "Keyframes" mode needs this
+  // to size its timeline; the "Simple" fields above it don't.
+  pageDuration: number;
   // True for exactly the one layer the text tool just placed — focuses its
   // textarea once, on mount, so placing text and typing is one continuous
   // motion instead of place-then-hunt-for-the-field.
   autoFocus?: boolean;
-}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, autoFocus }) => {
+}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, pageDuration, autoFocus }) => {
   const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
   const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
   const photoInput = React.useRef<HTMLInputElement>(null);
@@ -1847,6 +1851,7 @@ const ElementMotion: React.FC<{
   const isPhotoSlot = layer.role === "photo";
   const isTextLayer = layer.assetKind === "text";
   const isShapeLayer = layer.assetKind === "shape";
+  const kfMode = hasMotionKeyframes(layer);
   const inOptions = isTextLayer ? [...ENTRANCES, ...TEXT_ENTRANCE_NAMES] : ENTRANCES;
 
   // Group the shared library by family name, for the two-step Font -> Style pickers.
@@ -2325,8 +2330,37 @@ const ElementMotion: React.FC<{
         {panel === "keyframes" && (
         <>
       <div className="card compact group" style={{ marginTop: 8 }}>
-        <div className="subhead">Keyframes</div>
-        <div className="grid2 mini">
+        <div className="row between" style={{ alignItems: "center" }}>
+          <div className="subhead" style={{ marginBottom: 0 }}>Keyframes</div>
+          {/* Derived, not stored — "Keyframes" mode is simply "this layer has
+              at least one real track set" (see hasMotionKeyframes in
+              presets.ts), so there's nothing to get out of sync. Switching
+              to Keyframes doesn't touch the Simple fields below (still there
+              if you switch back); switching back to Simple just clears the
+              tracks — Simple's own delay/duration were never touched, so
+              that direction is always lossless. */}
+          <div className="row" style={{ gap: 0 }}>
+            <button className={"btn small" + (!kfMode ? " active" : "")}
+              onClick={() => onChange((l) => { l.motionKeyframes = undefined; })}>
+              Simple
+            </button>
+            <button className={"btn small" + (kfMode ? " active" : "")}
+              title="Any property, any number of points, its own curve per segment — see the hint below once it's on"
+              onClick={() => {
+                if (kfMode) return;
+                onChange((l) => {
+                  l.motionKeyframes = { opacity: [{ t: 0, v: 0, ease: "easeOut" }, { t: 15, v: 1, ease: "linear" }] };
+                });
+              }}>
+              Keyframes
+            </button>
+          </div>
+        </div>
+        {kfMode ? (
+          <KeyframeEditor layer={layer} pageDuration={pageDuration} canvas={canvas} onChange={onChange} />
+        ) : (
+        <>
+        <div className="grid2 mini" style={{ marginTop: 8 }}>
           <div><label>in delay (s) &mdash; when it starts</label>
             <NumField step={0.1} min={0} value={sec(layer.delay)}
               onChange={(e) => onChange((l) => { l.delay = toFr(e.target.value); })} /></div>
@@ -2366,6 +2400,8 @@ const ElementMotion: React.FC<{
               disabled={(layer.exit ?? "none") === "none"}
               onChange={(frames) => onChange((l) => { l.outDuration = frames; })} /></div>
         </div>
+        </>
+        )}
         <div className="mini" style={{ marginTop: 4 }}>
           <label title="How much of the PAGE's own ambient motion (set on the Page tab, e.g. kenburns/sway) this layer follows. 1 = moves with it normally, 0 = stays still while everything else drifts, below 1 = drifts slower (background feel), above 1 = drifts more (foreground feel). No effect if the page's ambient is “none”.">
             Parallax depth (page ambient)
@@ -2514,6 +2550,7 @@ const PageInspector: React.FC<{
               motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
               autoFocus={l.index === newestLayerIndex}
               canvas={canvas}
+              pageDuration={page.durationInFrames}
               onDelete={() => onDeleteLayer(li)} />
           )).reverse()}
         </>

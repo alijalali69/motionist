@@ -1,6 +1,7 @@
 // Motion + transition preset library. This is the curated "menu" the app offers.
 // Entrances are pure functions of a 0..1 progress; ambient is a function of frame.
 import { interpolate, spring, Easing } from "remotion";
+import type { ContentLayer, MotionKeyframe } from "./types";
 
 export type EntranceName =
   | "none"
@@ -240,7 +241,7 @@ function bounceOut(t: number): number {
   return n1 * u * u + 0.984375;
 }
 
-function easingFn(name: Exclude<EasingName, "spring">): (t: number) => number {
+export function easingFn(name: Exclude<EasingName, "spring">): (t: number) => number {
   switch (name) {
     case "bounce": return bounceOut;
     case "linear": return Easing.linear;
@@ -256,6 +257,59 @@ function easingFn(name: Exclude<EasingName, "spring">): (t: number) => number {
     case "easeInBack": return Easing.bezier(0.36, 0, 0.66, -0.56); // slight pull-back before leaving
     default: return Easing.bezier(0.25, 0.1, 0.25, 1.0);
   }
+}
+
+// --- Per-property keyframes (Keyframes tab "Keyframes" mode) ----------
+// The alternative engine to the entrance/exit preset system above — see
+// ContentLayer.motionKeyframes in types.ts. "spring" is excluded here (it's
+// a physics simulation anchored to a single transition, not a plain 0..1
+// curve function like the rest) — every other named easing in EASING_NAMES
+// works unchanged as a per-segment curve.
+export const KEYFRAME_EASE_NAMES: Exclude<EasingName, "spring">[] =
+  EASING_NAMES.filter((n): n is Exclude<EasingName, "spring"> => n !== "spring");
+
+// Value at `frame` for one property's track, linearly walking the keyframe
+// list (already kept sorted by t on every write — see KeyframeEditor.tsx)
+// and shaping each segment's local 0..1 progress through that segment's
+// LEADING keyframe's own ease. Before the first / after the last keyframe,
+// the value holds flat — same "clamp to the ends" convention interpolate()
+// uses elsewhere in this file.
+export function keyframeValue(kfs: MotionKeyframe[] | undefined, frame: number, fallback: number): number {
+  if (!kfs || kfs.length === 0) return fallback;
+  if (frame <= kfs[0].t) return kfs[0].v;
+  const last = kfs[kfs.length - 1];
+  if (frame >= last.t) return last.v;
+  for (let i = 0; i < kfs.length - 1; i++) {
+    const a = kfs[i], b = kfs[i + 1];
+    if (frame >= a.t && frame <= b.t) {
+      const p = (frame - a.t) / ((b.t - a.t) || 1);
+      return a.v + (b.v - a.v) * easingFn(a.ease)(p);
+    }
+  }
+  return last.v;
+}
+
+export function hasMotionKeyframes(layer: ContentLayer): boolean {
+  const mk = layer.motionKeyframes;
+  if (!mk) return false;
+  return !!(mk.opacity?.length || mk.scale?.length || mk.tx?.length || mk.ty?.length || mk.rotate?.length);
+}
+
+// Resolves a layer's full motionKeyframes into one LayerMotion, same shape
+// combinedEntranceMotion/combinedExitMotion return — a track with no points
+// simply falls back to that property's identity value (rotateY/clipPath/
+// shadow/shine have no keyframe track at all yet, so they always stay at
+// their BASE identity here).
+export function keyframeMotion(mk: ContentLayer["motionKeyframes"], frame: number): LayerMotion {
+  return {
+    opacity: keyframeValue(mk?.opacity, frame, 1),
+    tx: keyframeValue(mk?.tx, frame, 0),
+    ty: keyframeValue(mk?.ty, frame, 0),
+    scale: keyframeValue(mk?.scale, frame, 1),
+    rotate: keyframeValue(mk?.rotate, frame, 0),
+    blur: 0,
+    rotateY: 0,
+  };
 }
 
 // Crafted per motion character rather than one blanket curve for every

@@ -13,6 +13,7 @@ import {
 import { Gif } from "@remotion/gif";
 import {
   entranceMotion, entranceProgress, exitMotion, exitProgress, combineMotions, ambientMotion,
+  hasMotionKeyframes, keyframeMotion,
   type EntranceName, type ExitName,
 } from "./presets";
 
@@ -111,8 +112,14 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
   const inExitPhase = hasExit && frame >= outStart;
   const isStagger = layer.entrance === "wordReveal" || layer.entrance === "lineReveal";
 
+  // Keyframes (Keyframes tab "Keyframes" mode) take over the whole box —
+  // including overriding the stagger identity below — the moment a layer
+  // has any real track set; see hasMotionKeyframes/keyframeMotion in
+  // presets.ts. Absent = today's entrance/exit/stagger behavior, unchanged.
   let m;
-  if (inExitPhase) {
+  if (hasMotionKeyframes(layer)) {
+    m = keyframeMotion(layer.motionKeyframes, frame);
+  } else if (inExitPhase) {
     m = combinedExitMotion(layer, frame, outStart, outDuration);
   } else if (!isStagger) {
     m = combinedEntranceMotion(layer, frame, fps, inDuration);
@@ -200,7 +207,9 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
   // own progress/easing — see combinedEntranceMotion/combinedExitMotion and
   // combineMotions in presets.ts.
   let m;
-  if (hasExit && frame >= outStart) {
+  if (hasMotionKeyframes(layer)) {
+    m = keyframeMotion(layer.motionKeyframes, frame);
+  } else if (hasExit && frame >= outStart) {
     m = combinedExitMotion(layer, frame, outStart, outDuration);
   } else {
     m = combinedEntranceMotion(layer, frame, fps, inDuration);

@@ -89,7 +89,27 @@ export type ContentLayer = {
   shapeCornerRadius?: number; // rect/square/line only; ellipse/circle ignore it (already round)
   shapeStrokeColor?: string;
   shapeStrokeWidth?: number; // 0/undefined = no stroke
+  // Per-property keyframe animation — an alternative to the entrance/exit
+  // preset system above. When a layer has at least one non-empty track here,
+  // it ignores entrance/exit/delay/inDuration/outDelay/outDuration entirely
+  // and is driven frame-by-frame by these tracks instead (see
+  // hasMotionKeyframes/keyframeMotion in presets.ts). Absent/all-empty =
+  // today's preset behavior, unchanged — every existing project keeps
+  // working exactly as before. Each keyframe's `ease` describes the curve of
+  // the segment LEAVING it, toward the next keyframe in that track.
+  motionKeyframes?: {
+    opacity?: MotionKeyframe[];
+    scale?: MotionKeyframe[];
+    tx?: MotionKeyframe[]; // px offset from the layer's own box position
+    ty?: MotionKeyframe[];
+    rotate?: MotionKeyframe[]; // degrees
+  };
 };
+
+// "spring" is deliberately excluded — a keyframe segment's ease is a plain
+// 0..1 progress-shaping function (see easingFn in presets.ts), and spring is
+// a physics simulation, not that shape. See KEYFRAME_EASE_NAMES.
+export type MotionKeyframe = { t: number; v: number; ease: Exclude<EasingName, "spring"> };
 
 export type TemplateLayer = {
   file: string;
