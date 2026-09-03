@@ -41,38 +41,57 @@ function shadowStyle(shadow: number | undefined): string | undefined {
 import type { Page, ContentLayer } from "./types";
 
 // Resolves a layer's up-to-3 combined entrance (or exit) slots into one
-// LayerMotion — each slot gets its own progress AND its own easing (FX1 can
-// land hard while FX2 settles slow; they're independent, never sharing one
-// curve), then combineMotions layers them together. Slots left unset (or
-// "none") are skipped entirely; pairing name+easing BEFORE filtering keeps
-// FX3's easing tied to FX3 even if FX2 happens to be "none" in between.
-function combinedEntranceMotion(
-  layer: ContentLayer, frame: number, fps: number, inDuration: number
-) {
+// LayerMotion — each slot gets its own progress, easing, AND now its own
+// timing (delay/duration) too. FX2/FX3 fall back to FX1's own delay/
+// inDuration whenever their own is unset, so a layer that's never had FX2/3
+// dragged independently in the Keyframes tab behaves exactly as before.
+// Slots left unset (or "none") are skipped entirely; pairing name+easing+
+// timing BEFORE filtering keeps FX3's own values tied to FX3 even if FX2
+// happens to be "none" in between.
+function combinedEntranceMotion(layer: ContentLayer, frame: number, fps: number) {
+  const d1 = layer.delay, u1 = layer.inDuration ?? 26;
   const slots = ([
-    [layer.entrance, layer.entranceEasing],
-    [layer.entrance2, layer.entranceEasing2],
-    [layer.entrance3, layer.entranceEasing3],
-  ] as [EntranceName | undefined, EasingName | undefined][])
-    .filter((s): s is [EntranceName, EasingName | undefined] => !!s[0] && s[0] !== "none");
+    [layer.entrance, layer.entranceEasing, d1, u1],
+    [layer.entrance2, layer.entranceEasing2, layer.delay2 ?? d1, layer.inDuration2 ?? u1],
+    [layer.entrance3, layer.entranceEasing3, layer.delay3 ?? d1, layer.inDuration3 ?? u1],
+  ] as [EntranceName | undefined, EasingName | undefined, number, number][])
+    .filter((s): s is [EntranceName, EasingName | undefined, number, number] => !!s[0] && s[0] !== "none");
   if (slots.length === 0) return entranceMotion("none", 1);
-  const motions = slots.map(([name, ease]) =>
-    entranceMotion(name, entranceProgress(name, ease, frame, fps, layer.delay, inDuration))
+  const motions = slots.map(([name, ease, delay, dur]) =>
+    entranceMotion(name, entranceProgress(name, ease, frame, fps, delay, dur))
   );
   return combineMotions(motions);
 }
 
-function combinedExitMotion(
-  layer: ContentLayer, frame: number, outStart: number, outDuration: number
-) {
+// The earliest of all ACTIVE exit slots' own resolved start frames — used
+// only to decide when to switch from rendering entrance to rendering exit at
+// all. Needs to be the earliest (not just FX1's), now that FX2/FX3 can have
+// their own independent exit timing — a layer whose FX2 exit starts before
+// FX1's must already be in "exit mode" by FX2's own start, not FX1's.
+// combinedExitMotion itself is safe to call before every slot has actually
+// started: exitMotion(name, 0) is identity (opacity 1, no offset), so a
+// not-yet-started slot just contributes nothing until its own turn.
+function earliestExitStart(layer: ContentLayer, pageDuration: number): number {
+  const u1 = layer.outDuration ?? 24;
+  const s1 = layer.outDelay ?? (pageDuration - u1);
+  const starts: number[] = [];
+  if (layer.exit && layer.exit !== "none") starts.push(s1);
+  if (layer.exit2 && layer.exit2 !== "none") starts.push(layer.outDelay2 ?? s1);
+  if (layer.exit3 && layer.exit3 !== "none") starts.push(layer.outDelay3 ?? s1);
+  return starts.length ? Math.min(...starts) : s1;
+}
+
+function combinedExitMotion(layer: ContentLayer, frame: number, pageDuration: number) {
+  const u1 = layer.outDuration ?? 24;
+  const s1 = layer.outDelay ?? (pageDuration - u1);
   const slots = ([
-    [layer.exit, layer.exitEasing],
-    [layer.exit2, layer.exitEasing2],
-    [layer.exit3, layer.exitEasing3],
-  ] as [ExitName | undefined, EasingName | undefined][])
-    .filter((s): s is [ExitName, EasingName | undefined] => !!s[0] && s[0] !== "none");
+    [layer.exit, layer.exitEasing, s1, u1],
+    [layer.exit2, layer.exitEasing2, layer.outDelay2 ?? s1, layer.outDuration2 ?? u1],
+    [layer.exit3, layer.exitEasing3, layer.outDelay3 ?? s1, layer.outDuration3 ?? u1],
+  ] as [ExitName | undefined, EasingName | undefined, number, number][])
+    .filter((s): s is [ExitName, EasingName | undefined, number, number] => !!s[0] && s[0] !== "none");
   if (slots.length === 0) return entranceMotion("none", 1);
-  const motions = slots.map(([name, ease]) =>
+  const motions = slots.map(([name, ease, outStart, outDuration]) =>
     exitMotion(name, exitProgress(name, ease, frame, outStart, outDuration))
   );
   return combineMotions(motions);
@@ -114,17 +133,16 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
   useLayerFont(layer.fontFile, layer.fontFamily);
 
   const inDuration = layer.inDuration ?? 26;
-  const outDuration = layer.outDuration ?? 24;
   const hasExit = (layer.exit && layer.exit !== "none") || (layer.exit2 && layer.exit2 !== "none") || (layer.exit3 && layer.exit3 !== "none");
-  const outStart = layer.outDelay ?? (pageDuration - outDuration);
+  const outStart = earliestExitStart(layer, pageDuration);
   const inExitPhase = hasExit && frame >= outStart;
   const isStagger = layer.entrance === "wordReveal" || layer.entrance === "lineReveal";
 
   let m;
   if (inExitPhase) {
-    m = combinedExitMotion(layer, frame, outStart, outDuration);
+    m = combinedExitMotion(layer, frame, pageDuration);
   } else if (!isStagger) {
-    m = combinedEntranceMotion(layer, frame, fps, inDuration);
+    m = combinedEntranceMotion(layer, frame, fps);
   } else {
     m = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, clipPath: undefined as string | undefined };
   }
@@ -200,19 +218,17 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const inDuration = layer.inDuration ?? 26;
-  const outDuration = layer.outDuration ?? 24;
   const hasExit = (layer.exit && layer.exit !== "none") || (layer.exit2 && layer.exit2 !== "none") || (layer.exit3 && layer.exit3 !== "none");
-  const outStart = layer.outDelay ?? (pageDuration - outDuration);
+  const outStart = earliestExitStart(layer, pageDuration);
 
   // Up to 3 combined entrance/exit effects (FX1/FX2/FX3), each keeping its
-  // own progress/easing — see combinedEntranceMotion/combinedExitMotion and
-  // combineMotions in presets.ts.
+  // own progress/easing/timing — see combinedEntranceMotion/
+  // combinedExitMotion and combineMotions in presets.ts.
   let m;
   if (hasExit && frame >= outStart) {
-    m = combinedExitMotion(layer, frame, outStart, outDuration);
+    m = combinedExitMotion(layer, frame, pageDuration);
   } else {
-    m = combinedEntranceMotion(layer, frame, fps, inDuration);
+    m = combinedEntranceMotion(layer, frame, fps);
   }
   const opacity = m.opacity * layer.opacity;
   const isShape = layer.assetKind === "shape";

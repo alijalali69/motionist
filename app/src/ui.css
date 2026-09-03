@@ -702,6 +702,7 @@ input.project-name-input::placeholder { color: var(--muted); font-weight: 600; }
   display: flex; align-items: center; justify-content: center; touch-action: none;
 }
 .kf-seg:active { cursor: grabbing; }
+.kf-block-curve { position: absolute; inset: 3px 4px; pointer-events: none; opacity: 0.9; }
 .kf-handle-r { position: absolute; right: -4px; top: 0; width: 10px; height: 100%; cursor: ew-resize; }
 .kf-handle-r::after {
   content: ""; position: absolute; right: 3px; top: 50%; width: 3px; height: 14px;

@@ -15,29 +15,41 @@ export type ContentLayer = {
   height: number;
   opacity: number;
   // IN effect. entrance2/entrance3 are optional extra effects COMBINED with
-  // `entrance` (same delay/inDuration/easing, layered via combineMotions in
-  // presets.ts) — the FX1/FX2/FX3 slots in the inspector, capped at 3.
+  // `entrance` (layered via combineMotions in presets.ts) — the FX1/FX2/FX3
+  // slots in the inspector, capped at 3.
   entrance: EntranceName;
   entrance2?: EntranceName;
   entrance3?: EntranceName;
-  delay: number;         // in-delay (frames) before the entrance starts
-  inDuration?: number;   // entrance length (frames), default 26
-  // Each combined FX slot gets its OWN easing — FX1 can land hard
-  // (easeOutBack) while FX2 settles slow (easeOutExpo); they're combined
-  // (see combineMotions) but never share one curve. entranceEasing (no
-  // suffix) is FX1's; unset = the curated default for that slot's effect.
+  delay: number;         // FX1's in-delay (frames) before its entrance starts
+  inDuration?: number;   // FX1's entrance length (frames), default 26
+  // Each combined FX slot gets its OWN timing AND easing — FX1 can start
+  // immediately and land hard (easeOutBack) while FX2 starts later and
+  // settles slow (easeOutExpo); they're combined (see combineMotions) but
+  // never share one delay/duration/curve. delay2/inDuration2/
+  // entranceEasing2 are FX2's own; unset = falls back to FX1's own value
+  // (delay/inDuration/entranceEasing) — so a layer that's never had FX2/3
+  // dragged independently behaves exactly as if they were still shared.
+  delay2?: number;
+  delay3?: number;
+  inDuration2?: number;
+  inDuration3?: number;
   entranceEasing?: EasingName;
   entranceEasing2?: EasingName;
   entranceEasing3?: EasingName;
   // OUT effect — by default plays over the last outDuration frames of the
   // page (anchored to the page's END); set outDelay to instead anchor it to
   // an exact time from the page's START (e.g. "exit at 4.5s"), independent
-  // of how long the page is. exit2/exit3 combine the same way entrance2/3 do.
+  // of how long the page is. exit2/exit3 combine the same way entrance2/3 do,
+  // with the same independent-timing-falls-back-to-FX1 rule as delay2/3 above.
   exit?: ExitName;       // default "none"
   exit2?: ExitName;
   exit3?: ExitName;
-  outDuration?: number;  // exit length (frames), default 24
-  outDelay?: number;     // exit START (frames from page start) — unset = old "anchored to page end" behavior
+  outDuration?: number;  // FX1's exit length (frames), default 24
+  outDelay?: number;     // FX1's exit START (frames from page start) — unset = old "anchored to page end" behavior
+  outDelay2?: number;
+  outDelay3?: number;
+  outDuration2?: number;
+  outDuration3?: number;
   exitEasing?: EasingName; // unset = use the curated default for this exit (see presets.ts)
   exitEasing2?: EasingName;
   exitEasing3?: EasingName;

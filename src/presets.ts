@@ -320,6 +320,14 @@ const DEFAULT_ENTRANCE_EASING: Partial<Record<EntranceName, EasingName>> = {
   typewriter: "linear",
 };
 
+// What "(auto)" actually resolves to for a given effect — same fallback
+// chain entranceProgress/exitProgress use internally, exposed so the
+// Keyframes tab can draw the REAL curve on a block even when its easing is
+// unset, instead of guessing.
+export function resolvedEntranceEasing(name: EntranceName, override: EasingName | undefined): EasingName {
+  return override ?? DEFAULT_ENTRANCE_EASING[name] ?? "ease";
+}
+
 // Exits mirror the entrance table's intent but reversed: things arriving
 // decelerate INTO place (ease-out), things leaving accelerate AWAY
 // (ease-in) — the standard motion-design convention, now actually applied
@@ -343,6 +351,10 @@ const DEFAULT_EXIT_EASING: Partial<Record<ExitName, EasingName>> = {
   shineOut: "easeIn",
   typewriterOut: "linear",
 };
+
+export function resolvedExitEasing(name: ExitName, override: EasingName | undefined): EasingName {
+  return override ?? DEFAULT_EXIT_EASING[name] ?? "easeIn";
+}
 
 // 0..1 entrance progress, driven by whichever easing applies — physics
 // (spring) or a bezier curve. `easingOverride` is the layer's own explicit
