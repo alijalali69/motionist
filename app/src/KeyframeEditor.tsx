@@ -27,7 +27,7 @@ type Row = {
   t0: number;    // frame
   dur: number;   // frames
   ease: string;
-  onMove: (deltaFrames: number) => void;
+  onMove: (newT0: number) => void; // ABSOLUTE new start frame, not a delta to add
   onResize: (newDur: number) => void;
   onCycleEase: () => void;
 };
@@ -60,7 +60,7 @@ export const KeyframeEditor: React.FC<{
       label: `FX${i + 1} ${name} · IN`,
       color: SLOT_COLOR[i],
       t0: layer.delay, dur: inDuration, ease: ease ?? "auto",
-      onMove: (dt) => onChange((l) => { l.delay = Math.max(0, l.delay + dt); }),
+      onMove: (newT0) => onChange((l) => { l.delay = Math.max(0, newT0); }),
       onResize: (d) => onChange((l) => { l.inDuration = Math.max(1, d); }),
       onCycleEase: () => onChange((l) => {
         const next = cycleEase(ease) as any;
@@ -77,9 +77,8 @@ export const KeyframeEditor: React.FC<{
       label: `FX${i + 1} ${name} · OUT`,
       color: SLOT_COLOR[i],
       t0: outStart, dur: outDuration, ease: ease ?? "auto",
-      onMove: (dt) => onChange((l) => {
-        const base = l.outDelay ?? outStart;
-        l.outDelay = clamp(base + dt, 0, pageDuration - (l.outDuration ?? outDuration));
+      onMove: (newT0) => onChange((l) => {
+        l.outDelay = clamp(newT0, 0, pageDuration - (l.outDuration ?? outDuration));
       }),
       onResize: (d) => onChange((l) => { l.outDuration = Math.max(1, d); }),
       onCycleEase: () => onChange((l) => {
@@ -146,8 +145,13 @@ const TrackRow: React.FC<{ row: Row; pageDuration: number }> = ({ row, pageDurat
     const d = dragRef.current;
     if (!d || !areaRef.current) return;
     const rect = areaRef.current.getBoundingClientRect();
+    // Always computed from the fixed snapshot taken at pointerdown, never
+    // from the row's current (already-updated-mid-drag) position — adding a
+    // since-drag-start delta onto an already-moving value on every single
+    // pointermove is what caused the reported "jumps while dragging"
+    // (each event compounded the whole delta again on top of the last).
     const dt = Math.round(((e.clientX - d.startX) / rect.width) * pageDuration);
-    if (d.mode === "move") row.onMove(dt);
+    if (d.mode === "move") row.onMove(Math.max(0, d.startT0 + dt));
     else row.onResize(clamp(d.startDur + dt, 1, pageDuration));
   };
   const onUp = () => { dragRef.current = null; };
