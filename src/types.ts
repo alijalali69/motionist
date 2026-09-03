@@ -97,46 +97,7 @@ export type ContentLayer = {
   shapeCornerRadius?: number; // rect/square/line only; ellipse/circle ignore it (already round)
   shapeStrokeColor?: string;
   shapeStrokeWidth?: number; // 0/undefined = no stroke
-  // Per-FX keyframe animation — an alternative to the entrance/exit preset
-  // TIMING system. When a layer has at least one non-empty track here it
-  // ignores entrance/exit/delay/inDuration/outDelay/outDuration and is driven
-  // frame-by-frame by these tracks instead (see hasMotionKeyframes/
-  // keyframeMotion in presets.ts). Absent/all-empty = today's preset
-  // behavior, unchanged — every existing project keeps working.
-  //
-  // Each CHOSEN effect (FX1/FX2/FX3, in or out) contributes its own track(s)
-  // in that effect's REAL units — slideRight -> an "X offset" track in px,
-  // blurIn -> a "Blur" track in px, rotateIn -> a "Rotation" (deg) track AND
-  // a "Scale" track. Two combined FX are two independent, separately-editable
-  // tracks, not one merged property. Opacity is a single shared track (every
-  // effect fades the same way, combined via min). Effects whose motion isn't
-  // a plain scalar (mask wipes, the shine sweep, the weighted card-flip) get
-  // one "Progress" track (0..1) that drives the whole effect through its own
-  // motion function instead. Each keyframe's `ease` shapes the segment
-  // LEAVING it toward the next keyframe in that track.
-  motionKeyframes?: {
-    opacity?: MotionKeyframe[]; // shared, 0..1
-    fx?: MotionFxTrack[];
-  };
 };
-
-// One editable track owned by a specific FX slot. `prop` is the real motion
-// dimension it drives (px/deg/×), or "progress" for a non-scalar effect
-// whose 0..1 track is fed back through entranceMotion/exitMotion. `effect`
-// is kept so a progress track knows which motion function to call and so the
-// UI can label the track by the effect it came from.
-export type MotionFxTrack = {
-  slot: 1 | 2 | 3;
-  phase: "in" | "out";
-  effect: EntranceName | ExitName;
-  prop: "tx" | "ty" | "scale" | "rotate" | "rotateY" | "blur" | "progress";
-  points: MotionKeyframe[];
-};
-
-// "spring" is deliberately excluded — a keyframe segment's ease is a plain
-// 0..1 progress-shaping function (see easingFn in presets.ts), and spring is
-// a physics simulation, not that shape. See KEYFRAME_EASE_NAMES.
-export type MotionKeyframe = { t: number; v: number; ease: Exclude<EasingName, "spring"> };
 
 export type TemplateLayer = {
   file: string;

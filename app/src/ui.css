@@ -674,11 +674,12 @@ input.project-name-input::placeholder { color: var(--muted); font-weight: 600; }
 .num-field-spin button:disabled { opacity: 0.35; cursor: default; }
 .num-field-spin button:disabled:hover { background: none; color: var(--muted); }
 
-/* Keyframes tab, "Keyframes" mode — KeyframeEditor.tsx. One track per chosen
-   FX (plus a shared Opacity track), each in that effect's own real units.
-   Diamonds (.kf-dot) with a live value label; the curve line (.kf-line) is
-   the real eased shape between them. */
-.kf-ruler { position: relative; height: 14px; margin: 0 0 2px 112px; }
+/* Keyframes tab, "Keyframes" mode — KeyframeEditor.tsx. One draggable block
+   row per chosen FX (same "chunky block" language as the very first Simple-
+   mode-as-blocks mockup) — body drag moves the shared delay/outDelay, the
+   right-edge handle resizes the shared inDuration/outDuration, and each
+   row's own ease chip cycles just that slot's easing. */
+.kf-ruler { position: relative; height: 14px; margin: 0 0 2px 128px; }
 .kf-ruler-tick {
   position: absolute; top: 0; font-family: var(--mono); font-size: 9px; color: var(--muted);
   transform: translateX(-50%);
@@ -690,34 +691,26 @@ input.project-name-input::placeholder { color: var(--muted); font-weight: 600; }
 .kf-track { display: flex; border-bottom: 1px solid var(--line); }
 .kf-track:last-child { border-bottom: none; }
 .kf-track-label {
-  width: 112px; flex-shrink: 0; font-family: var(--mono); color: var(--muted);
-  display: flex; flex-direction: column; justify-content: center; gap: 1px;
-  padding: 4px 8px; letter-spacing: 0.02em; line-height: 1.15;
+  width: 128px; flex-shrink: 0; font-family: var(--mono); color: var(--muted);
+  display: flex; align-items: center; padding: 0 8px; letter-spacing: 0.02em;
   border-right: 1px solid var(--line); background: var(--panel2);
 }
-.kf-fxtag { font-size: 8px; font-weight: 700; letter-spacing: 0.06em; opacity: 0.85; }
-.kf-fxname { font-size: 10.5px; font-weight: 600; }
-.kf-fxparam { font-size: 8.5px; color: var(--muted); }
-.kf-track-area { position: relative; flex: 1; height: 48px; cursor: crosshair; touch-action: none; }
-.kf-line { position: absolute; inset: 0; pointer-events: none; }
-.kf-dot-wrap { position: absolute; }
-.kf-dot {
-  position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px;
-  border: 1.5px solid var(--bg); transform: rotate(45deg);
-  cursor: grab; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4); touch-action: none;
+.kf-fxname { font-size: 10px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kf-track-area { position: relative; flex: 1; height: 40px; touch-action: none; }
+.kf-seg {
+  position: absolute; top: 4px; bottom: 4px; border-radius: 5px; cursor: grab;
+  display: flex; align-items: center; justify-content: center; touch-action: none;
 }
-.kf-dot:hover, .kf-dot.dragging { filter: brightness(1.4); }
-.kf-dot-val {
-  position: absolute; left: 0; top: -14px; transform: translateX(-50%);
-  font-family: var(--mono); font-size: 8.5px; font-variant-numeric: tabular-nums;
-  color: var(--text); background: var(--panel); padding: 0 3px; border-radius: 3px;
-  white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .12s;
+.kf-seg:active { cursor: grabbing; }
+.kf-handle-r { position: absolute; right: -4px; top: 0; width: 10px; height: 100%; cursor: ew-resize; }
+.kf-handle-r::after {
+  content: ""; position: absolute; right: 3px; top: 50%; width: 3px; height: 14px;
+  margin-top: -7px; border-radius: 2px; background: rgba(255, 255, 255, 0.5);
 }
-.kf-dot-wrap:hover .kf-dot-val { opacity: 1; }
 .kf-chip {
-  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  position: relative;
   font-family: var(--mono); font-size: 8.5px; font-weight: 600;
-  background: var(--panel2); color: var(--muted); border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 999px;
   padding: 1px 6px; cursor: pointer; white-space: nowrap; z-index: 1;
 }
-.kf-chip:hover { color: var(--text); border-color: var(--accent); }
+.kf-chip:hover { border-color: var(--accent); color: var(--accent2); }

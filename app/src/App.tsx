@@ -2,7 +2,7 @@ import React from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { Reel } from "../../src/Reel";
 import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
-import { TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS, hasMotionKeyframes, deriveKeyframesFromSimple } from "../../src/presets";
+import { TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS } from "../../src/presets";
 import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
   listFonts, deleteProjectFiles, type IngestResult, type FontEntry,
@@ -1884,7 +1884,10 @@ const ElementMotion: React.FC<{
   const isPhotoSlot = layer.role === "photo";
   const isTextLayer = layer.assetKind === "text";
   const isShapeLayer = layer.assetKind === "shape";
-  const kfMode = hasMotionKeyframes(layer);
+  // Simple (4 number fields) vs Keyframes (one draggable row per FX) — a
+  // pure display choice, not stored data; always starts on Simple, same as
+  // this whole component remounting (key={l.index}) on every layer switch.
+  const [kfView, setKfView] = React.useState(false);
   const inCategories = isTextLayer
     ? [...ENTRANCE_CATEGORIES, { label: "Text reveal", names: TEXT_ENTRANCE_NAMES }]
     : ENTRANCE_CATEGORIES;
@@ -2373,31 +2376,25 @@ const ElementMotion: React.FC<{
       <div className="card compact group" style={{ marginTop: 8 }}>
         <div className="row between" style={{ alignItems: "center" }}>
           <div className="subhead" style={{ marginBottom: 0 }}>Keyframes</div>
-          {/* Derived, not stored — "Keyframes" mode is simply "this layer has
-              at least one real track set" (see hasMotionKeyframes in
-              presets.ts), so there's nothing to get out of sync. Switching
-              to Keyframes doesn't touch the Simple fields below (still there
-              if you switch back); switching back to Simple just clears the
-              tracks — Simple's own delay/duration were never touched, so
-              that direction is always lossless. */}
+          {/* Purely a display choice — same delay/inDuration/outDelay/
+              outDuration fields either way, nothing to get out of sync
+              switching back and forth. Simple = 4 number fields (today's
+              exact UI). Keyframes = one draggable timeline row per chosen
+              FX (see KeyframeEditor.tsx) — same shared timing, just easier
+              to see/drag, with each row's own ease chip. */}
           <div className="row" style={{ gap: 0 }}>
-            <button className={"btn small" + (!kfMode ? " active" : "")}
-              onClick={() => onChange((l) => { l.motionKeyframes = undefined; })}>
+            <button className={"btn small" + (!kfView ? " active" : "")}
+              onClick={() => setKfView(false)}>
               Simple
             </button>
-            <button className={"btn small" + (kfMode ? " active" : "")}
-              title="Starts from whatever IN/OUT effects are already set on this element — same motion, now as an editable curve per property, each with its own easing"
-              onClick={() => {
-                if (kfMode) return;
-                onChange((l) => {
-                  l.motionKeyframes = deriveKeyframesFromSimple(l, pageDuration);
-                });
-              }}>
+            <button className={"btn small" + (kfView ? " active" : "")}
+              title="One draggable row per chosen effect — same timing as Simple, just easier to see and drag"
+              onClick={() => setKfView(true)}>
               Keyframes
             </button>
           </div>
         </div>
-        {kfMode ? (
+        {kfView ? (
           <KeyframeEditor layer={layer} pageDuration={pageDuration} onChange={onChange} />
         ) : (
         <>

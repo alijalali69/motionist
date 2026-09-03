@@ -1,111 +1,93 @@
 import React from "react";
-import type { ContentLayer as LayerT, MotionKeyframe, MotionFxTrack } from "../../src/types";
-import { KEYFRAME_EASE_NAMES, easingFn, KF_PROP_META, isProgressOnlyEffect } from "../../src/presets";
+import type { ContentLayer as LayerT } from "../../src/types";
+import { KEYFRAME_EASE_NAMES } from "../../src/presets";
 
-// The "Keyframes" mode of the Keyframes tab — one track group per chosen FX,
-// each in that effect's OWN real units (slideRight in px, rotateIn in degrees
-// + a scale track, etc). Two combined FX are two independent, separately-
-// editable tracks. Opacity is one shared track. Non-scalar effects (wipes,
-// shine, card-flip) get a single 0..1 Progress track instead. Seeded from the
-// layer's current Simple-mode motion via deriveKeyframesFromSimple (see the
-// Keyframes toggle in App.tsx), so switching modes reproduces what you had,
-// now editable. Diamonds only (no blocks) — the point of real-value mode is
-// that the diamond's HEIGHT is the value, which a flat block would hide.
+// The "Keyframes" view of the Keyframes tab — a visual, draggable
+// alternative to the 4 number fields in "Simple", nothing more. One row per
+// chosen effect (FX1/FX2/FX3, IN and OUT), each row a chunky block spanning
+// when that PHASE plays. Entrance rows all share layer.delay/inDuration —
+// dragging any one of them moves/resizes that same shared window, so all
+// entrance rows move together (they ARE the same timing, today's model,
+// unchanged) — but each row keeps its OWN ease chip (entranceEasing/2/3),
+// independently cyclable, so "FX1 lands hard, FX2 lands slower" is real.
+// Exit rows work the same way against outDelay/outDuration.
 
-const PAD = 0.1; // top/bottom inset so diamonds never clip at the track edge
-const SLOT_COLOR: Record<1 | 2 | 3, string> = {
-  1: "var(--accent)",
-  2: "var(--warn)",
-  3: "var(--good)",
-};
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+const SLOT_COLOR = ["var(--accent)", "var(--warn)", "var(--good)"];
 
-type TrackDesc = {
-  id: string;
-  effectLabel: string;   // "slideRight", or "Opacity" for the shared track
-  paramLabel: string;    // "X offset · px", "Progress · %"
-  tag?: string;          // "FX1 · IN" (absent for the shared opacity track)
+function cycleEase(current: string | undefined): string {
+  const i = KEYFRAME_EASE_NAMES.indexOf((current ?? "") as any);
+  return KEYFRAME_EASE_NAMES[(i + 1) % KEYFRAME_EASE_NAMES.length];
+}
+
+type Row = {
+  key: string;
+  label: string; // "FX1 slideRight · IN"
   color: string;
-  min: number;
-  max: number;
-  displayScale: number;  // 100 for 0..1 tracks shown as %, else 1
-  points: MotionKeyframe[];
-  onSet: (pts: MotionKeyframe[]) => void;
+  t0: number;    // frame
+  dur: number;   // frames
+  ease: string;
+  onMove: (deltaFrames: number) => void;
+  onResize: (newDur: number) => void;
+  onCycleEase: () => void;
 };
-
-// Where a track with no seeded points opens, per dimension — a sane visible
-// range so the first click lands somewhere meaningful.
-function emptyRange(prop: MotionFxTrack["prop"]): [number, number] {
-  switch (prop) {
-    case "tx": case "ty": return [-100, 100];
-    case "rotate": return [-45, 45];
-    case "rotateY": return [-120, 120];
-    case "scale": return [0, 2];
-    case "blur": return [0, 20];
-    default: return [0, 1]; // progress
-  }
-}
-
-function rangeFor(prop: MotionFxTrack["prop"] | "opacity", pts: MotionKeyframe[]): [number, number] {
-  if (prop === "opacity" || prop === "progress") return [0, 1];
-  if (pts.length === 0) return emptyRange(prop);
-  const vals = pts.map((p) => p.v);
-  let lo = Math.min(...vals), hi = Math.max(...vals);
-  // Include the effect's resting anchor so the "arrived" value reads as home:
-  // 0 for offsets/rotation, 1 for scale, 0 for blur.
-  const anchor = prop === "scale" ? 1 : 0;
-  lo = Math.min(lo, anchor); hi = Math.max(hi, anchor);
-  if (Math.abs(hi - lo) < 1e-6) { lo -= 1; hi += 1; }
-  const pad = (hi - lo) * 0.18;
-  return [lo - pad, hi + pad];
-}
 
 export const KeyframeEditor: React.FC<{
   layer: LayerT;
   pageDuration: number; // frames
   onChange: (fn: (l: LayerT) => void) => void;
 }> = ({ layer, pageDuration, onChange }) => {
-  const mk = layer.motionKeyframes ?? {};
-  const fx = mk.fx ?? [];
+  const inDuration = layer.inDuration ?? 26;
+  const outDuration = layer.outDuration ?? 24;
+  const outStart = layer.outDelay ?? (pageDuration - outDuration);
 
-  const setOpacity = (pts: MotionKeyframe[]) => {
-    const sorted = [...pts].sort((a, b) => a.t - b.t);
-    onChange((l) => { l.motionKeyframes = { ...(l.motionKeyframes ?? {}), opacity: sorted }; });
-  };
-  const setFxPoints = (idx: number, pts: MotionKeyframe[]) => {
-    const sorted = [...pts].sort((a, b) => a.t - b.t);
-    onChange((l) => {
-      const cur = l.motionKeyframes ?? {};
-      const nextFx = (cur.fx ?? []).map((f, i) => (i === idx ? { ...f, points: sorted } : f));
-      l.motionKeyframes = { ...cur, fx: nextFx };
+  const entranceSlots: [LayerT["entrance"] | undefined, string | undefined][] = [
+    [layer.entrance, layer.entranceEasing],
+    [layer.entrance2, layer.entranceEasing2],
+    [layer.entrance3, layer.entranceEasing3],
+  ];
+  const exitSlots: [LayerT["exit"] | undefined, string | undefined][] = [
+    [layer.exit, layer.exitEasing],
+    [layer.exit2, layer.exitEasing2],
+    [layer.exit3, layer.exitEasing3],
+  ];
+
+  const rows: Row[] = [];
+  entranceSlots.forEach(([name, ease], i) => {
+    if (!name || name === "none") return;
+    rows.push({
+      key: `in${i}`,
+      label: `FX${i + 1} ${name} · IN`,
+      color: SLOT_COLOR[i],
+      t0: layer.delay, dur: inDuration, ease: ease ?? "auto",
+      onMove: (dt) => onChange((l) => { l.delay = Math.max(0, l.delay + dt); }),
+      onResize: (d) => onChange((l) => { l.inDuration = Math.max(1, d); }),
+      onCycleEase: () => onChange((l) => {
+        const next = cycleEase(ease) as any;
+        if (i === 0) l.entranceEasing = next;
+        else if (i === 1) l.entranceEasing2 = next;
+        else l.entranceEasing3 = next;
+      }),
     });
-  };
-
-  const tracks: TrackDesc[] = [];
-  // Shared opacity first — always offered, even empty, so a fade can be
-  // shaped or added; empty just means "stays fully visible."
-  tracks.push({
-    id: "opacity",
-    effectLabel: "Opacity",
-    paramLabel: `${KF_PROP_META.opacity.label} · ${KF_PROP_META.opacity.unit}`,
-    color: "var(--muted)",
-    min: 0, max: 1, displayScale: 100,
-    points: mk.opacity ?? [],
-    onSet: setOpacity,
   });
-  fx.forEach((f, idx) => {
-    const meta = KF_PROP_META[f.prop];
-    const [min, max] = rangeFor(f.prop, f.points);
-    tracks.push({
-      id: `fx${idx}`,
-      effectLabel: f.effect,
-      paramLabel: `${meta.label} · ${meta.unit}`,
-      tag: `FX${f.slot} · ${f.phase.toUpperCase()}`,
-      color: SLOT_COLOR[f.slot],
-      min, max,
-      displayScale: f.prop === "progress" ? 100 : 1,
-      points: f.points,
-      onSet: (pts) => setFxPoints(idx, pts),
+  exitSlots.forEach(([name, ease], i) => {
+    if (!name || name === "none") return;
+    rows.push({
+      key: `out${i}`,
+      label: `FX${i + 1} ${name} · OUT`,
+      color: SLOT_COLOR[i],
+      t0: outStart, dur: outDuration, ease: ease ?? "auto",
+      onMove: (dt) => onChange((l) => {
+        const base = l.outDelay ?? outStart;
+        l.outDelay = clamp(base + dt, 0, pageDuration - (l.outDuration ?? outDuration));
+      }),
+      onResize: (d) => onChange((l) => { l.outDuration = Math.max(1, d); }),
+      onCycleEase: () => onChange((l) => {
+        const next = cycleEase(ease) as any;
+        if (i === 0) l.exitEasing = next;
+        else if (i === 1) l.exitEasing2 = next;
+        else l.exitEasing3 = next;
+      }),
     });
   });
 
@@ -113,6 +95,14 @@ export const KeyframeEditor: React.FC<{
   const durationSec = pageDuration / fps;
   const ticks: number[] = [];
   for (let s = 0; s <= Math.ceil(durationSec); s++) ticks.push(s);
+
+  if (rows.length === 0) {
+    return (
+      <p className="hint" style={{ marginTop: 8 }}>
+        No IN/OUT effects chosen yet — pick one above and it'll show up here as a draggable row.
+      </p>
+    );
+  }
 
   return (
     <div className="kf-editor">
@@ -122,141 +112,63 @@ export const KeyframeEditor: React.FC<{
         ))}
       </div>
       <div className="kf-stack">
-        {tracks.map((t) => (
-          <TrackRow key={t.id} track={t} pageDuration={pageDuration} />
+        {rows.map((r) => (
+          <TrackRow key={r.key} row={r} pageDuration={pageDuration} />
         ))}
       </div>
       <p className="hint" style={{ marginTop: 6 }}>
-        Each effect you picked shows here in its own real units. Drag a diamond to retime/reshape ·
-        click empty space to add one · double-click to remove · click an ease chip to change that
-        segment's curve.
+        Drag a block to move it, its right edge to resize · click the ease chip to cycle that effect's
+        own curve. Entrance rows share one timing window (today's IN delay/duration); exit rows share
+        the OUT window — dragging any row of the same phase moves them together.
       </p>
     </div>
   );
 };
 
-const TrackRow: React.FC<{ track: TrackDesc; pageDuration: number }> = ({ track, pageDuration }) => {
+const TrackRow: React.FC<{ row: Row; pageDuration: number }> = ({ row, pageDuration }) => {
   const areaRef = React.useRef<HTMLDivElement | null>(null);
-  const { min, max, points, onSet, color, displayScale } = track;
+  const dragRef = React.useRef<{ mode: "move" | "resize"; startX: number; startT0: number; startDur: number } | null>(null);
 
-  const valToTopPct = (v: number) => {
-    const frac = clamp((v - min) / (max - min || 1), 0, 1);
-    return ((1 - frac) * (1 - 2 * PAD) + PAD) * 100;
-  };
-  const yFracToVal = (yFrac: number) => {
-    const inner = (clamp(yFrac, PAD, 1 - PAD) - PAD) / (1 - 2 * PAD);
-    return min + (1 - inner) * (max - min);
-  };
-  const tToPct = (t: number) => (t / pageDuration) * 100;
+  const left = (row.t0 / pageDuration) * 100;
+  const width = (row.dur / pageDuration) * 100;
 
-  const addPointAt = (clientX: number, clientY: number) => {
-    const rect = areaRef.current!.getBoundingClientRect();
-    const t = Math.round(clamp(((clientX - rect.left) / rect.width) * pageDuration, 0, pageDuration));
-    const v = yFracToVal((clientY - rect.top) / rect.height);
-    onSet([...points, { t, v, ease: "linear" }]);
+  const onBodyDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    dragRef.current = { mode: "move", startX: e.clientX, startT0: row.t0, startDur: row.dur };
   };
-  const onAreaPointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest(".kf-dot, .kf-chip")) return;
-    addPointAt(e.clientX, e.clientY);
+  const onHandleDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    dragRef.current = { mode: "resize", startX: e.clientX, startT0: row.t0, startDur: row.dur };
   };
-
-  const cycleEase = (kf: MotionKeyframe) => {
-    const i = KEYFRAME_EASE_NAMES.indexOf(kf.ease);
-    const next = KEYFRAME_EASE_NAMES[(i + 1) % KEYFRAME_EASE_NAMES.length];
-    onSet(points.map((p) => (p === kf ? { ...p, ease: next } : p)));
+  const onMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d || !areaRef.current) return;
+    const rect = areaRef.current.getBoundingClientRect();
+    const dt = Math.round(((e.clientX - d.startX) / rect.width) * pageDuration);
+    if (d.mode === "move") row.onMove(dt);
+    else row.onResize(clamp(d.startDur + dt, 1, pageDuration));
   };
-  const removePoint = (kf: MotionKeyframe) => onSet(points.filter((p) => p !== kf));
-
-  const fmt = (v: number) => {
-    const n = v * displayScale;
-    return Math.abs(n) >= 10 || n % 1 === 0 ? Math.round(n).toString() : n.toFixed(1);
-  };
-
-  const curveD = React.useMemo(() => {
-    if (points.length < 2) return "";
-    const steps = 22;
-    const pts: string[] = [];
-    for (let i = 0; i < points.length - 1; i++) {
-      const a = points[i], b = points[i + 1];
-      for (let s = 0; s <= steps; s++) {
-        const p = s / steps;
-        const v = a.v + (b.v - a.v) * easingFn(a.ease)(p);
-        const t = a.t + (b.t - a.t) * p;
-        pts.push(`${tToPct(t)},${valToTopPct(v)}`);
-      }
-    }
-    return pts.join(" ");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, min, max, pageDuration]);
-
-  const sorted = [...points].sort((a, b) => a.t - b.t);
+  const onUp = () => { dragRef.current = null; };
 
   return (
     <div className="kf-track">
       <div className="kf-track-label">
-        {track.tag && <span className="kf-fxtag" style={{ color }}>{track.tag}</span>}
-        <span className="kf-fxname" style={{ color }}>{track.effectLabel}</span>
-        <span className="kf-fxparam">{track.paramLabel}</span>
+        <span className="kf-fxname" style={{ color: row.color }}>{row.label}</span>
       </div>
-      <div className="kf-track-area" ref={areaRef} onPointerDown={onAreaPointerDown}>
-        {curveD && (
-          <svg className="kf-line" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <polyline points={curveD} fill="none" stroke={color} strokeWidth="1.2" vectorEffect="non-scaling-stroke" opacity="0.85" />
-          </svg>
-        )}
-        {sorted.map((kf, i) => {
-          const b = sorted[i + 1];
-          return (
-            <React.Fragment key={i}>
-              <Diamond kf={kf} color={color} left={tToPct(kf.t)} top={valToTopPct(kf.v)} label={fmt(kf.v)}
-                onMove={(clientX, clientY) => {
-                  const rect = areaRef.current!.getBoundingClientRect();
-                  const t = Math.round(clamp(((clientX - rect.left) / rect.width) * pageDuration, 0, pageDuration));
-                  const v = yFracToVal((clientY - rect.top) / rect.height);
-                  onSet(points.map((p) => (p === kf ? { ...p, t, v } : p)));
-                }}
-                onDelete={() => removePoint(kf)} />
-              {b && (
-                <div className="kf-chip" style={{ left: `${(tToPct(kf.t) + tToPct(b.t)) / 2}%` }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => { e.stopPropagation(); cycleEase(kf); }}
-                  title="Click to change this segment's easing">
-                  {kf.ease}
-                </div>
-              )}
-            </React.Fragment>
-          );
-        })}
+      <div className="kf-track-area" ref={areaRef}>
+        <div className="kf-seg" style={{ left: `${left}%`, width: `${width}%`, background: `linear-gradient(90deg, ${row.color}22, ${row.color}88)` }}
+          onPointerDown={onBodyDown} onPointerMove={onMove} onPointerUp={onUp}>
+          <div className="kf-handle-r" onPointerDown={onHandleDown} onPointerMove={onMove} onPointerUp={onUp} />
+          <div className="kf-chip"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); row.onCycleEase(); }}
+            title="Click to cycle this effect's own easing">
+            {row.ease}
+          </div>
+        </div>
       </div>
-    </div>
-  );
-};
-
-const Diamond: React.FC<{
-  kf: MotionKeyframe;
-  color: string;
-  left: number;
-  top: number;
-  label: string;
-  onMove: (clientX: number, clientY: number) => void;
-  onDelete: () => void;
-}> = ({ kf, color, left, top, label, onMove, onDelete }) => {
-  const [dragging, setDragging] = React.useState(false);
-  return (
-    <div className="kf-dot-wrap" style={{ left: `${left}%`, top: `${top}%` }}>
-      <span className="kf-dot-val">{label}</span>
-      <div
-        className={"kf-dot" + (dragging ? " dragging" : "")}
-        style={{ background: color }}
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          (e.target as Element).setPointerCapture(e.pointerId);
-          setDragging(true);
-        }}
-        onPointerMove={(e) => { if (dragging) onMove(e.clientX, e.clientY); }}
-        onPointerUp={() => setDragging(false)}
-        onDoubleClick={(e) => { e.stopPropagation(); onDelete(); }}
-      />
     </div>
   );
 };
