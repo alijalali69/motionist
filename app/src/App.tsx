@@ -1784,6 +1784,11 @@ const DurationPresetField: React.FC<{
         {DURATION_PRESETS.map((p) => <option key={p.frames} value={p.frames}>{p.label}</option>)}
         <option value="custom">Custom…</option>
       </select>
+      {/* The 1-frame floor here (not 1 second — this converts typed seconds
+          to frames first) is load-bearing: spring() throws outright at
+          durationInFrames 0, so this can't be deferred to blur the way
+          fontSize's floor was — it has to stay live per-keystroke, the same
+          as it always has, so a value never mid-type reaches 0 frames. */}
       <NumField step={0.1} min={0.1} value={secVal} disabled={disabled} style={{ width: 64 }}
         onChange={(e) => onChange(Math.max(1, Math.round(parseFloat(e.target.value || "0") * 30)))} />
     </div>
@@ -2036,7 +2041,8 @@ const ElementMotion: React.FC<{
             {isLine ? (
               <div><label title="How thick the line is, in pixels">Thickness</label>
                 <NumField min={1} value={layer.height}
-                  onChange={(e) => onChange((l) => { l.height = Math.max(1, Math.round(parseFloat(e.target.value || "6"))); })} /></div>
+                  onChange={(e) => onChange((l) => { l.height = Math.round(parseFloat(e.target.value || "6")); })}
+                  onBlur={() => onChange((l) => { l.height = Math.max(1, l.height ?? 6); })} /></div>
             ) : (
               <div><label>Corner radius</label>
                 <NumField min={0} value={layer.shapeCornerRadius ?? 0}
@@ -2100,8 +2106,14 @@ const ElementMotion: React.FC<{
               already in that shared library, via Font/Style above. */}
           <div className="grid3 mini" style={{ marginTop: 6 }}>
             <div><label>Size</label>
+              {/* Clamping to the min on every keystroke (not just once you're
+                  done) meant typing "1" toward "18" or "100" got force-
+                  jumped to 8 immediately, before the next digit could land —
+                  the min only gets enforced on blur now, so mid-typing is
+                  never fought. */}
               <NumField min={8} value={layer.fontSize ?? 48}
-                onChange={(e) => onChange((l) => { l.fontSize = Math.max(8, Math.round(parseFloat(e.target.value || "48"))); })} /></div>
+                onChange={(e) => onChange((l) => { l.fontSize = Math.round(parseFloat(e.target.value || "48")); })}
+                onBlur={() => onChange((l) => { l.fontSize = Math.max(8, l.fontSize ?? 48); })} /></div>
             <div style={{ gridColumn: "span 2" }}><label>Color</label>
               <ColorField value={layer.textColor ?? "#1a1a1a"}
                 onChange={(hex) => onChange((l) => { l.textColor = hex; })}
