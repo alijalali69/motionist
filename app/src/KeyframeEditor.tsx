@@ -14,16 +14,22 @@ import { KEYFRAME_EASE_NAMES, easingFn, resolvedEntranceEasing, resolvedExitEasi
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const SLOT_COLOR = ["var(--accent)", "var(--warn)", "var(--good)"];
 
-// Snaps a frame value to the nearest whole second when it's already close —
-// a fast drag blows straight past the window in one jump so it barely
-// feels it, a slow drag lingers inside it, which is exactly the "snaps when
-// dragging slowly" feel without needing real velocity tracking.
+// Two-tier snap: a strong pull to the nearest whole SECOND when already
+// close (magnetic, not velocity-based — a fast drag blows straight past
+// the window in one jump so it barely feels it, a slow drag lingers
+// inside it, which reads as "only snaps when dragging slowly"); everywhere
+// else, a soft snap to the nearest 0.1s (3 frames) so the block still
+// lands on tidy round values instead of raw single-frame pixel jitter.
 const FPS = 30;
+const SEC_FRAMES = FPS;
+const SUBSEC_FRAMES = 3; // 0.1s
 const SNAP_WINDOW_FRAMES = 5;
-function snapToSecond(frame: number): number {
-  const nearest = Math.round(frame / FPS) * FPS;
-  return Math.abs(frame - nearest) <= SNAP_WINDOW_FRAMES ? nearest : frame;
+function snapFrame(frame: number): number {
+  const nearestSec = Math.round(frame / SEC_FRAMES) * SEC_FRAMES;
+  if (Math.abs(frame - nearestSec) <= SNAP_WINDOW_FRAMES) return nearestSec;
+  return Math.round(frame / SUBSEC_FRAMES) * SUBSEC_FRAMES;
 }
+const fmtSec = (frames: number) => (frames / FPS).toFixed(2) + "s";
 
 function cycleEase(current: string | undefined): string {
   const i = KEYFRAME_EASE_NAMES.indexOf((current ?? "") as any);
@@ -151,9 +157,9 @@ export const KeyframeEditor: React.FC<{
         ))}
       </div>
       <p className="hint" style={{ marginTop: 6 }}>
-        Each FX row moves independently — drag a block to move it, its right edge to resize (snaps near
-        whole seconds), click the ease chip to cycle that effect's own curve. The line on the block is
-        that curve, live.
+        Each FX row moves independently — drag a block to move it, its right edge to resize (a live
+        readout shows the exact time; snaps hard to whole seconds, softly to 0.1s steps otherwise),
+        click the ease chip to cycle that effect's own curve. The line on the block is that curve, live.
       </p>
     </div>
   );
@@ -162,6 +168,9 @@ export const KeyframeEditor: React.FC<{
 const TrackRow: React.FC<{ row: Row; pageDuration: number }> = ({ row, pageDuration }) => {
   const areaRef = React.useRef<HTMLDivElement | null>(null);
   const dragRef = React.useRef<{ mode: "move" | "resize"; startX: number; startT0: number; startDur: number } | null>(null);
+  // Mirrors dragRef into real state ONLY so the live seconds readout can
+  // render/update during a drag — dragRef alone doesn't trigger a render.
+  const [dragLive, setDragLive] = React.useState<{ mode: "move" | "resize"; frames: number } | null>(null);
 
   const left = (row.t0 / pageDuration) * 100;
   const width = (row.dur / pageDuration) * 100;
@@ -170,11 +179,13 @@ const TrackRow: React.FC<{ row: Row; pageDuration: number }> = ({ row, pageDurat
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
     dragRef.current = { mode: "move", startX: e.clientX, startT0: row.t0, startDur: row.dur };
+    setDragLive({ mode: "move", frames: row.t0 });
   };
   const onHandleDown = (e: React.PointerEvent) => {
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
     dragRef.current = { mode: "resize", startX: e.clientX, startT0: row.t0, startDur: row.dur };
+    setDragLive({ mode: "resize", frames: row.dur });
   };
   const onMove = (e: React.PointerEvent) => {
     const d = dragRef.current;
@@ -184,10 +195,17 @@ const TrackRow: React.FC<{ row: Row; pageDuration: number }> = ({ row, pageDurat
     // from the row's current (already-updated-mid-drag) position — see the
     // "jumps while dragging" fix.
     const dt = Math.round(((e.clientX - d.startX) / rect.width) * pageDuration);
-    if (d.mode === "move") row.onMove(snapToSecond(Math.max(0, d.startT0 + dt)));
-    else row.onResize(snapToSecond(clamp(d.startDur + dt, 1, pageDuration)));
+    if (d.mode === "move") {
+      const v = snapFrame(Math.max(0, d.startT0 + dt));
+      row.onMove(v);
+      setDragLive({ mode: "move", frames: v });
+    } else {
+      const v = snapFrame(clamp(d.startDur + dt, 1, pageDuration));
+      row.onResize(v);
+      setDragLive({ mode: "resize", frames: v });
+    }
   };
-  const onUp = () => { dragRef.current = null; };
+  const onUp = () => { dragRef.current = null; setDragLive(null); };
 
   // The real eased shape (sampled), redrawn whenever the ease actually
   // changes — this is the literal answer to "when easing is changed the
@@ -223,6 +241,11 @@ const TrackRow: React.FC<{ row: Row; pageDuration: number }> = ({ row, pageDurat
             <polyline points={curveD} fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
           </svg>
           <div className="kf-handle-r" onPointerDown={onHandleDown} onPointerMove={onMove} onPointerUp={onUp} />
+          {dragLive && (
+            <div className="kf-drag-readout">
+              {dragLive.mode === "move" ? "start " : "dur "}{fmtSec(dragLive.frames)}
+            </div>
+          )}
           <div className="kf-chip"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); row.onCycleEase(); }}
