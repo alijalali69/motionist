@@ -696,23 +696,14 @@ input.project-name-input::placeholder { color: var(--muted); font-weight: 600; }
   border-right: 1px solid var(--line); background: var(--panel2);
 }
 .kf-fxname { font-size: 10px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kf-track-area { position: relative; flex: 1; height: 40px; touch-action: none; }
+/* 72px (was 40px) — the curve is the whole point of the block now, and 40px
+   left it a sliver too thin to actually read the shape of the easing. */
+.kf-track-area { position: relative; flex: 1; height: 72px; touch-action: none; }
 .kf-seg {
-  position: absolute; top: 4px; bottom: 4px; border-radius: 5px; cursor: grab;
+  position: absolute; top: 6px; bottom: 6px; border-radius: 5px; cursor: grab;
   display: flex; align-items: center; justify-content: center; touch-action: none;
 }
 .kf-seg:active { cursor: grabbing; }
-/* overflow:hidden here (not on .kf-seg, which needs its resize handle to
-   overhang past its own right edge) — an overshoot curve (easeOutBack,
-   bounce) samples values outside 0..1, which without a clip pokes the
-   polyline out past the block's own top/bottom edge. */
-/* width/height:100% is load-bearing here, not decoration — an <svg> with a
-   viewBox but no width/height attribute has an intrinsic 1:1 aspect ratio,
-   and a replaced element with an intrinsic ratio sizes from THAT even when
-   fully inset-constrained on all 4 sides — without this it was rendering
-   as a square taller than the block (visible height ~2x the block's own),
-   which is what let overshoot curves poke out the bottom regardless of the
-   overflow:hidden below. */
 .kf-block-curve {
   /* Explicit width/height (not "auto" via inset on all 4 sides) — an <svg>
      with a viewBox but no width/height attribute has an intrinsic 1:1
@@ -723,9 +714,11 @@ input.project-name-input::placeholder { color: var(--muted); font-weight: 600; }
      the bottom regardless of the overflow:hidden below. calc() sidesteps
      the ambiguity outright instead of fighting it via inset + 100%
      (which would itself be over-constrained against these same offsets).
+     overflow:hidden lives here, not on .kf-seg, which needs its resize
+     handle to overhang past its own right edge.
   */
-  position: absolute; top: 3px; left: 4px;
-  width: calc(100% - 8px); height: calc(100% - 6px);
+  position: absolute; top: 5px; left: 4px;
+  width: calc(100% - 8px); height: calc(100% - 10px);
   pointer-events: none; opacity: 0.9; overflow: hidden; border-radius: 3px;
 }
 .kf-handle-r { position: absolute; right: -4px; top: 0; width: 10px; height: 100%; cursor: ew-resize; }
