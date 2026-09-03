@@ -158,7 +158,15 @@ const TrackRow: React.FC<{ row: Row; pageDuration: number }> = ({ row, pageDurat
         <span className="kf-fxname" style={{ color: row.color }}>{row.label}</span>
       </div>
       <div className="kf-track-area" ref={areaRef}>
-        <div className="kf-seg" style={{ left: `${left}%`, width: `${width}%`, background: `linear-gradient(90deg, ${row.color}22, ${row.color}88)` }}
+        <div className="kf-seg" style={{
+          left: `${left}%`, width: `${width}%`,
+          // Can't just append a hex-alpha suffix onto a var(...) reference
+          // (var(--accent)22 isn't valid CSS — the whole background rule
+          // gets silently dropped) — color-mix() blends the CSS var with
+          // transparent instead, so the fade-in gradient still tracks the
+          // token if the palette ever changes.
+          background: `linear-gradient(90deg, color-mix(in srgb, ${row.color} 15%, transparent), color-mix(in srgb, ${row.color} 55%, transparent))`,
+        }}
           onPointerDown={onBodyDown} onPointerMove={onMove} onPointerUp={onUp}>
           <div className="kf-handle-r" onPointerDown={onHandleDown} onPointerMove={onMove} onPointerUp={onUp} />
           <div className="kf-chip"
