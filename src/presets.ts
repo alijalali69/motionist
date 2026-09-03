@@ -1,7 +1,7 @@
 // Motion + transition preset library. This is the curated "menu" the app offers.
 // Entrances are pure functions of a 0..1 progress; ambient is a function of frame.
 import { interpolate, spring, Easing } from "remotion";
-import type { ContentLayer, MotionKeyframe } from "./types";
+import type { ContentLayer, MotionKeyframe, MotionFxTrack } from "./types";
 
 export type EntranceName =
   | "none"
@@ -320,24 +320,80 @@ export function keyframeValue(kfs: MotionKeyframe[] | undefined, frame: number, 
 export function hasMotionKeyframes(layer: ContentLayer): boolean {
   const mk = layer.motionKeyframes;
   if (!mk) return false;
-  return !!(mk.opacity?.length || mk.scale?.length || mk.tx?.length || mk.ty?.length || mk.rotate?.length);
+  return !!(mk.opacity?.length || mk.fx?.some((f) => f.points.length > 0));
 }
 
-// Resolves a layer's full motionKeyframes into one LayerMotion, same shape
-// combinedEntranceMotion/combinedExitMotion return — a track with no points
-// simply falls back to that property's identity value (rotateY/clipPath/
-// shadow/shine have no keyframe track at all yet, so they always stay at
-// their BASE identity here).
+// The plain scalar LayerMotion dimensions an effect can be decomposed into,
+// each editable as its own real-value track. opacity is handled separately
+// (one shared track). clipPath/shadow/shine are NON-scalar — an effect that
+// depends on them can't be split into real numbers, so it's driven by a
+// single 0..1 "progress" track instead (see PROGRESS_ONLY below).
+export const KF_SCALAR_PROPS = ["tx", "ty", "scale", "rotate", "rotateY", "blur"] as const;
+export type KfScalarProp = (typeof KF_SCALAR_PROPS)[number];
+
+// Human labels + units for each keyframe-able dimension, shown in the editor.
+export const KF_PROP_META: Record<MotionFxTrack["prop"] | "opacity", { label: string; unit: string }> = {
+  tx: { label: "X offset", unit: "px" },
+  ty: { label: "Y offset", unit: "px" },
+  scale: { label: "Scale", unit: "×" },
+  rotate: { label: "Rotation", unit: "°" },
+  rotateY: { label: "Flip Y", unit: "°" },
+  blur: { label: "Blur", unit: "px" },
+  progress: { label: "Progress", unit: "%" },
+  opacity: { label: "Opacity", unit: "%" },
+};
+
+// Effects whose motion is NOT a plain scalar (mask reveals via clipPath, the
+// shine sweep, the weighted card-flip's shadow) — these can't be exposed as
+// real px/deg values, so their whole effect rides one 0..1 progress track
+// that's fed back through entranceMotion/exitMotion.
+const PROGRESS_ONLY: ReadonlySet<string> = new Set<EntranceName | ExitName>([
+  "wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop",
+  "circleReveal", "typewriter", "shineIn", "cardFlipIn",
+  "wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop",
+  "circleHide", "typewriterOut", "shineOut", "cardFlipOut",
+]);
+export function isProgressOnlyEffect(effect: string): boolean {
+  return PROGRESS_ONLY.has(effect);
+}
+
+function effectMotionAt(effect: EntranceName | ExitName, phase: "in" | "out", p: number): LayerMotion {
+  return phase === "out" ? exitMotion(effect as ExitName, p) : entranceMotion(effect as EntranceName, p);
+}
+
+// Which scalar dimensions this effect actually moves (differs between its
+// start pose p=0 and end pose p=1) — a slide moves tx only, a rotate-in
+// moves rotate AND scale, a fade moves none of them (opacity-only).
+export function animatedScalarProps(effect: EntranceName | ExitName, phase: "in" | "out"): KfScalarProp[] {
+  const m0 = effectMotionAt(effect, phase, 0);
+  const m1 = effectMotionAt(effect, phase, 1);
+  return KF_SCALAR_PROPS.filter((p) => Math.abs((m0[p] ?? 0) - (m1[p] ?? 0)) > 0.001);
+}
+
+// Resolves a layer's full motionKeyframes into one LayerMotion. Each fx track
+// contributes to its own dimension (offsets/rotations SUM, scale MULTIPLIES,
+// same rules combineMotions uses); a "progress" track feeds its 0..1 value
+// back through the real effect function and merges the whole result. opacity
+// is the one shared track. Anything with no track holds its BASE identity.
 export function keyframeMotion(mk: ContentLayer["motionKeyframes"], frame: number): LayerMotion {
-  return {
-    opacity: keyframeValue(mk?.opacity, frame, 1),
-    tx: keyframeValue(mk?.tx, frame, 0),
-    ty: keyframeValue(mk?.ty, frame, 0),
-    scale: keyframeValue(mk?.scale, frame, 1),
-    rotate: keyframeValue(mk?.rotate, frame, 0),
-    blur: 0,
-    rotateY: 0,
-  };
+  const acc: LayerMotion = { ...BASE, opacity: keyframeValue(mk?.opacity, frame, 1) };
+  for (const f of mk?.fx ?? []) {
+    if (f.points.length === 0) continue;
+    if (f.prop === "progress") {
+      const p = keyframeValue(f.points, frame, 0);
+      const m = effectMotionAt(f.effect, f.phase, p);
+      acc.tx += m.tx; acc.ty += m.ty; acc.rotate += m.rotate; acc.rotateY += m.rotateY; acc.blur += m.blur;
+      acc.scale *= m.scale;
+      if (!acc.clipPath && m.clipPath) acc.clipPath = m.clipPath;
+      if (m.shadow !== undefined) acc.shadow = Math.max(acc.shadow ?? 0, m.shadow);
+      if (acc.shine === undefined && m.shine !== undefined) acc.shine = m.shine;
+    } else if (f.prop === "scale") {
+      acc.scale *= keyframeValue(f.points, frame, 1);
+    } else {
+      acc[f.prop] += keyframeValue(f.points, frame, 0);
+    }
+  }
+  return acc;
 }
 
 function toKeyframeEase(e: EasingName): Exclude<EasingName, "spring"> {
@@ -349,72 +405,82 @@ function toKeyframeEase(e: EasingName): Exclude<EasingName, "spring"> {
   return e === "spring" ? "easeOutBack" : e;
 }
 
-// Only push a point that actually moves time forward — keeps the array
-// valid (strictly increasing t) even when entrance/exit windows collide or
-// overlap on a very short page, instead of needing special-case handling
-// for every way that can happen.
-function pushIfMonotonic(arr: MotionKeyframe[], t: number, v: number, ease: Exclude<EasingName, "spring">) {
-  const last = arr[arr.length - 1];
-  if (last && t <= last.t) return;
-  arr.push({ t, v, ease });
-}
-
-// Converts a layer's CURRENT resolved Simple-mode motion (entrance + exit,
-// with whatever per-slot easing it already has) into real keyframe tracks —
-// this is what backs the Keyframes tab's "Keyframes" toggle: switching
-// modes hands you an editable curve that reproduces what you already had,
-// not a blank slate. Samples each of the 5 keyframe-able properties
-// (opacity/scale/tx/ty/rotate) at the entrance start/end and exit
-// start/end; a property that never actually moves (e.g. a plain "fade",
-// which only touches opacity) gets no track at all rather than a flat,
-// pointless one. blur/rotateY/clipPath/shadow/shine have no keyframe track
-// yet, so an effect that ONLY uses one of those (a wipe reveal, say) seeds
-// nothing for this layer — an honest gap, not a silent wrong answer.
+// Converts a layer's CURRENT Simple-mode motion (entrance + exit, with
+// whatever per-slot effects/easing it already has) into real per-FX
+// keyframe tracks — this is what backs the Keyframes toggle: it hands you an
+// editable copy of what you already had, in real units, one track group per
+// chosen FX. Scalar effects (slide/rotate/blur/…) seed their real px/deg/×
+// endpoints; non-scalar effects (wipes/shine/card-flip) seed a 0..1 progress
+// track. opacity — which nearly every effect fades — is one shared track,
+// sampled as the combined (min) opacity at each phase boundary.
 export function deriveKeyframesFromSimple(
   layer: ContentLayer, pageDuration: number
 ): NonNullable<ContentLayer["motionKeyframes"]> {
   const inDuration = layer.inDuration ?? 26;
   const outDuration = layer.outDuration ?? 24;
   const delay = layer.delay;
-  const entranceEnd = delay + inDuration;
+  const inEnd = delay + inDuration;
   const outStart = layer.outDelay ?? (pageDuration - outDuration);
   const outEnd = outStart + outDuration;
 
-  const entranceNames = [layer.entrance, layer.entrance2, layer.entrance3]
-    .filter((n): n is EntranceName => !!n && n !== "none");
-  const exitNames = [layer.exit, layer.exit2, layer.exit3]
-    .filter((n): n is ExitName => !!n && n !== "none");
-  const hasEntrance = entranceNames.length > 0;
-  const hasExit = exitNames.length > 0;
+  const round = (v: number) => Math.round(v * 1000) / 1000;
+  const fx: MotionFxTrack[] = [];
 
-  const startM = hasEntrance ? combineMotions(entranceNames.map((n) => entranceMotion(n, 0))) : BASE;
-  const midM = hasEntrance ? combineMotions(entranceNames.map((n) => entranceMotion(n, 1))) : BASE;
-  const exitStartM = hasExit ? combineMotions(exitNames.map((n) => exitMotion(n, 0))) : midM;
-  const exitEndM = hasExit ? combineMotions(exitNames.map((n) => exitMotion(n, 1))) : midM;
+  const slots: [EntranceName | ExitName | undefined, EasingName | undefined, 1 | 2 | 3, "in" | "out"][] = [
+    [layer.entrance, layer.entranceEasing, 1, "in"],
+    [layer.entrance2, layer.entranceEasing2, 2, "in"],
+    [layer.entrance3, layer.entranceEasing3, 3, "in"],
+    [layer.exit, layer.exitEasing, 1, "out"],
+    [layer.exit2, layer.exitEasing2, 2, "out"],
+    [layer.exit3, layer.exitEasing3, 3, "out"],
+  ];
 
-  const entranceEase = toKeyframeEase(
-    layer.entranceEasing ?? DEFAULT_ENTRANCE_EASING[layer.entrance] ?? "ease"
-  );
-  const exitEase = hasExit
-    ? toKeyframeEase(layer.exitEasing ?? DEFAULT_EXIT_EASING[exitNames[0]] ?? "easeIn")
-    : "linear";
+  for (const [name, easing, slot, phase] of slots) {
+    if (!name || name === "none") continue;
+    const [t0, t1] = phase === "in" ? [delay, inEnd] : [outStart, outEnd];
+    const defEase = phase === "in"
+      ? (DEFAULT_ENTRANCE_EASING[name as EntranceName] ?? "ease")
+      : (DEFAULT_EXIT_EASING[name as ExitName] ?? "easeIn");
+    const ease = toKeyframeEase(easing ?? defEase);
 
-  const tracks: NonNullable<ContentLayer["motionKeyframes"]> = {};
-  (["opacity", "scale", "tx", "ty", "rotate"] as const).forEach((key) => {
-    const points: MotionKeyframe[] = [];
-    if (hasEntrance) {
-      pushIfMonotonic(points, delay, startM[key], entranceEase);
-      pushIfMonotonic(points, entranceEnd, midM[key], "linear");
+    if (isProgressOnlyEffect(name)) {
+      fx.push({ slot, phase, effect: name, prop: "progress",
+        points: [{ t: t0, v: 0, ease }, { t: t1, v: 1, ease: "linear" }] });
+      continue;
     }
-    if (hasExit) {
-      pushIfMonotonic(points, outStart, exitStartM[key], exitEase);
-      pushIfMonotonic(points, outEnd, exitEndM[key], "linear");
+    const m0 = effectMotionAt(name, phase, 0);
+    const m1 = effectMotionAt(name, phase, 1);
+    for (const prop of animatedScalarProps(name, phase)) {
+      fx.push({ slot, phase, effect: name, prop,
+        points: [{ t: t0, v: round(m0[prop]), ease }, { t: t1, v: round(m1[prop]), ease: "linear" }] });
     }
-    if (points.length < 2) return; // nothing to animate on this property
-    const allEqual = points.every((p) => Math.abs(p.v - points[0].v) < 0.001);
-    if (!allEqual) tracks[key] = points;
-  });
-  return tracks;
+  }
+
+  // Shared opacity track — sampled as the combined (min) opacity of each
+  // phase's effects at its start/end; skipped if opacity never actually moves
+  // (e.g. a pure move with opacity pinned at 1).
+  const inNames = [layer.entrance, layer.entrance2, layer.entrance3].filter((n): n is EntranceName => !!n && n !== "none");
+  const outNames = [layer.exit, layer.exit2, layer.exit3].filter((n): n is ExitName => !!n && n !== "none");
+  const combinedOpacity = (names: (EntranceName | ExitName)[], phase: "in" | "out", p: number) =>
+    names.length ? Math.min(...names.map((n) => effectMotionAt(n, phase, p).opacity)) : 1;
+  const opacity: MotionKeyframe[] = [];
+  const inEase = toKeyframeEase(layer.entranceEasing ?? (layer.entrance ? DEFAULT_ENTRANCE_EASING[layer.entrance] ?? "ease" : "ease"));
+  const outEaseO = toKeyframeEase(layer.exitEasing ?? (outNames[0] ? DEFAULT_EXIT_EASING[outNames[0]] ?? "easeIn" : "easeIn"));
+  if (inNames.length) {
+    opacity.push({ t: delay, v: combinedOpacity(inNames, "in", 0), ease: inEase });
+    if (inEnd > delay) opacity.push({ t: inEnd, v: combinedOpacity(inNames, "in", 1), ease: "linear" });
+  }
+  if (outNames.length) {
+    const oStart = Math.max(outStart, opacity.length ? opacity[opacity.length - 1].t + 1 : outStart);
+    opacity.push({ t: oStart, v: combinedOpacity(outNames, "out", 0), ease: outEaseO });
+    if (outEnd > oStart) opacity.push({ t: outEnd, v: combinedOpacity(outNames, "out", 1), ease: "linear" });
+  }
+  const opacityMoves = opacity.length >= 2 && !opacity.every((p) => Math.abs(p.v - opacity[0].v) < 0.001);
+
+  const mk: NonNullable<ContentLayer["motionKeyframes"]> = {};
+  if (fx.length) mk.fx = fx;
+  if (opacityMoves) mk.opacity = opacity;
+  return mk;
 }
 
 // Crafted per motion character rather than one blanket curve for every

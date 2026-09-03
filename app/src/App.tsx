@@ -2398,7 +2398,7 @@ const ElementMotion: React.FC<{
           </div>
         </div>
         {kfMode ? (
-          <KeyframeEditor layer={layer} pageDuration={pageDuration} canvas={canvas} onChange={onChange} />
+          <KeyframeEditor layer={layer} pageDuration={pageDuration} onChange={onChange} />
         ) : (
         <>
         <div className="grid2 mini" style={{ marginTop: 8 }}>
