@@ -340,6 +340,83 @@ export function keyframeMotion(mk: ContentLayer["motionKeyframes"], frame: numbe
   };
 }
 
+function toKeyframeEase(e: EasingName): Exclude<EasingName, "spring"> {
+  // A keyframe segment's ease is a plain progress-shaping function; spring
+  // is physics, not that shape (see MotionKeyframe's own comment in
+  // types.ts) — easeOutBack is the closest plain curve to spring's overshoot
+  // feel, so switching to Keyframes doesn't flatten a bouncy entrance into
+  // something that reads as a completely different motion.
+  return e === "spring" ? "easeOutBack" : e;
+}
+
+// Only push a point that actually moves time forward — keeps the array
+// valid (strictly increasing t) even when entrance/exit windows collide or
+// overlap on a very short page, instead of needing special-case handling
+// for every way that can happen.
+function pushIfMonotonic(arr: MotionKeyframe[], t: number, v: number, ease: Exclude<EasingName, "spring">) {
+  const last = arr[arr.length - 1];
+  if (last && t <= last.t) return;
+  arr.push({ t, v, ease });
+}
+
+// Converts a layer's CURRENT resolved Simple-mode motion (entrance + exit,
+// with whatever per-slot easing it already has) into real keyframe tracks —
+// this is what backs the Keyframes tab's "Keyframes" toggle: switching
+// modes hands you an editable curve that reproduces what you already had,
+// not a blank slate. Samples each of the 5 keyframe-able properties
+// (opacity/scale/tx/ty/rotate) at the entrance start/end and exit
+// start/end; a property that never actually moves (e.g. a plain "fade",
+// which only touches opacity) gets no track at all rather than a flat,
+// pointless one. blur/rotateY/clipPath/shadow/shine have no keyframe track
+// yet, so an effect that ONLY uses one of those (a wipe reveal, say) seeds
+// nothing for this layer — an honest gap, not a silent wrong answer.
+export function deriveKeyframesFromSimple(
+  layer: ContentLayer, pageDuration: number
+): NonNullable<ContentLayer["motionKeyframes"]> {
+  const inDuration = layer.inDuration ?? 26;
+  const outDuration = layer.outDuration ?? 24;
+  const delay = layer.delay;
+  const entranceEnd = delay + inDuration;
+  const outStart = layer.outDelay ?? (pageDuration - outDuration);
+  const outEnd = outStart + outDuration;
+
+  const entranceNames = [layer.entrance, layer.entrance2, layer.entrance3]
+    .filter((n): n is EntranceName => !!n && n !== "none");
+  const exitNames = [layer.exit, layer.exit2, layer.exit3]
+    .filter((n): n is ExitName => !!n && n !== "none");
+  const hasEntrance = entranceNames.length > 0;
+  const hasExit = exitNames.length > 0;
+
+  const startM = hasEntrance ? combineMotions(entranceNames.map((n) => entranceMotion(n, 0))) : BASE;
+  const midM = hasEntrance ? combineMotions(entranceNames.map((n) => entranceMotion(n, 1))) : BASE;
+  const exitStartM = hasExit ? combineMotions(exitNames.map((n) => exitMotion(n, 0))) : midM;
+  const exitEndM = hasExit ? combineMotions(exitNames.map((n) => exitMotion(n, 1))) : midM;
+
+  const entranceEase = toKeyframeEase(
+    layer.entranceEasing ?? DEFAULT_ENTRANCE_EASING[layer.entrance] ?? "ease"
+  );
+  const exitEase = hasExit
+    ? toKeyframeEase(layer.exitEasing ?? DEFAULT_EXIT_EASING[exitNames[0]] ?? "easeIn")
+    : "linear";
+
+  const tracks: NonNullable<ContentLayer["motionKeyframes"]> = {};
+  (["opacity", "scale", "tx", "ty", "rotate"] as const).forEach((key) => {
+    const points: MotionKeyframe[] = [];
+    if (hasEntrance) {
+      pushIfMonotonic(points, delay, startM[key], entranceEase);
+      pushIfMonotonic(points, entranceEnd, midM[key], "linear");
+    }
+    if (hasExit) {
+      pushIfMonotonic(points, outStart, exitStartM[key], exitEase);
+      pushIfMonotonic(points, outEnd, exitEndM[key], "linear");
+    }
+    if (points.length < 2) return; // nothing to animate on this property
+    const allEqual = points.every((p) => Math.abs(p.v - points[0].v) < 0.001);
+    if (!allEqual) tracks[key] = points;
+  });
+  return tracks;
+}
+
 // Crafted per motion character rather than one blanket curve for every
 // entrance — a punchy zoom wants overshoot, a slide wants a clean
 // decelerate, a mask wipe reads best fairly linear-ish (ease-in-out).

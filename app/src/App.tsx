@@ -2,7 +2,7 @@ import React from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { Reel } from "../../src/Reel";
 import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
-import { TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS, hasMotionKeyframes } from "../../src/presets";
+import { TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS, hasMotionKeyframes, deriveKeyframesFromSimple } from "../../src/presets";
 import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
   listFonts, deleteProjectFiles, type IngestResult, type FontEntry,
@@ -1473,11 +1473,15 @@ export type MotionClip = {
   delay: number;
   inDuration?: number;
   entranceEasing?: LayerT["entranceEasing"];
+  entranceEasing2?: LayerT["entranceEasing2"];
+  entranceEasing3?: LayerT["entranceEasing3"];
   exit?: LayerT["exit"];
   exit2?: LayerT["exit2"];
   exit3?: LayerT["exit3"];
   outDuration?: number;
   exitEasing?: LayerT["exitEasing"];
+  exitEasing2?: LayerT["exitEasing2"];
+  exitEasing3?: LayerT["exitEasing3"];
   // Text style — never the `text` content itself.
   fontFamily?: LayerT["fontFamily"];
   fontFile?: LayerT["fontFile"];
@@ -1506,8 +1510,10 @@ function clipFromLayer(l: LayerT): MotionClip {
   return {
     entrance: l.entrance, entrance2: l.entrance2, entrance3: l.entrance3,
     delay: l.delay, inDuration: l.inDuration, entranceEasing: l.entranceEasing,
+    entranceEasing2: l.entranceEasing2, entranceEasing3: l.entranceEasing3,
     exit: l.exit, exit2: l.exit2, exit3: l.exit3,
     outDuration: l.outDuration, exitEasing: l.exitEasing,
+    exitEasing2: l.exitEasing2, exitEasing3: l.exitEasing3,
     fontFamily: l.fontFamily, fontFile: l.fontFile, fontSize: l.fontSize,
     textColor: l.textColor, textAlign: l.textAlign, direction: l.direction,
     letterSpacing: l.letterSpacing, lineHeight: l.lineHeight, uppercase: l.uppercase,
@@ -1525,11 +1531,15 @@ function applyClip(l: LayerT, clip: MotionClip) {
   l.delay = clip.delay;
   l.inDuration = clip.inDuration;
   l.entranceEasing = clip.entranceEasing;
+  l.entranceEasing2 = clip.entranceEasing2;
+  l.entranceEasing3 = clip.entranceEasing3;
   l.exit = clip.exit;
   l.exit2 = clip.exit2;
   l.exit3 = clip.exit3;
   l.outDuration = clip.outDuration;
   l.exitEasing = clip.exitEasing;
+  l.exitEasing2 = clip.exitEasing2;
+  l.exitEasing3 = clip.exitEasing3;
   // Style — skipped entirely for a field the clip never set (undefined),
   // so pasting an older clip that predates these fields is a no-op for them
   // instead of wiping the target layer's existing style back to defaults.
@@ -1707,28 +1717,34 @@ const KeyframesIcon: React.FC = () => (
 // a "+" reveals FX2 then FX3 (capped there), each removable with its own ✕
 // (removing one also clears anything after it, so there's never a gap).
 // values/onChange/onAdd/onRemove all address slots by 0/1/2 (FX1/FX2/FX3).
+// Each combined FX slot is a full row — effect AND its own easing,
+// independent of every other slot — so "FX1 lands hard (easeOutBack), FX2
+// settles slow (easeOutExpo)" is just two different dropdowns, not one
+// shared curve fighting two different effects.
 const FxSlots: React.FC<{
   label: string;
   hint?: string; // tooltip on the label — detail that doesn't need to sit in the visible text
   categories: { label: string; names: string[] }[];
   values: [string, string | undefined, string | undefined];
+  easings: [string | undefined, string | undefined, string | undefined];
   onChangeSlot: (index: 0 | 1 | 2, value: string) => void;
+  onChangeEasing: (index: 0 | 1 | 2, value: string | undefined) => void;
   onAdd: () => void;
   onRemove: (index: 1 | 2) => void;
   disabled?: boolean;
-}> = ({ label, hint, categories, values, onChangeSlot, onAdd, onRemove, disabled }) => {
+}> = ({ label, hint, categories, values, easings, onChangeSlot, onChangeEasing, onAdd, onRemove, disabled }) => {
   const shown = values[2] !== undefined ? 3 : values[1] !== undefined ? 2 : 1;
   return (
     <div className="mini fx-slots">
       <label title={hint}>{label}</label>
-      <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {([0, 1, 2] as const).slice(0, shown).map((i) => (
           <div key={i} className="row" style={{ gap: 5, alignItems: "center" }}>
-            <span className="tag" style={{ padding: "2px 5px" }}>FX{i + 1}</span>
+            <span className="tag" style={{ padding: "2px 5px", flexShrink: 0 }}>FX{i + 1}</span>
             {/* `disabled` means "can't combine more effects yet" (e.g. OUT's
                 FX1 is still "none") — it must never lock FX1 itself, or
                 there'd be no way to ever set it away from "none" at all. */}
-            <select value={values[i]} disabled={i > 0 && disabled}
+            <select value={values[i]} disabled={i > 0 && disabled} style={{ flex: "1.3 1 0" }}
               onChange={(e) => onChangeSlot(i, e.target.value)}>
               {/* "none" sits outside every group — an escape hatch, not a
                   motion family member — so it's the one bare <option>. */}
@@ -1739,6 +1755,12 @@ const FxSlots: React.FC<{
                 </optgroup>
               ))}
             </select>
+            <select value={easings[i] ?? ""} disabled={disabled || values[i] === "none"} style={{ flex: "1 1 0" }}
+              title="This slot's own easing — auto = a curve chosen to fit its effect"
+              onChange={(e) => onChangeEasing(i, e.target.value === "" ? undefined : e.target.value)}>
+              <option value="">(auto)</option>
+              {EASINGS.map((en) => <option key={en} value={en}>{en}</option>)}
+            </select>
             {i > 0 && (
               <button className="btn small" title={`Remove FX${i + 1}`} aria-label={`Remove FX${i + 1} effect`} disabled={disabled}
                 onClick={() => onRemove(i as 1 | 2)}>✕</button>
@@ -1746,7 +1768,7 @@ const FxSlots: React.FC<{
           </div>
         ))}
         {shown < 3 && (
-          <button className="btn small" title="Combine another effect" aria-label="Combine another effect" disabled={disabled} onClick={onAdd}>＋</button>
+          <button className="btn small" title="Combine another effect" aria-label="Combine another effect" disabled={disabled} onClick={onAdd}>＋ Add FX{shown + 1}</button>
         )}
       </div>
     </div>
@@ -2209,9 +2231,11 @@ const ElementMotion: React.FC<{
           <button className="btn small" title="Clear every IN/OUT effect, easing, timing, and parallax setting on this element back to none"
             onClick={() => onChange((l) => {
               l.entrance = "none"; l.entrance2 = undefined; l.entrance3 = undefined;
-              l.entranceEasing = undefined; l.inDuration = undefined; l.delay = 0;
+              l.entranceEasing = undefined; l.entranceEasing2 = undefined; l.entranceEasing3 = undefined;
+              l.inDuration = undefined; l.delay = 0;
               l.exit = undefined; l.exit2 = undefined; l.exit3 = undefined;
-              l.exitEasing = undefined; l.outDuration = undefined; l.outDelay = undefined;
+              l.exitEasing = undefined; l.exitEasing2 = undefined; l.exitEasing3 = undefined;
+              l.outDuration = undefined; l.outDelay = undefined;
               l.parallaxDepth = undefined;
             })}>
             Reset
@@ -2292,58 +2316,55 @@ const ElementMotion: React.FC<{
         )}
 
         <FxSlots
-          label="In effect" hint="Combine up to 3"
+          label="In effect" hint="Combine up to 3 — each with its own easing"
           categories={inCategories}
           values={[layer.entrance, layer.entrance2, layer.entrance3]}
+          easings={[layer.entranceEasing, layer.entranceEasing2, layer.entranceEasing3]}
           disabled={layer.entrance === "wordReveal" || layer.entrance === "lineReveal"}
           onChangeSlot={(i, v) => onChange((l) => {
             if (i === 0) l.entrance = v as any;
             else if (i === 1) l.entrance2 = v as any;
             else l.entrance3 = v as any;
           })}
+          onChangeEasing={(i, v) => onChange((l) => {
+            if (i === 0) l.entranceEasing = v as any;
+            else if (i === 1) l.entranceEasing2 = v as any;
+            else l.entranceEasing3 = v as any;
+          })}
           onAdd={() => onChange((l) => {
             if (!l.entrance2) l.entrance2 = "none" as any;
             else l.entrance3 = "none" as any;
           })}
           onRemove={(i) => onChange((l) => {
-            if (i === 1) { l.entrance2 = undefined; l.entrance3 = undefined; }
-            else l.entrance3 = undefined;
+            if (i === 1) { l.entrance2 = undefined; l.entranceEasing2 = undefined; l.entrance3 = undefined; l.entranceEasing3 = undefined; }
+            else { l.entrance3 = undefined; l.entranceEasing3 = undefined; }
           })}
         />
         <FxSlots
-          label="Out effect" hint="Combine up to 3"
+          label="Out effect" hint="Combine up to 3 — each with its own easing"
           categories={EXIT_CATEGORIES}
           values={[layer.exit ?? "none", layer.exit2, layer.exit3]}
+          easings={[layer.exitEasing, layer.exitEasing2, layer.exitEasing3]}
           disabled={(layer.exit ?? "none") === "none"}
           onChangeSlot={(i, v) => onChange((l) => {
             if (i === 0) l.exit = v as any;
             else if (i === 1) l.exit2 = v as any;
             else l.exit3 = v as any;
           })}
+          onChangeEasing={(i, v) => onChange((l) => {
+            if (i === 0) l.exitEasing = v as any;
+            else if (i === 1) l.exitEasing2 = v as any;
+            else l.exitEasing3 = v as any;
+          })}
           onAdd={() => onChange((l) => {
             if (!l.exit2) l.exit2 = "none" as any;
             else l.exit3 = "none" as any;
           })}
           onRemove={(i) => onChange((l) => {
-            if (i === 1) { l.exit2 = undefined; l.exit3 = undefined; }
-            else l.exit3 = undefined;
+            if (i === 1) { l.exit2 = undefined; l.exitEasing2 = undefined; l.exit3 = undefined; l.exitEasing3 = undefined; }
+            else { l.exit3 = undefined; l.exitEasing3 = undefined; }
           })}
         />
-        <div className="grid2 mini" style={{ marginTop: 4 }}>
-          <div><label>IN easing</label>
-            <select value={layer.entranceEasing ?? ""} title="Auto = a curve chosen to fit the IN effect"
-              onChange={(e) => onChange((l) => { l.entranceEasing = e.target.value === "" ? undefined : e.target.value as any; })}>
-              <option value="">(auto)</option>
-              {EASINGS.map((en) => <option key={en} value={en}>{en}</option>)}
-            </select></div>
-          <div><label>OUT easing</label>
-            <select value={layer.exitEasing ?? ""} title="Auto = a curve chosen to fit the OUT effect"
-              disabled={(layer.exit ?? "none") === "none"}
-              onChange={(e) => onChange((l) => { l.exitEasing = e.target.value === "" ? undefined : e.target.value as any; })}>
-              <option value="">(auto)</option>
-              {EASINGS.map((en) => <option key={en} value={en}>{en}</option>)}
-            </select></div>
-        </div>
       </div>
         </>
         )}
@@ -2365,11 +2386,11 @@ const ElementMotion: React.FC<{
               Simple
             </button>
             <button className={"btn small" + (kfMode ? " active" : "")}
-              title="Any property, any number of points, its own curve per segment — see the hint below once it's on"
+              title="Starts from whatever IN/OUT effects are already set on this element — same motion, now as an editable curve per property, each with its own easing"
               onClick={() => {
                 if (kfMode) return;
                 onChange((l) => {
-                  l.motionKeyframes = { opacity: [{ t: 0, v: 0, ease: "easeOut" }, { t: 15, v: 1, ease: "linear" }] };
+                  l.motionKeyframes = deriveKeyframesFromSimple(l, pageDuration);
                 });
               }}>
               Keyframes

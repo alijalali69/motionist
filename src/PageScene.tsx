@@ -14,7 +14,7 @@ import { Gif } from "@remotion/gif";
 import {
   entranceMotion, entranceProgress, exitMotion, exitProgress, combineMotions, ambientMotion,
   hasMotionKeyframes, keyframeMotion,
-  type EntranceName, type ExitName,
+  type EntranceName, type ExitName, type EasingName,
 } from "./presets";
 
 // A moving diagonal highlight for shineIn/shineOut (LayerMotion.shine,
@@ -42,18 +42,23 @@ function shadowStyle(shadow: number | undefined): string | undefined {
 import type { Page, ContentLayer } from "./types";
 
 // Resolves a layer's up-to-3 combined entrance (or exit) slots into one
-// LayerMotion — each slot gets its own progress (so "auto" easing still
-// resolves per-effect even when combined, e.g. zoomIn keeps its own
-// overshoot while slideRight keeps its own decelerate), then combineMotions
-// layers them together. Slots left unset (or "none") are skipped entirely.
+// LayerMotion — each slot gets its own progress AND its own easing (FX1 can
+// land hard while FX2 settles slow; they're independent, never sharing one
+// curve), then combineMotions layers them together. Slots left unset (or
+// "none") are skipped entirely; pairing name+easing BEFORE filtering keeps
+// FX3's easing tied to FX3 even if FX2 happens to be "none" in between.
 function combinedEntranceMotion(
   layer: ContentLayer, frame: number, fps: number, inDuration: number
 ) {
-  const names = [layer.entrance, layer.entrance2, layer.entrance3]
-    .filter((n): n is EntranceName => !!n && n !== "none");
-  if (names.length === 0) return entranceMotion("none", 1);
-  const motions = names.map((name) =>
-    entranceMotion(name, entranceProgress(name, layer.entranceEasing, frame, fps, layer.delay, inDuration))
+  const slots = ([
+    [layer.entrance, layer.entranceEasing],
+    [layer.entrance2, layer.entranceEasing2],
+    [layer.entrance3, layer.entranceEasing3],
+  ] as [EntranceName | undefined, EasingName | undefined][])
+    .filter((s): s is [EntranceName, EasingName | undefined] => !!s[0] && s[0] !== "none");
+  if (slots.length === 0) return entranceMotion("none", 1);
+  const motions = slots.map(([name, ease]) =>
+    entranceMotion(name, entranceProgress(name, ease, frame, fps, layer.delay, inDuration))
   );
   return combineMotions(motions);
 }
@@ -61,11 +66,15 @@ function combinedEntranceMotion(
 function combinedExitMotion(
   layer: ContentLayer, frame: number, outStart: number, outDuration: number
 ) {
-  const names = [layer.exit, layer.exit2, layer.exit3]
-    .filter((n): n is ExitName => !!n && n !== "none");
-  if (names.length === 0) return entranceMotion("none", 1);
-  const motions = names.map((name) =>
-    exitMotion(name, exitProgress(name, layer.exitEasing, frame, outStart, outDuration))
+  const slots = ([
+    [layer.exit, layer.exitEasing],
+    [layer.exit2, layer.exitEasing2],
+    [layer.exit3, layer.exitEasing3],
+  ] as [ExitName | undefined, EasingName | undefined][])
+    .filter((s): s is [ExitName, EasingName | undefined] => !!s[0] && s[0] !== "none");
+  if (slots.length === 0) return entranceMotion("none", 1);
+  const motions = slots.map(([name, ease]) =>
+    exitMotion(name, exitProgress(name, ease, frame, outStart, outDuration))
   );
   return combineMotions(motions);
 }
