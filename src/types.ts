@@ -109,6 +109,17 @@ export type ContentLayer = {
   shapeCornerRadius?: number; // rect/square/line only; ellipse/circle ignore it (already round)
   shapeStrokeColor?: string;
   shapeStrokeWidth?: number; // 0/undefined = no stroke
+  // Optional photo (or video/gif) mask — when set, this shape's own geometry
+  // (its corner radius / circle roundness / stroke) clips the uploaded media
+  // instead of the flat shapeFill color; shapeFill itself is untouched and
+  // just stops being drawn while a mask is present, so removing the photo
+  // always falls straight back to whatever fill was already set. Reuses the
+  // SAME generic crop fields a real photo layer uses — photoPanX/photoPanY/
+  // photoZoom/fit/photoMotion/naturalWidth/naturalHeight — a shape with a
+  // photo mask is pan/zoom-croppable exactly like a photo layer (see
+  // PhotoPanHandles' target filter in App.tsx).
+  shapePhotoFile?: string;
+  shapePhotoKind?: "image" | "video" | "gif";
 };
 
 export type TemplateLayer = {

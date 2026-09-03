@@ -644,6 +644,50 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     finally { setBusy(null); }
   };
 
+  // Same upload flow as onUploadPhoto, but for a SHAPE layer's optional
+  // photo mask — writes shapePhotoFile/shapePhotoKind instead of file/
+  // assetKind, so the layer stays a real "shape" (keeps its own Effects/
+  // Keyframes vocabulary) while the shape's own geometry clips the photo.
+  const onUploadShapePhoto = async (pageIndex: number, layerIndex: number, file: File) => {
+    if (!project) return;
+    const pageId = project.pages[pageIndex].id;
+    const oldFile = project.pages[pageIndex].layers[layerIndex]?.shapePhotoFile || null;
+    setBusy("Uploading photo…"); setErr(null);
+    try {
+      const { file: f, kind, width, height } = await uploadAsset(file, `shapephoto_${pageId}_${layerIndex}`, projectId);
+      update((p) => {
+        const layer = p.pages[pageIndex].layers[layerIndex];
+        layer.shapePhotoFile = f;
+        // "lottie" can't be object-fit cropped like an image/video/gif can —
+        // the upload picker's own accept list already excludes .json, this
+        // is just a defensive fallback so an unexpected kind renders as a
+        // photo rather than something broken.
+        layer.shapePhotoKind = kind === "video" || kind === "gif" ? kind : "image";
+        layer.fit = "cover";
+        layer.naturalWidth = width;
+        layer.naturalHeight = height;
+        layer.photoPanX = 50;
+        layer.photoPanY = 50;
+        layer.photoZoom = 1;
+      });
+      if (oldFile) deleteProjectFiles(projectId, [oldFile]);
+    } catch (e: any) { setErr(String(e.message || e)); }
+    finally { setBusy(null); }
+  };
+
+  // Removing the mask is a pure data edit (no server call beyond freeing the
+  // file) — falls straight back to the shape's own flat shapeFill color.
+  const onRemoveShapePhoto = (pageIndex: number, layerIndex: number) => {
+    if (!project) return;
+    const oldFile = project.pages[pageIndex].layers[layerIndex]?.shapePhotoFile || null;
+    update((p) => {
+      const layer = p.pages[pageIndex].layers[layerIndex];
+      layer.shapePhotoFile = undefined;
+      layer.shapePhotoKind = undefined;
+    });
+    if (oldFile) deleteProjectFiles(projectId, [oldFile]);
+  };
+
   // Text layers are created directly in the app (not extracted from a PSD/SVG)
   // — a live Farsi (or any) text box with a sensible default box + fade-in.
   // `box` overrides the default position/size — the text tool passes one in
@@ -947,7 +991,9 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     if (!page) return [];
     const list: PhotoPanTarget[] = [];
     page.layers.forEach((l, li) => {
-      if (l.role !== "photo" || !l.assetKind || !l.naturalWidth || !l.naturalHeight) return;
+      const isPlainPhoto = l.role === "photo" && !!l.assetKind;
+      const isShapeWithPhoto = l.assetKind === "shape" && !!l.shapePhotoFile;
+      if (!(isPlainPhoto || isShapeWithPhoto) || !l.naturalWidth || !l.naturalHeight) return;
       list.push({
         id: `photo-${li}`,
         box: { left: l.left, top: l.top, width: l.width, height: l.height },
@@ -1314,6 +1360,8 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             onCopyClip={setMotionClip}
             onChange={(fn) => update((p) => fn(p.pages[sel]))}
             onUploadPhoto={(li, file) => onUploadPhoto(sel, li, file)}
+            onUploadShapePhoto={(li, file) => onUploadShapePhoto(sel, li, file)}
+            onRemoveShapePhoto={(li) => onRemoveShapePhoto(sel, li)}
             onToggleTextTool={() => setTextTool((v) => !v)}
             textToolArmed={textTool}
             onAddPhoto={() => newPhotoInput.current?.click()}
@@ -1823,6 +1871,8 @@ const ElementMotion: React.FC<{
   onCopy: (clip: MotionClip) => void;
   onChange: (fn: (l: LayerT) => void) => void;
   onUploadPhoto?: (file: File) => void;
+  onUploadShapePhoto?: (file: File) => void;
+  onRemoveShapePhoto?: () => void;
   fonts?: FontEntry[];
   onSelectFont?: (entry: FontEntry | null) => void;
   onDelete: () => void;
@@ -1843,10 +1893,11 @@ const ElementMotion: React.FC<{
   // textarea once, on mount, so placing text and typing is one continuous
   // motion instead of place-then-hunt-for-the-field.
   autoFocus?: boolean;
-}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, pageDuration, autoFocus }) => {
+}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, pageDuration, autoFocus }) => {
   const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
   const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
   const photoInput = React.useRef<HTMLInputElement>(null);
+  const shapePhotoInput = React.useRef<HTMLInputElement>(null);
   const textContentRef = React.useRef<HTMLTextAreaElement>(null);
   // Runs once, on mount — a freshly-placed text layer is a genuinely new
   // ElementMotion instance (key={l.index}), so this never re-fires later
@@ -2077,13 +2128,57 @@ const ElementMotion: React.FC<{
             )}
           </div>
           <div className="grid2 mini" style={{ marginTop: 4 }}>
-            <div><label>Fill</label>
+            <div><label title={layer.shapePhotoFile ? "Not shown while a photo mask is set below — remove it to use this again" : undefined}>Fill</label>
               <ColorField value={layer.shapeFill ?? "#000000"}
                 onChange={(hex) => onChange((l) => { l.shapeFill = hex; })}
                 swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} /></div>
             <div><label title="How see-through the fill/stroke is — 100% is fully solid, the color you pick exactly">Opacity</label>
               <NumField min={0} max={100} value={Math.round((layer.opacity ?? 1) * 100)}
                 onChange={(e) => onChange((l) => { l.opacity = Math.min(100, Math.max(0, Math.round(parseFloat(e.target.value || "100")))) / 100; })} /></div>
+          </div>
+          {/* Photo mask — an uploaded photo/video, clipped to this shape's
+              own outline (corner radius / circle roundness) instead of the
+              flat Fill above. Reuses the exact same Zoom/Fit crop controls a
+              real photo layer has, since a shape carrying one is
+              pan/zoom-croppable the same way (see PhotoPanHandles' filter). */}
+          <div className="mini" style={{ marginTop: 4 }}>
+            <label title="Clips an uploaded photo/video to this shape's outline instead of the flat Fill above">Photo mask</label>
+            <div className="row" style={{ gap: 4 }}>
+              <button className={"btn small" + (layer.shapePhotoFile ? " filled" : "")} style={{ flex: 1 }}
+                onClick={() => shapePhotoInput.current?.click()}>
+                {layer.shapePhotoFile ? "Replace photo" : "Upload photo"}
+              </button>
+              {layer.shapePhotoFile && (
+                <button className="btn small" title="Remove — falls back to Fill above"
+                  onClick={() => onRemoveShapePhoto?.()}>✕</button>
+              )}
+            </div>
+            <input ref={shapePhotoInput} className="hidden-file" type="file"
+              accept=".png,.jpg,.jpeg,.webp,.svg,.gif,.webm,.mov,.mp4"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadShapePhoto?.(f); e.target.value = ""; }} />
+            {layer.shapePhotoFile && (
+              <>
+                <div className="row between mini" style={{ marginTop: 6 }}>
+                  <span style={{ color: "var(--muted)" }}>Zoom {(layer.photoZoom ?? 1).toFixed(2)}×</span>
+                  <div className="row" style={{ gap: 4 }}>
+                    <button className="btn small" title="Zoom out — can shrink the photo smaller than its frame, revealing what's behind it"
+                      onClick={() => onChange((l) => { l.photoZoom = Math.max(0.3, +((l.photoZoom ?? 1) - 0.1).toFixed(2)); })}>−</button>
+                    <button className="btn small" title="Zoom in"
+                      onClick={() => onChange((l) => { l.photoZoom = Math.min(3, +((l.photoZoom ?? 1) + 0.1).toFixed(2)); })}>＋</button>
+                    <button className="btn small" title="Reset crop to centered"
+                      onClick={() => onChange((l) => { l.photoZoom = 1; l.photoPanX = 50; l.photoPanY = 50; })}>Reset</button>
+                  </div>
+                </div>
+                <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+                  <span style={{ color: "var(--muted)" }} title="Cover fills the shape (crops mismatched aspect ratios); contain shows the whole photo (may letterbox).">Fit</span>
+                  <select value={layer.fit ?? "cover"} style={{ width: "auto" }}
+                    onChange={(e) => onChange((l) => { l.fit = e.target.value as any; })}>
+                    <option value="cover">cover (fill, may crop)</option>
+                    <option value="contain">contain (whole photo, may letterbox)</option>
+                  </select>
+                </div>
+              </>
+            )}
           </div>
           <div className="grid2 mini" style={{ marginTop: 4 }}>
             <div><label>Stroke width</label>
@@ -2465,6 +2560,8 @@ const PageInspector: React.FC<{
   onCopyClip: (clip: MotionClip) => void;
   onChange: (fn: (pg: PageT) => void) => void;
   onUploadPhoto: (layerIndex: number, file: File) => void;
+  onUploadShapePhoto: (layerIndex: number, file: File) => void;
+  onRemoveShapePhoto: (layerIndex: number) => void;
   onToggleTextTool: () => void;
   textToolArmed: boolean;
   onAddPhoto: () => void;
@@ -2479,7 +2576,7 @@ const PageInspector: React.FC<{
   onSaveMotionPreset: (name: string, clip: MotionClip) => void;
   onDeleteMotionPreset: (id: string) => void;
   newestLayerIndex: number | null;
-}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex }) => {
+}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex }) => {
   // Duration/bg/ambient/transition/subtitle vs. the layer list were one long
   // stacked scroll before — split so each is reachable without scrolling
   // past the other. Resets to "Page" on every page switch (this component
@@ -2582,6 +2679,8 @@ const PageInspector: React.FC<{
               canMoveUp={li < page.layers.length - 1}
               canMoveDown={li > 0}
               onUploadPhoto={(file) => onUploadPhoto(li, file)}
+              onUploadShapePhoto={(file) => onUploadShapePhoto(li, file)}
+              onRemoveShapePhoto={() => onRemoveShapePhoto(li)}
               fonts={fonts}
               onSelectFont={(entry) => onSelectFont(li, entry)}
               swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch}

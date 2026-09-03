@@ -254,20 +254,42 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
   const objectPosition = `${panX}% ${panY}%`;
 
   // BG/Title/photo slots can be replaced by an uploaded asset; render it by
-  // kind but keep the layer's box + entrance + page ambient motion. A shape
-  // layer has no asset at all — just a solid-color (or stroked) box, same
-  // pipeline otherwise.
+  // kind but keep the layer's box + entrance + page ambient motion. A plain
+  // shape layer has no asset at all — just a solid-color (or stroked) box —
+  // unless it's carrying an uploaded photo mask, in which case the SHAPE's
+  // own geometry (corner radius / circle roundness) clips that photo instead
+  // of filling with a flat color; the stroke (if any) still draws on top.
+  const shapeRadius = (layer.shapeType === "ellipse" || layer.shapeType === "circle") ? "50%" : (layer.shapeCornerRadius ?? 0);
+  const shapeBorder = layer.shapeStrokeWidth
+    ? `${layer.shapeStrokeWidth}px solid ${layer.shapeStrokeColor ?? "#000000"}`
+    : undefined;
   const media = isShape ? (
-    <div
-      style={{
-        width: "100%", height: "100%", boxSizing: "border-box",
-        background: layer.shapeFill ?? "#000000",
-        borderRadius: (layer.shapeType === "ellipse" || layer.shapeType === "circle") ? "50%" : (layer.shapeCornerRadius ?? 0),
-        border: layer.shapeStrokeWidth
-          ? `${layer.shapeStrokeWidth}px solid ${layer.shapeStrokeColor ?? "#000000"}`
-          : undefined,
-      }}
-    />
+    layer.shapePhotoFile ? (
+      // A plain overflow:hidden wrapper clips whichever media component
+      // renders inside it (Img/OffthreadVideo/Gif each have their own style
+      // API — clipping the wrapper instead of each one individually is one
+      // rule that works no matter which kind got uploaded).
+      <div style={{ width: "100%", height: "100%", boxSizing: "border-box", borderRadius: shapeRadius, border: shapeBorder, overflow: "hidden" }}>
+        {layer.shapePhotoKind === "video" ? (
+          <OffthreadVideo src={staticFile(layer.shapePhotoFile)} transparent muted
+            style={{ width: "100%", height: "100%", objectFit: fit, objectPosition, transform: `scale(${zoom})` }} />
+        ) : layer.shapePhotoKind === "gif" ? (
+          <Gif src={staticFile(layer.shapePhotoFile)} fit={fit} width={layer.width} height={layer.height} />
+        ) : (
+          <Img src={staticFile(layer.shapePhotoFile)}
+            style={{ width: "100%", height: "100%", objectFit: fit, objectPosition, transform: `scale(${zoom})` }} />
+        )}
+      </div>
+    ) : (
+      <div
+        style={{
+          width: "100%", height: "100%", boxSizing: "border-box",
+          background: layer.shapeFill ?? "#000000",
+          borderRadius: shapeRadius,
+          border: shapeBorder,
+        }}
+      />
+    )
   ) :
     layer.assetKind === "video" ? (
       <OffthreadVideo src={url} transparent muted
