@@ -2,7 +2,7 @@ import React from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { Reel } from "../../src/Reel";
 import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
-import { ENTRANCE_NAMES, TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, EXIT_NAMES, EASING_NAMES, TRANSITIONS, hasMotionKeyframes } from "../../src/presets";
+import { TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS, hasMotionKeyframes } from "../../src/presets";
 import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
   listFonts, deleteProjectFiles, type IngestResult, type FontEntry,
@@ -19,7 +19,6 @@ import { TextPlacementOverlay } from "./TextPlacementOverlay";
 import { NumField } from "./NumField";
 import { KeyframeEditor } from "./KeyframeEditor";
 
-const ENTRANCES = ENTRANCE_NAMES;
 const AMBIENTS = AMBIENT_NAMES;
 const EASINGS = EASING_NAMES;
 
@@ -1711,13 +1710,13 @@ const KeyframesIcon: React.FC = () => (
 const FxSlots: React.FC<{
   label: string;
   hint?: string; // tooltip on the label — detail that doesn't need to sit in the visible text
-  options: readonly string[];
+  categories: { label: string; names: string[] }[];
   values: [string, string | undefined, string | undefined];
   onChangeSlot: (index: 0 | 1 | 2, value: string) => void;
   onAdd: () => void;
   onRemove: (index: 1 | 2) => void;
   disabled?: boolean;
-}> = ({ label, hint, options, values, onChangeSlot, onAdd, onRemove, disabled }) => {
+}> = ({ label, hint, categories, values, onChangeSlot, onAdd, onRemove, disabled }) => {
   const shown = values[2] !== undefined ? 3 : values[1] !== undefined ? 2 : 1;
   return (
     <div className="mini fx-slots">
@@ -1731,7 +1730,14 @@ const FxSlots: React.FC<{
                 there'd be no way to ever set it away from "none" at all. */}
             <select value={values[i]} disabled={i > 0 && disabled}
               onChange={(e) => onChangeSlot(i, e.target.value)}>
-              {options.map((o) => <option key={o} value={o}>{o}</option>)}
+              {/* "none" sits outside every group — an escape hatch, not a
+                  motion family member — so it's the one bare <option>. */}
+              <option value="none">none</option>
+              {categories.map((cat) => (
+                <optgroup key={cat.label} label={cat.label}>
+                  {cat.names.map((o) => <option key={o} value={o}>{o}</option>)}
+                </optgroup>
+              ))}
             </select>
             {i > 0 && (
               <button className="btn small" title={`Remove FX${i + 1}`} aria-label={`Remove FX${i + 1} effect`} disabled={disabled}
@@ -1852,7 +1858,9 @@ const ElementMotion: React.FC<{
   const isTextLayer = layer.assetKind === "text";
   const isShapeLayer = layer.assetKind === "shape";
   const kfMode = hasMotionKeyframes(layer);
-  const inOptions = isTextLayer ? [...ENTRANCES, ...TEXT_ENTRANCE_NAMES] : ENTRANCES;
+  const inCategories = isTextLayer
+    ? [...ENTRANCE_CATEGORIES, { label: "Text reveal", names: TEXT_ENTRANCE_NAMES }]
+    : ENTRANCE_CATEGORIES;
 
   // Group the shared library by family name, for the two-step Font -> Style pickers.
   const families = React.useMemo(() => {
@@ -2273,7 +2281,7 @@ const ElementMotion: React.FC<{
 
         <FxSlots
           label="In effect" hint="Combine up to 3"
-          options={inOptions}
+          categories={inCategories}
           values={[layer.entrance, layer.entrance2, layer.entrance3]}
           disabled={layer.entrance === "wordReveal" || layer.entrance === "lineReveal"}
           onChangeSlot={(i, v) => onChange((l) => {
@@ -2282,8 +2290,8 @@ const ElementMotion: React.FC<{
             else l.entrance3 = v as any;
           })}
           onAdd={() => onChange((l) => {
-            if (!l.entrance2) l.entrance2 = inOptions[0] as any;
-            else l.entrance3 = inOptions[0] as any;
+            if (!l.entrance2) l.entrance2 = "none" as any;
+            else l.entrance3 = "none" as any;
           })}
           onRemove={(i) => onChange((l) => {
             if (i === 1) { l.entrance2 = undefined; l.entrance3 = undefined; }
@@ -2292,7 +2300,7 @@ const ElementMotion: React.FC<{
         />
         <FxSlots
           label="Out effect" hint="Combine up to 3"
-          options={EXIT_NAMES}
+          categories={EXIT_CATEGORIES}
           values={[layer.exit ?? "none", layer.exit2, layer.exit3]}
           disabled={(layer.exit ?? "none") === "none"}
           onChangeSlot={(i, v) => onChange((l) => {
@@ -2301,8 +2309,8 @@ const ElementMotion: React.FC<{
             else l.exit3 = v as any;
           })}
           onAdd={() => onChange((l) => {
-            if (!l.exit2) l.exit2 = EXIT_NAMES[0] as any;
-            else l.exit3 = EXIT_NAMES[0] as any;
+            if (!l.exit2) l.exit2 = "none" as any;
+            else l.exit3 = "none" as any;
           })}
           onRemove={(i) => onChange((l) => {
             if (i === 1) { l.exit2 = undefined; l.exit3 = undefined; }

@@ -54,6 +54,23 @@ export const ENTRANCE_NAMES: EntranceName[] = [
 // don't show options that only make sense for live text.
 export const TEXT_ENTRANCE_NAMES: EntranceName[] = ["wordReveal", "lineReveal"];
 
+// Grouped for the FX picker — a flat 20+ option dropdown made every effect a
+// scroll-and-squint search; a header per motion family (rendered as a real
+// <optgroup>) turns "which one was the one that slides in?" into "open
+// Slide". "none" stays outside every group — it's the escape hatch, not a
+// member of a category — so FxSlots renders it as one standalone option
+// before these. Every EntranceName except "none" appears in exactly one
+// group here; TEXT_ENTRANCE_NAMES gets its own group, added by the caller
+// only for text layers (see inOptions in App.tsx).
+export const ENTRANCE_CATEGORIES: { label: string; names: EntranceName[] }[] = [
+  { label: "Fade & glow", names: ["fade", "blurIn", "shineIn"] },
+  { label: "Slide", names: ["slideRight", "slideLeft", "slideUp", "slideDown"] },
+  { label: "Scale", names: ["pop", "zoomIn", "zoomOut", "growIn"] },
+  { label: "Drop & float", names: ["dropIn", "riseIn", "floatIn"] },
+  { label: "Rotate & flip", names: ["rotateIn", "flipIn", "cardFlipIn"] },
+  { label: "Wipe & reveal", names: ["wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop", "circleReveal", "typewriter"] },
+];
+
 export type AmbientName =
   | "none"
   | "kenburns"
@@ -103,6 +120,17 @@ export const EXIT_NAMES: ExitName[] = [
   "shrinkOut", "zoomOut", "popOut", "blurOut", "dropOut", "riseOut", "rotateOut", "flipOut",
   "wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide",
   "cardFlipOut", "shineOut", "typewriterOut",
+];
+
+// Same grouping as ENTRANCE_CATEGORIES, mirrored for exits — see the comment
+// there. Every ExitName except "none" appears in exactly one group.
+export const EXIT_CATEGORIES: { label: string; names: ExitName[] }[] = [
+  { label: "Fade & glow", names: ["fadeOut", "blurOut", "shineOut"] },
+  { label: "Slide", names: ["slideOutLeft", "slideOutRight", "slideOutUp", "slideOutDown"] },
+  { label: "Scale", names: ["popOut", "zoomOut", "shrinkOut"] },
+  { label: "Drop & rise", names: ["dropOut", "riseOut"] },
+  { label: "Rotate & flip", names: ["rotateOut", "flipOut", "cardFlipOut"] },
+  { label: "Wipe & hide", names: ["wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide", "typewriterOut"] },
 ];
 
 // Page-to-page transitions. `name` is stored on the page; `label` shows in the UI.
