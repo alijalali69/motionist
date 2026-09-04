@@ -171,6 +171,48 @@ export async function deleteMotionPreset(id: string): Promise<void> {
   await fetch(`/api/motion-presets/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+// --- Page-layout template library: a whole saved PAGE (layers, boxes,
+// motion, its own background style), reusable across any project — unlike
+// a motion preset, this also carries real asset files, physically copied
+// server-side into a shared store (see /api/page-templates in server/
+// index.mjs) so the template outlives whichever project it was saved from.
+export type PageTemplateSummary = {
+  id: string;
+  name: string;
+  createdAt: string;
+  thumbnail: string | null;
+};
+export type PageTemplateEntry = PageTemplateSummary & { page: Project["pages"][number] };
+
+export async function listPageTemplates(): Promise<PageTemplateSummary[]> {
+  const r = await fetch("/api/page-templates");
+  return r.json();
+}
+
+export async function loadPageTemplate(id: string): Promise<PageTemplateEntry> {
+  const r = await fetch(`/api/page-templates/${encodeURIComponent(id)}`);
+  if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || "template not found");
+  return r.json();
+}
+
+// `page` should be the CURRENT (already-saved) state of the page being
+// templated — its own layer file paths must already point at real files
+// under this project's projects/<projectId>/ folder for the server to find
+// and copy them.
+export async function savePageTemplate(name: string, projectId: string, page: Project["pages"][number]): Promise<PageTemplateEntry> {
+  const r = await fetch("/api/page-templates", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, projectId, page }),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || "saving template failed");
+  return r.json();
+}
+
+export async function deletePageTemplate(id: string): Promise<void> {
+  await fetch(`/api/page-templates/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 // --- Custom canvas-size presets: same pattern as the motion preset library
 // above — saved once from the Dashboard, reusable as its own size card.
 export type SizePresetEntry = {

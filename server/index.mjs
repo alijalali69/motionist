@@ -332,6 +332,101 @@ app.delete("/api/motion-presets/:id", (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Page-layout template library: a whole SAVED PAGE (its layers, box
+// positions, motion, background style — everything but the source
+// project's own id), reusable across any project. Unlike a motion preset
+// (plain JSON, nothing to store), a page can carry real uploaded photo/
+// video/text art, so saving one as a template also has to physically copy
+// those asset files somewhere that outlives the source project — a shared
+// public/page-templates/<templateId>/ store, not the source project's own
+// projects/<id>/ folder (which the user might delete later). Same
+// path-rewrite-by-walk approach as /api/projects/:id/duplicate above, just
+// copying into a different destination convention.
+const PAGE_TEMPLATES_JSON = path.join(ROOT, "data", "page-templates.json");
+const PAGE_TEMPLATES_DIR = path.join(PUBLIC, "page-templates");
+fs.mkdirSync(PAGE_TEMPLATES_DIR, { recursive: true });
+
+function readPageTemplates() {
+  if (!fs.existsSync(PAGE_TEMPLATES_JSON)) return [];
+  try { return JSON.parse(fs.readFileSync(PAGE_TEMPLATES_JSON, "utf-8")); } catch { return []; }
+}
+function writePageTemplates(list) {
+  fs.writeFileSync(PAGE_TEMPLATES_JSON, JSON.stringify(list, null, 2), "utf-8");
+}
+
+// A page's thumbnail is just its first real content layer's own file (same
+// idea as a project's own summarize()/thumbnailFor above).
+function pageThumbnail(page) {
+  const firstLayer = (page.layers ?? []).find((l) => l.file);
+  return firstLayer ? `/${firstLayer.file}` : null;
+}
+
+app.get("/api/page-templates", (_req, res) => res.json(readPageTemplates().map((t) => ({
+  id: t.id, name: t.name, createdAt: t.createdAt, thumbnail: pageThumbnail(t.page),
+}))));
+
+// Full template (page + layers) — fetched only when the user actually
+// applies one, not for the picker list above.
+app.get("/api/page-templates/:id", (req, res) => {
+  const t = readPageTemplates().find((x) => x.id === req.params.id);
+  if (!t) return res.status(404).json({ error: "template not found" });
+  res.json(t);
+});
+
+app.post("/api/page-templates", (req, res) => {
+  try {
+    const name = (req.body?.name || "").trim();
+    const projectId = req.body?.projectId;
+    const page = req.body?.page;
+    if (!name) return res.status(400).json({ error: "name required" });
+    if (!projectId) return res.status(400).json({ error: "projectId required" });
+    if (!page || typeof page !== "object") return res.status(400).json({ error: "page required" });
+
+    const id = "tmpl_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const destDir = path.join(PAGE_TEMPLATES_DIR, id);
+    const srcPrefix = `projects/${projectId}/`;
+    const destPrefix = `page-templates/${id}/`;
+
+    const cloned = structuredClone(page);
+    const walk = (v) => {
+      if (Array.isArray(v)) { v.forEach(walk); return; }
+      if (v && typeof v === "object") {
+        for (const k of Object.keys(v)) {
+          if (typeof v[k] === "string" && v[k].startsWith(srcPrefix)) {
+            const subPath = v[k].slice(srcPrefix.length); // e.g. "assets/photo_...png"
+            const srcAbs = path.join(PUBLIC, "projects", projectId, subPath);
+            const destAbs = path.join(destDir, subPath);
+            if (fs.existsSync(srcAbs)) {
+              fs.mkdirSync(path.dirname(destAbs), { recursive: true });
+              fs.copyFileSync(srcAbs, destAbs);
+            }
+            v[k] = destPrefix + subPath;
+          } else if (v[k] && typeof v[k] === "object") {
+            walk(v[k]);
+          }
+        }
+      }
+    };
+    walk(cloned);
+
+    const entry = { id, name, page: cloned, createdAt: new Date().toISOString() };
+    const list = readPageTemplates();
+    list.push(entry);
+    writePageTemplates(list);
+    res.json(entry);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.delete("/api/page-templates/:id", (req, res) => {
+  const id = req.params.id;
+  writePageTemplates(readPageTemplates().filter((t) => t.id !== id));
+  const dir = path.join(PAGE_TEMPLATES_DIR, id);
+  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  res.json({ ok: true });
+});
+
 // --- Custom canvas-size presets: same pattern as motion presets above — a
 // named width/height saved once from the Dashboard's "+ Custom size" card,
 // reusable as its own size-preset card afterward.

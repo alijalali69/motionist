@@ -8,6 +8,7 @@ import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
   listFonts, deleteProjectFiles, type IngestResult, type FontEntry,
   listMotionPresets, saveMotionPreset, deleteMotionPreset, type MotionPresetEntry,
+  listPageTemplates, loadPageTemplate, savePageTemplate, deletePageTemplate, type PageTemplateSummary,
 } from "./api";
 import { BUILT_IN_PRESETS } from "./builtinPresets";
 import { Dashboard } from "./Dashboard";
@@ -385,6 +386,15 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [renderProgress, setRenderProgress] = React.useState<{ percent: number; phase?: string; frame?: number; totalFrames?: number; status?: string } | null>(null);
   const [dragOver, setDragOver] = React.useState(false);
   const [motionClip, setMotionClip] = React.useState<MotionClip | null>(null);
+  // Page-layout template library — a whole saved page (layers, boxes,
+  // motion, its own bg style), reusable across any project. `null` =
+  // not fetched yet; fetched lazily when the picker actually opens.
+  const [pageTemplates, setPageTemplates] = React.useState<PageTemplateSummary[] | null>(null);
+  const [showTemplatePicker, setShowTemplatePicker] = React.useState(false);
+  const [savingTemplateFor, setSavingTemplateFor] = React.useState<number | null>(null); // page index, or null
+  const [templateName, setTemplateName] = React.useState("");
+  const [templateBusy, setTemplateBusy] = React.useState(false);
+  const [templateErr, setTemplateErr] = React.useState<string | null>(null);
   const [showSafeZone, setShowSafeZone] = React.useState(false);
   const [showInstagramUI, setShowInstagramUI] = React.useState(false);
   // A photo layer's own frame is now freely draggable/resizable (plain drag)
@@ -916,6 +926,61 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     });
   };
 
+  // Saves the CURRENT (already-persisted) state of one page as a reusable
+  // template — the server physically copies its referenced asset files into
+  // a shared store, so this only works on a page whose layers already point
+  // at real uploaded files (true for any page the user is looking at; a
+  // brand-new page with nothing uploaded yet just saves an assetless shell,
+  // which is a fine, if sparse, template too).
+  const commitSaveTemplate = async () => {
+    if (!project || savingTemplateFor == null) return;
+    const name = templateName.trim();
+    if (!name) return;
+    setTemplateBusy(true); setTemplateErr(null);
+    try {
+      await savePageTemplate(name, projectId, project.pages[savingTemplateFor]);
+      setSavingTemplateFor(null);
+      setTemplateName("");
+      setPageTemplates(null); // stale — refetch next time the picker opens
+    } catch (e: any) {
+      setTemplateErr(String(e.message || e));
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
+
+  // Inserts a saved template as a brand-new page — fresh page id AND fresh
+  // per-layer indices (indices are just React keys/z-order within a page,
+  // reusing the template's own would collide if the SAME template gets
+  // inserted twice into one project). Its asset files stay pointed at the
+  // shared page-templates/ store — that's permanent, not tied to whichever
+  // project first saved it, so no per-project asset copy is needed here.
+  const onInsertTemplate = async (id: string) => {
+    if (!project) return;
+    setTemplateBusy(true); setTemplateErr(null);
+    try {
+      const entry = await loadPageTemplate(id);
+      update((p) => {
+        const pageId = "p" + Date.now().toString(36) + Math.round(Math.random() * 1e4).toString(36);
+        const page = structuredClone(entry.page);
+        page.id = pageId;
+        page.layers = page.layers.map((l: any, i: number) => ({ ...l, index: i }));
+        p.pages.push(page);
+      });
+      setShowTemplatePicker(false);
+      setSel(project.pages.length); // the just-inserted page is now the last one
+    } catch (e: any) {
+      setTemplateErr(String(e.message || e));
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
+
+  const onDeleteTemplate = async (id: string) => {
+    await deletePageTemplate(id);
+    setPageTemplates((list) => (list ?? []).filter((t) => t.id !== id));
+  };
+
   // Photo tool: browse -> upload -> the layer is created ALREADY filled in,
   // one action instead of "add an empty slot, then click again inside it to
   // upload." Placed at the BACK of the stack (unlike text, which defaults to
@@ -1223,6 +1288,10 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             onClick={onAddBlankPage}>
             <PageIcon /><span>Page</span>
           </button>
+          <button className="btn" style={{ flex: 1 }} title="Insert a saved page layout — its own layers, boxes, and motion, reusable across any project"
+            onClick={() => { setShowTemplatePicker(true); if (pageTemplates === null) listPageTemplates().then(setPageTemplates).catch(() => setPageTemplates([])); }}>
+            <TemplateIcon /><span>Template</span>
+          </button>
         </div>
         <input ref={psdInput} className="hidden-file" type="file" accept=".psd,.svg,.png,.jpg,.jpeg,.webp,.gif" multiple
           onChange={(e) => { if (e.target.files) onAddPages(e.target.files); e.target.value = ""; }} />
@@ -1252,6 +1321,10 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                 title={pg.name ?? pg.id}>{pg.name ?? pg.id}</span>
             </div>
             <div className="row" style={{ gap: 4 }}>
+              <button className="btn small" title="Save this page's layout as a reusable template"
+                onClick={(e) => { e.stopPropagation(); setSavingTemplateFor(i); setTemplateName(pg.name ? `${pg.name} layout` : "My layout"); setTemplateErr(null); }}>
+                <TemplateIcon />
+              </button>
               <button className="btn small" onClick={(e) => { e.stopPropagation(); movePage(i, -1); }}>↑</button>
               <button className="btn small" onClick={(e) => { e.stopPropagation(); movePage(i, 1); }}>↓</button>
               <button className="btn small" onClick={(e) => { e.stopPropagation(); delPage(i); }}>✕</button>
@@ -1259,6 +1332,67 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           </div>
           ))}
         </div>
+
+        {/* Save current page as a template — a small named-save form, same
+            "inline field, not window.prompt" spirit as motion presets'
+            "Save current as preset…" flow above. */}
+        {savingTemplateFor !== null && (
+          <div className="modal-backdrop" onClick={() => !templateBusy && setSavingTemplateFor(null)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <h2 style={{ marginTop: 0 }}>Save page as template</h2>
+              <p className="sub" style={{ marginTop: -8 }}>
+                Reusable in this or any other project — its layers, boxes, motion, and background style, asset files included.
+              </p>
+              <label>Template name</label>
+              <input type="text" autoFocus value={templateName} placeholder="e.g. Title + subtitle, centered"
+                onChange={(e) => setTemplateName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") commitSaveTemplate(); if (e.key === "Escape") setSavingTemplateFor(null); }} />
+              {templateErr && <p className="err">{templateErr}</p>}
+              <div className="row" style={{ gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
+                <button className="btn" disabled={templateBusy} onClick={() => setSavingTemplateFor(null)}>Cancel</button>
+                <button className="btn primary" disabled={templateBusy || !templateName.trim()} onClick={commitSaveTemplate}>
+                  {templateBusy ? "…" : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Template picker — insert a saved layout as a brand-new page. */}
+        {showTemplatePicker && (
+          <div className="modal-backdrop" onClick={() => setShowTemplatePicker(false)}>
+            <div className="modal" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
+              <h2 style={{ marginTop: 0 }}>Page templates</h2>
+              {templateErr && <p className="err">{templateErr}</p>}
+              {pageTemplates === null && <p className="sub">Loading…</p>}
+              {pageTemplates && pageTemplates.length === 0 && (
+                <p className="sub">No templates saved yet — use the ▤ button on any page in the list to save its layout here.</p>
+              )}
+              <div style={{ maxHeight: 360, overflowY: "auto" }}>
+                {(pageTemplates ?? []).map((t) => (
+                  <div key={t.id} className="row between card compact" style={{ marginBottom: 8, alignItems: "center" }}>
+                    <div className="row" style={{ gap: 10, minWidth: 0 }}>
+                      {t.thumbnail ? (
+                        <img src={t.thumbnail} alt="" style={{ width: 32, height: 56, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: 32, height: 56, borderRadius: 4, background: "var(--panel2)", flexShrink: 0 }} />
+                      )}
+                      <span style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.name}>{t.name}</span>
+                    </div>
+                    <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+                      <button className="btn small primary" disabled={templateBusy} onClick={() => onInsertTemplate(t.id)}>Insert</button>
+                      <button className="btn small danger" disabled={templateBusy} title={`Delete "${t.name}"`}
+                        onClick={() => onDeleteTemplate(t.id)}>✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="row" style={{ gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
+                <button className="btn" onClick={() => setShowTemplatePicker(false)}>Close</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {project && (
           <>
@@ -2060,6 +2194,12 @@ const PageIcon: React.FC = () => (
   <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
     <rect x="2" y="1.5" width="11" height="12" rx="1.4" />
     <path d="M7.5 6.2v3.6M5.7 8h3.6" />
+  </svg>
+);
+const TemplateIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="1.5" y="1.5" width="12" height="12" rx="1.4" />
+    <path d="M1.5 6.2h12M6 6.2v7.3" />
   </svg>
 );
 
