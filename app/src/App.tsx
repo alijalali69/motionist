@@ -2551,6 +2551,13 @@ const ElementMotion: React.FC<{
                 onChange={(hex) => onChange((l) => { l.shapeStrokeColor = hex; })}
                 swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} /></div>
           </div>
+          <div className="mini" style={{ marginTop: 4 }}>
+            <label title="A continuous loop for as long as this layer is visible — independent of its In/Out effect above">Motion (while visible)</label>
+            <select value={layer.photoMotion ?? "none"}
+              onChange={(e) => onChange((l) => { l.photoMotion = e.target.value as any; })}>
+              {AMBIENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
         </div>
         );
       })()}
@@ -2678,6 +2685,13 @@ const ElementMotion: React.FC<{
                 </button>
               ))}
             </div>
+          </div>
+          <div className="mini" style={{ marginTop: 10 }}>
+            <label title="A continuous loop for as long as this layer is visible — independent of its In/Out effect below">Motion (while visible)</label>
+            <select value={layer.photoMotion ?? "none"}
+              onChange={(e) => onChange((l) => { l.photoMotion = e.target.value as any; })}>
+              {AMBIENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
           </div>
         </div>
       )}

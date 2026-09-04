@@ -321,6 +321,14 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
     m = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, rotateY: 0, clipPath: undefined as string | undefined };
   }
 
+  // Continuous while-visible motion (kenburns/float/sway/pulse/etc — see
+  // ambientMotion in presets.ts), independent of the one-shot entrance/exit
+  // above. Reuses the same photoMotion field LayerView's photo/video/shape
+  // layers already use — "photo" in the name is legacy (it started there
+  // first); a text layer picking, say, "pulse" gets the same live emphasis
+  // wobble a photo would, applied to the text itself rather than a crop.
+  const pz = ambientMotion(layer.photoMotion ?? "none", frame, pageDuration);
+
   const justify = layer.textAlign === "left" ? "flex-start" : layer.textAlign === "center" ? "center" : "flex-end";
   const textStyle: React.CSSProperties = {
     fontFamily: layer.fontFamily || "Tahoma, Arial, sans-serif",
@@ -397,7 +405,11 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
   }
 
   if (!isStagger || inExitPhase) {
-    const textNode = <div style={textStyle}>{layer.text}</div>;
+    const textNode = (
+      <div style={{ transform: `translate(${pz.tx}px, ${pz.ty}px) scale(${pz.scale}) rotate(${pz.rotate}deg)`, transformOrigin: "center center" }}>
+        <div style={textStyle}>{layer.text}</div>
+      </div>
+    );
     return (
       <div style={boxStyle}>
         {textNode}
