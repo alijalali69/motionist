@@ -2,7 +2,7 @@ import React from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { Reel } from "../../src/Reel";
 import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
-import { TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS } from "../../src/presets";
+import { TEXT_ENTRANCE_NAMES, TEXT_EXIT_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS } from "../../src/presets";
 import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
   listFonts, deleteProjectFiles, type IngestResult, type FontEntry,
@@ -1992,6 +1992,9 @@ const ElementMotion: React.FC<{
   const inCategories = isTextLayer
     ? [...ENTRANCE_CATEGORIES, { label: "Text reveal", names: TEXT_ENTRANCE_NAMES }]
     : ENTRANCE_CATEGORIES;
+  const outCategories = isTextLayer
+    ? [...EXIT_CATEGORIES, { label: "Text reveal", names: TEXT_EXIT_NAMES }]
+    : EXIT_CATEGORIES;
 
   // Group the shared library by family name, for the two-step Font -> Style pickers.
   const families = React.useMemo(() => {
@@ -2490,7 +2493,7 @@ const ElementMotion: React.FC<{
         />
         <FxSlots
           label="Out effect" hint="Combine up to 3 — each with its own easing"
-          categories={EXIT_CATEGORIES}
+          categories={outCategories}
           values={[layer.exit ?? "none", layer.exit2, layer.exit3]}
           easings={[layer.exitEasing, layer.exitEasing2, layer.exitEasing3]}
           disabled={(layer.exit ?? "none") === "none"}

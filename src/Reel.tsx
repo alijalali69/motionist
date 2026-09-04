@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill } from "remotion";
+import { AbsoluteFill, useCurrentFrame } from "remotion";
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
 import { slide } from "@remotion/transitions/slide";
@@ -32,6 +32,14 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean; transparen
   transparent = false,
 }) => {
   const { pages } = project;
+  // Slowly oscillating noise frequency for liquidIn/Out's SVG filter (see
+  // the hidden <svg> below) — a real "flow" over time, not a static warp.
+  // A shared filter, not one per layer: the WARP TEXTURE (how the noise
+  // itself evolves) is the same everywhere; how much a given layer shows
+  // of it is a separate per-layer opacity crossfade (LiquidOverlay in
+  // PageScene.tsx), not this filter's own strength.
+  const frame = useCurrentFrame();
+  const liquidBaseFreq = 0.018 + Math.sin(frame * 0.045) * 0.007;
 
   // Per-page subtitle text -> caption windows; SRT captions override when present.
   const starts = pageStarts(project);
@@ -64,6 +72,18 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean; transparen
           </filter>
           <filter id="glitchCyanChannel" colorInterpolationFilters="sRGB">
             <feColorMatrix type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0" />
+          </filter>
+          {/* liquidIn/Out's organic warp — feTurbulence generates the noise,
+              feDisplacementMap uses it to physically shift pixels, on
+              WHATEVER content sits under the filter (no transform can fake
+              this). baseFrequency comes straight from `frame` above — a
+              plain React-controlled attribute re-rendered every frame like
+              everything else in this file, not a CSS/SMIL loop (Remotion's
+              headless render captures one frame at a time; a live loop
+              has no reliable state to capture at export time). */}
+          <filter id="liquidWarp" x="-20%" y="-20%" width="140%" height="140%">
+            <feTurbulence type="fractalNoise" baseFrequency={`${liquidBaseFreq} ${liquidBaseFreq * 2.2}`} numOctaves={2} seed={4} result="liquidNoise" />
+            <feDisplacementMap in="SourceGraphic" in2="liquidNoise" scale={22} xChannelSelector="R" yChannelSelector="G" />
           </filter>
         </defs>
       </svg>

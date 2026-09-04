@@ -91,6 +91,32 @@ function glitchNoise(frame: number, seed: number): number {
   return x - Math.floor(x);
 }
 
+// scrambleIn/Out's decrypt-style reveal — Persian digits and a few
+// script-neutral symbols, not Latin letters: a Latin run embedded inside
+// RTL Farsi text triggers the Unicode bidi algorithm and can visibly
+// reorder mid-word, where Arabic-Indic digits carry the same run direction
+// as the surrounding text and drop in cleanly instead.
+const SCRAMBLE_NOISE_CHARS = "۰۱۲۳۴۵۶۷۸۹#*+=-؟";
+
+// Whole-STRING substitution, not per-letter DOM spans — this is the part
+// that keeps it Farsi/Arabic-safe (the actual reason word/lineReveal never
+// split individual letters either): the resolved prefix is the real intact
+// string, cursive joining untouched; only the still-scrambled tail swaps
+// character-by-character, and whitespace is never touched so word spacing
+// never visibly glitches. `frame`-seeded per position, not Math.random() —
+// the churn has to render identically on every pass of the same frame.
+function scrambledText(text: string, revealFrac: number, frame: number): string {
+  const resolved = Math.floor(Math.min(1, Math.max(0, revealFrac)) * text.length);
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (i < resolved || ch === " " || ch === "\n") { out += ch; continue; }
+    const idx = Math.floor(glitchNoise(frame, i * 7 + 3) * SCRAMBLE_NOISE_CHARS.length);
+    out += SCRAMBLE_NOISE_CHARS[Math.min(idx, SCRAMBLE_NOISE_CHARS.length - 1)];
+  }
+  return out;
+}
+
 // glitchIn/Out's RGB channel-split — two real duplicates of the layer's
 // OWN content (not a flat overlay div, so it works identically over text,
 // photos, and video), each isolated to a single color channel (see the
@@ -142,6 +168,17 @@ const DataMoshOverlay: React.FC<{ amount: number; frame: number; children: React
   });
   return <>{slices}</>;
 };
+
+// liquidIn/Out's organic warp — one ghost copy of the layer's own content
+// with the shared feTurbulence/feDisplacementMap filter (defined once in
+// Reel.tsx) applied, crossfaded in over the crisp base via plain opacity.
+// The filter's own noise flows on its own (driven by frame in Reel.tsx);
+// this is just how much of that warped copy shows through for THIS layer.
+const LiquidOverlay: React.FC<{ amount: number; children: React.ReactNode }> = ({ amount, children }) => (
+  <div style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: amount, filter: "url(#liquidWarp)" }}>
+    {children}
+  </div>
+);
 import type { Page, ContentLayer } from "./types";
 
 // Resolves a layer's up-to-3 combined entrance (or exit) slots into one
@@ -241,6 +278,14 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
   const outStart = earliestExitStart(layer, pageDuration);
   const inExitPhase = hasExit && frame >= outStart;
   const isStagger = layer.entrance === "wordReveal" || layer.entrance === "lineReveal";
+  // Decrypt/scramble reveal — bypasses the normal LayerMotion pipeline
+  // entirely, same as word/lineReveal above: it's not a transform, it's the
+  // TEXT CONTENT itself changing frame to frame. Only checks the primary
+  // entrance/exit slot, matching word/lineReveal's own existing limitation
+  // (FX2/FX3 combos aren't considered for either).
+  const isScrambleIn = layer.entrance === "scrambleIn" && !inExitPhase;
+  const isScrambleOut = layer.exit === "scrambleOut" && inExitPhase;
+  const isScramble = isScrambleIn || isScrambleOut;
 
   let m;
   if (inExitPhase) {
@@ -279,6 +324,27 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
     justifyContent: justify,
   };
 
+  if (isScramble) {
+    const outDuration = layer.outDuration ?? 24;
+    const progress = isScrambleIn
+      ? entranceProgress("scrambleIn", layer.entranceEasing, frame, fps, layer.delay, inDuration)
+      : exitProgress("scrambleOut", layer.exitEasing, frame, outStart, outDuration);
+    // Real characters resolve left-to-right through the STRING's own
+    // logical order — for RTL Farsi text that's the same order the reader
+    // reaches each character in (bidi/CSS direction handles the visual
+    // mirroring), so "reveal position 0 first" already reads correctly
+    // right-to-left with no extra direction-aware logic needed.
+    const revealFrac = isScrambleIn ? progress : 1 - progress;
+    const textNode = <div style={textStyle}>{scrambledText(layer.text ?? "", revealFrac, frame)}</div>;
+    return (
+      <div style={boxStyle}>
+        {textNode}
+        {m.shine !== undefined && <ShineOverlay shine={m.shine} />}
+        {m.scanline !== undefined && <ScanlineOverlay scanline={m.scanline} frame={frame} />}
+      </div>
+    );
+  }
+
   if (!isStagger || inExitPhase) {
     const textNode = <div style={textStyle}>{layer.text}</div>;
     return (
@@ -288,6 +354,7 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
         {m.scanline !== undefined && <ScanlineOverlay scanline={m.scanline} frame={frame} />}
         {m.glitch !== undefined && <GlitchOverlay amount={m.glitch} frame={frame}>{textNode}</GlitchOverlay>}
         {m.glitchBlocks !== undefined && <DataMoshOverlay amount={m.glitchBlocks} frame={frame}>{textNode}</DataMoshOverlay>}
+        {m.liquid !== undefined && <LiquidOverlay amount={m.liquid}>{textNode}</LiquidOverlay>}
       </div>
     );
   }
@@ -447,6 +514,7 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
       {m.scanline !== undefined && <ScanlineOverlay scanline={m.scanline} frame={frame} />}
       {m.glitch !== undefined && <GlitchOverlay amount={m.glitch} frame={frame}>{zoomedMedia}</GlitchOverlay>}
       {m.glitchBlocks !== undefined && <DataMoshOverlay amount={m.glitchBlocks} frame={frame}>{zoomedMedia}</DataMoshOverlay>}
+      {m.liquid !== undefined && <LiquidOverlay amount={m.liquid}>{zoomedMedia}</LiquidOverlay>}
     </div>
   );
 };

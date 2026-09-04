@@ -40,6 +40,13 @@ export type EntranceName =
   // unit (never splits individual letters, which would break joining).
   | "wordReveal"
   | "lineReveal"
+  // Text-only decrypt/scramble reveal — a hacker/matrix-style character
+  // churn that resolves into the real text left-to-right through the
+  // STRING's own order (see scrambledText in PageScene.tsx). Never splits
+  // into per-letter DOM spans (same reason word/lineReveal don't) — it's
+  // one text node whose CONTENT changes frame to frame, so cursive
+  // Farsi/Arabic joining is never at risk.
+  | "scrambleIn"
   // Diagonal slides — same tx/ty fields as slideRight/slideUp, just both
   // axes combined at once instead of one.
   | "slideTopLeft"
@@ -84,7 +91,15 @@ export type EntranceName =
   // Horizontal block-tear / datamosh — several bands of the layer's own
   // content independently offset sideways, no color tint. See
   // LayerMotion.glitchBlocks and DataMoshOverlay.
-  | "dataMoshIn";
+  | "dataMoshIn"
+  // Organic SVG warp (feTurbulence + feDisplacementMap) crossfading in —
+  // see LayerMotion.liquid and LiquidOverlay.
+  | "liquidIn"
+  // Tumbles through a multi-quarter rotateY turn with a scale dip at each
+  // face-crossing (near-zero width at the 90°/180° marks, selling an
+  // edge-on moment) — no new field, just a richer curve over the existing
+  // rotateY/scale than flipIn/cardFlipIn's single smooth turn.
+  | "cubeIn";
 
 export const ENTRANCE_NAMES: EntranceName[] = [
   "none", "fade", "slideRight", "slideLeft", "slideUp", "slideDown",
@@ -95,12 +110,16 @@ export const ENTRANCE_NAMES: EntranceName[] = [
   "slideTopLeft", "slideTopRight", "slideBottomLeft", "slideBottomRight",
   "rollIn", "jackInBox", "swingIn", "heartbeatIn", "diamondReveal",
   "lightspeedIn", "squashStretchIn", "glowPulseIn", "vhsIn", "duotoneIn",
-  "glitchIn", "dataMoshIn",
+  "glitchIn", "dataMoshIn", "liquidIn", "cubeIn",
 ];
 
 // Text-only entrances — offered in a separate list so image/photo layers
 // don't show options that only make sense for live text.
-export const TEXT_ENTRANCE_NAMES: EntranceName[] = ["wordReveal", "lineReveal"];
+export const TEXT_ENTRANCE_NAMES: EntranceName[] = ["wordReveal", "lineReveal", "scrambleIn"];
+// Same idea as TEXT_ENTRANCE_NAMES, for exits — currently just scrambleOut,
+// the first text-only exit the app has (word/lineReveal never got an exit
+// side). Added by the caller only for text layers, same pattern.
+export const TEXT_EXIT_NAMES: ExitName[] = ["scrambleOut"];
 
 // Grouped for the FX picker — a flat 20+ option dropdown made every effect a
 // scroll-and-squint search; a header per motion family (rendered as a real
@@ -115,9 +134,9 @@ export const ENTRANCE_CATEGORIES: { label: string; names: EntranceName[] }[] = [
   { label: "Slide", names: ["slideRight", "slideLeft", "slideUp", "slideDown", "slideTopLeft", "slideTopRight", "slideBottomLeft", "slideBottomRight"] },
   { label: "Scale", names: ["pop", "zoomIn", "zoomOut", "growIn", "jackInBox", "heartbeatIn"] },
   { label: "Drop & float", names: ["dropIn", "riseIn", "floatIn"] },
-  { label: "Rotate & flip", names: ["rotateIn", "flipIn", "cardFlipIn", "rollIn", "swingIn"] },
+  { label: "Rotate & flip", names: ["rotateIn", "flipIn", "cardFlipIn", "rollIn", "swingIn", "cubeIn"] },
   { label: "Wipe & reveal", names: ["wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop", "circleReveal", "diamondReveal", "typewriter"] },
-  { label: "Glitch & texture", names: ["lightspeedIn", "squashStretchIn", "glowPulseIn", "vhsIn", "duotoneIn", "glitchIn", "dataMoshIn"] },
+  { label: "Glitch & texture", names: ["lightspeedIn", "squashStretchIn", "glowPulseIn", "vhsIn", "duotoneIn", "glitchIn", "dataMoshIn", "liquidIn"] },
 ];
 
 export type AmbientName =
@@ -178,7 +197,12 @@ export type ExitName =
   | "vhsOut"
   | "duotoneOut"
   | "glitchOut"
-  | "dataMoshOut";
+  | "dataMoshOut"
+  | "liquidOut"
+  | "cubeOut"
+  // Text-only — mirrors scrambleIn, reverses direction (see
+  // TEXT_EXIT_NAMES and the isScrambleOut branch in PageScene.tsx).
+  | "scrambleOut";
 
 export const EXIT_NAMES: ExitName[] = [
   "none", "fadeOut", "slideOutLeft", "slideOutRight", "slideOutUp", "slideOutDown",
@@ -188,7 +212,7 @@ export const EXIT_NAMES: ExitName[] = [
   "slideOutTopLeft", "slideOutTopRight", "slideOutBottomLeft", "slideOutBottomRight",
   "rollOut", "jackOutBox", "swingOut", "heartbeatOut", "diamondHide",
   "lightspeedOut", "squashStretchOut", "glowPulseOut", "vhsOut", "duotoneOut",
-  "glitchOut", "dataMoshOut",
+  "glitchOut", "dataMoshOut", "liquidOut", "cubeOut",
 ];
 
 // Same grouping as ENTRANCE_CATEGORIES, mirrored for exits — see the comment
@@ -198,9 +222,9 @@ export const EXIT_CATEGORIES: { label: string; names: ExitName[] }[] = [
   { label: "Slide", names: ["slideOutLeft", "slideOutRight", "slideOutUp", "slideOutDown", "slideOutTopLeft", "slideOutTopRight", "slideOutBottomLeft", "slideOutBottomRight"] },
   { label: "Scale", names: ["popOut", "zoomOut", "shrinkOut", "jackOutBox", "heartbeatOut"] },
   { label: "Drop & rise", names: ["dropOut", "riseOut"] },
-  { label: "Rotate & flip", names: ["rotateOut", "flipOut", "cardFlipOut", "rollOut", "swingOut"] },
+  { label: "Rotate & flip", names: ["rotateOut", "flipOut", "cardFlipOut", "rollOut", "swingOut", "cubeOut"] },
   { label: "Wipe & hide", names: ["wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide", "diamondHide", "typewriterOut"] },
-  { label: "Glitch & texture", names: ["lightspeedOut", "squashStretchOut", "glowPulseOut", "vhsOut", "duotoneOut", "glitchOut", "dataMoshOut"] },
+  { label: "Glitch & texture", names: ["lightspeedOut", "squashStretchOut", "glowPulseOut", "vhsOut", "duotoneOut", "glitchOut", "dataMoshOut", "liquidOut"] },
 ];
 
 // Page-to-page transitions. `name` is stored on the page; `label` shows in the UI.
@@ -246,6 +270,7 @@ export type LayerMotion = {
   tint?: number; // 0..1 hue/saturation sweep intensity — duotoneIn/Out
   glitch?: number; // 0..1 RGB-split burst envelope — glitchIn/Out
   glitchBlocks?: number; // 0..1 block-tear/datamosh burst envelope — dataMoshIn/Out
+  liquid?: number; // 0..1 organic SVG-warp crossfade intensity — liquidIn/Out
 };
 
 const BASE: LayerMotion = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, rotateY: 0 };
@@ -282,6 +307,7 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
   let tint: number | undefined;
   let glitch: number | undefined;
   let glitchBlocks: number | undefined;
+  let liquid: number | undefined;
   for (const m of motions) {
     opacity = Math.min(opacity, m.opacity);
     tx += m.tx; ty += m.ty;
@@ -309,6 +335,7 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
     if (m.tint !== undefined) tint = Math.max(tint ?? 0, m.tint);
     if (m.glitch !== undefined) glitch = Math.max(glitch ?? 0, m.glitch);
     if (m.glitchBlocks !== undefined) glitchBlocks = Math.max(glitchBlocks ?? 0, m.glitchBlocks);
+    if (m.liquid !== undefined) liquid = Math.max(liquid ?? 0, m.liquid);
     // Shine sweep, like clipPath: only one sweep makes sense on a layer at
     // once, first one set wins.
     if (shine === undefined && m.shine !== undefined) shine = m.shine;
@@ -321,7 +348,7 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
     // would carry redundant scaleX/scaleY: scale copies for no reason.
     scaleX: sawScaleXY ? scaleX : undefined,
     scaleY: sawScaleXY ? scaleY : undefined,
-    glow, scanline, tint, glitch, glitchBlocks,
+    glow, scanline, tint, glitch, glitchBlocks, liquid,
   };
 }
 
@@ -449,6 +476,11 @@ const DEFAULT_ENTRANCE_EASING: Partial<Record<EntranceName, EasingName>> = {
   // bursts are actually allowed to fire.
   glitchIn: "linear",
   dataMoshIn: "linear",
+  liquidIn: "easeInOut",
+  // Linear, same reasoning as typewriter — a decrypt reveal ticking at a
+  // constant rate reads right; an eased curve would bunch the resolves up.
+  scrambleIn: "linear",
+  cubeIn: "linear", // the tumble shape is already baked into the multi-stop curve itself
 };
 
 // What "(auto)" actually resolves to for a given effect — same fallback
@@ -495,6 +527,9 @@ const DEFAULT_EXIT_EASING: Partial<Record<ExitName, EasingName>> = {
   duotoneOut: "linear",
   glitchOut: "linear",
   dataMoshOut: "linear",
+  liquidOut: "easeInOut",
+  scrambleOut: "linear",
+  cubeOut: "linear",
 };
 
 export function resolvedExitEasing(name: ExitName, override: EasingName | undefined): EasingName {
@@ -669,6 +704,17 @@ export function entranceMotion(name: EntranceName, p: number): LayerMotion {
       return { ...BASE, opacity: p, glitch: p };
     case "dataMoshIn":
       return { ...BASE, opacity: p, glitchBlocks: p };
+    case "liquidIn":
+      return { ...BASE, opacity: p, liquid: p };
+    // Three quarter-turns with a scale dip baked in right at each 90°/180°
+    // crossing (edge-on read) — the multi-stop curve IS the choreography,
+    // same trick heartbeatIn/squashStretchIn use.
+    case "cubeIn":
+      return {
+        ...BASE, opacity: p,
+        rotateY: interpolate(p, [0, 1], [-270, 0]),
+        scale: interpolate(p, [0, 0.30, 0.34, 0.63, 0.67, 1], [1, 1, 0.2, 0.2, 1, 1]),
+      };
     default:
       return BASE;
   }
@@ -768,6 +814,14 @@ export function exitMotion(name: ExitName, q: number): LayerMotion {
       return { ...BASE, opacity: 1 - q, glitch: q };
     case "dataMoshOut":
       return { ...BASE, opacity: 1 - q, glitchBlocks: q };
+    case "liquidOut":
+      return { ...BASE, opacity: 1 - q, liquid: q };
+    case "cubeOut":
+      return {
+        ...BASE, opacity: 1 - q,
+        rotateY: interpolate(q, [0, 1], [0, 270]),
+        scale: interpolate(q, [0, 0.33, 0.37, 0.70, 0.74, 1], [1, 1, 0.2, 0.2, 1, 1]),
+      };
     default:
       return BASE;
   }
