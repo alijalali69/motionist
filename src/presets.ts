@@ -39,7 +39,29 @@ export type EntranceName =
   // cursive Farsi/Arabic script because each WORD stays one intact shaped
   // unit (never splits individual letters, which would break joining).
   | "wordReveal"
-  | "lineReveal";
+  | "lineReveal"
+  // Diagonal slides — same tx/ty fields as slideRight/slideUp, just both
+  // axes combined at once instead of one.
+  | "slideTopLeft"
+  | "slideTopRight"
+  | "slideBottomLeft"
+  | "slideBottomRight"
+  // Tumbles in like a rolling wheel — slide + rotate summed.
+  | "rollIn"
+  // Pops open with a decaying rotational wobble layered on top of a
+  // scale-from-zero pop — the wobble is baked into the formula itself
+  // (a decaying sine of progress), so it doesn't need real spring physics.
+  | "jackInBox"
+  // Rotates in with a settling wobble, no scale change — pivots around the
+  // layer's own center (a true top-pivot "hang from a pin" needs
+  // transform-origin control, which isn't in LayerMotion yet).
+  | "swingIn"
+  // Overshoot → dip → smaller overshoot → settle, as one multi-stop scale
+  // curve over progress — reads punchier than a single spring.
+  | "heartbeatIn"
+  // Same clip-path mechanism as circleReveal, a rotated-square polygon
+  // instead of a circle.
+  | "diamondReveal";
 
 export const ENTRANCE_NAMES: EntranceName[] = [
   "none", "fade", "slideRight", "slideLeft", "slideUp", "slideDown",
@@ -47,6 +69,8 @@ export const ENTRANCE_NAMES: EntranceName[] = [
   "blurIn", "rotateIn", "flipIn", "floatIn",
   "wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop", "circleReveal",
   "cardFlipIn", "shineIn", "typewriter",
+  "slideTopLeft", "slideTopRight", "slideBottomLeft", "slideBottomRight",
+  "rollIn", "jackInBox", "swingIn", "heartbeatIn", "diamondReveal",
 ];
 
 // Text-only entrances — offered in a separate list so image/photo layers
@@ -63,11 +87,11 @@ export const TEXT_ENTRANCE_NAMES: EntranceName[] = ["wordReveal", "lineReveal"];
 // only for text layers (see inOptions in App.tsx).
 export const ENTRANCE_CATEGORIES: { label: string; names: EntranceName[] }[] = [
   { label: "Fade & glow", names: ["fade", "blurIn", "shineIn"] },
-  { label: "Slide", names: ["slideRight", "slideLeft", "slideUp", "slideDown"] },
-  { label: "Scale", names: ["pop", "zoomIn", "zoomOut", "growIn"] },
+  { label: "Slide", names: ["slideRight", "slideLeft", "slideUp", "slideDown", "slideTopLeft", "slideTopRight", "slideBottomLeft", "slideBottomRight"] },
+  { label: "Scale", names: ["pop", "zoomIn", "zoomOut", "growIn", "jackInBox", "heartbeatIn"] },
   { label: "Drop & float", names: ["dropIn", "riseIn", "floatIn"] },
-  { label: "Rotate & flip", names: ["rotateIn", "flipIn", "cardFlipIn"] },
-  { label: "Wipe & reveal", names: ["wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop", "circleReveal", "typewriter"] },
+  { label: "Rotate & flip", names: ["rotateIn", "flipIn", "cardFlipIn", "rollIn", "swingIn"] },
+  { label: "Wipe & reveal", names: ["wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop", "circleReveal", "diamondReveal", "typewriter"] },
 ];
 
 export type AmbientName =
@@ -112,24 +136,35 @@ export type ExitName =
   | "circleHide"
   | "cardFlipOut"
   | "shineOut"
-  | "typewriterOut";
+  | "typewriterOut"
+  | "slideOutTopLeft"
+  | "slideOutTopRight"
+  | "slideOutBottomLeft"
+  | "slideOutBottomRight"
+  | "rollOut"
+  | "jackOutBox"
+  | "swingOut"
+  | "heartbeatOut"
+  | "diamondHide";
 
 export const EXIT_NAMES: ExitName[] = [
   "none", "fadeOut", "slideOutLeft", "slideOutRight", "slideOutUp", "slideOutDown",
   "shrinkOut", "zoomOut", "popOut", "blurOut", "dropOut", "riseOut", "rotateOut", "flipOut",
   "wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide",
   "cardFlipOut", "shineOut", "typewriterOut",
+  "slideOutTopLeft", "slideOutTopRight", "slideOutBottomLeft", "slideOutBottomRight",
+  "rollOut", "jackOutBox", "swingOut", "heartbeatOut", "diamondHide",
 ];
 
 // Same grouping as ENTRANCE_CATEGORIES, mirrored for exits — see the comment
 // there. Every ExitName except "none" appears in exactly one group.
 export const EXIT_CATEGORIES: { label: string; names: ExitName[] }[] = [
   { label: "Fade & glow", names: ["fadeOut", "blurOut", "shineOut"] },
-  { label: "Slide", names: ["slideOutLeft", "slideOutRight", "slideOutUp", "slideOutDown"] },
-  { label: "Scale", names: ["popOut", "zoomOut", "shrinkOut"] },
+  { label: "Slide", names: ["slideOutLeft", "slideOutRight", "slideOutUp", "slideOutDown", "slideOutTopLeft", "slideOutTopRight", "slideOutBottomLeft", "slideOutBottomRight"] },
+  { label: "Scale", names: ["popOut", "zoomOut", "shrinkOut", "jackOutBox", "heartbeatOut"] },
   { label: "Drop & rise", names: ["dropOut", "riseOut"] },
-  { label: "Rotate & flip", names: ["rotateOut", "flipOut", "cardFlipOut"] },
-  { label: "Wipe & hide", names: ["wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide", "typewriterOut"] },
+  { label: "Rotate & flip", names: ["rotateOut", "flipOut", "cardFlipOut", "rollOut", "swingOut"] },
+  { label: "Wipe & hide", names: ["wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide", "diamondHide", "typewriterOut"] },
 ];
 
 // Page-to-page transitions. `name` is stored on the page; `label` shows in the UI.
@@ -318,6 +353,13 @@ const DEFAULT_ENTRANCE_EASING: Partial<Record<EntranceName, EasingName>> = {
   // Linear, deliberately — real typing happens at a constant rate; an eased
   // curve would bunch the steps up at one end instead of ticking evenly.
   typewriter: "linear",
+  slideTopLeft: "easeOutCubic", slideTopRight: "easeOutCubic",
+  slideBottomLeft: "easeOutCubic", slideBottomRight: "easeOutCubic",
+  rollIn: "easeOutCubic",
+  jackInBox: "easeOutBack",
+  swingIn: "easeOutCubic",
+  heartbeatIn: "easeOutCubic",
+  diamondReveal: "easeInOut",
 };
 
 // What "(auto)" actually resolves to for a given effect — same fallback
@@ -350,6 +392,13 @@ const DEFAULT_EXIT_EASING: Partial<Record<ExitName, EasingName>> = {
   cardFlipOut: "easeInCubic",
   shineOut: "easeIn",
   typewriterOut: "linear",
+  slideOutTopLeft: "easeInCubic", slideOutTopRight: "easeInCubic",
+  slideOutBottomLeft: "easeInCubic", slideOutBottomRight: "easeInCubic",
+  rollOut: "easeInCubic",
+  jackOutBox: "easeIn",
+  swingOut: "easeInCubic",
+  heartbeatOut: "easeInCubic",
+  diamondHide: "easeInOut",
 };
 
 export function resolvedExitEasing(name: ExitName, override: EasingName | undefined): EasingName {
@@ -461,6 +510,37 @@ export function entranceMotion(name: EntranceName, p: number): LayerMotion {
       const stepped = Math.floor(p * steps) / steps;
       return { ...BASE, clipPath: `inset(0 ${(1 - stepped) * 100}% 0 0)` };
     }
+    // Diagonal slides — same tx/ty the orthogonal slides use, both axes at once.
+    case "slideTopLeft":
+      return { ...BASE, opacity: p, tx: -(1 - p) * 90, ty: -(1 - p) * 90 };
+    case "slideTopRight":
+      return { ...BASE, opacity: p, tx: (1 - p) * 90, ty: -(1 - p) * 90 };
+    case "slideBottomLeft":
+      return { ...BASE, opacity: p, tx: -(1 - p) * 90, ty: (1 - p) * 90 };
+    case "slideBottomRight":
+      return { ...BASE, opacity: p, tx: (1 - p) * 90, ty: (1 - p) * 90 };
+    // Tumbles in from the left, slide and rotate summing to a "rolling wheel" read.
+    case "rollIn":
+      return { ...BASE, opacity: p, tx: -(1 - p) * 110, rotate: -(1 - p) * 90 };
+    // Pops from 0 scale with a decaying rotational wobble baked in as a sine
+    // of progress (not real spring physics — jackInBox uses easeOutBack for
+    // its own snap, layering the wobble on top of that).
+    case "jackInBox":
+      return { ...BASE, opacity: p, scale: interpolate(p, [0, 1], [0, 1]), rotate: Math.sin(p * Math.PI * 2.5) * (1 - p) * 14 };
+    // Rotates to rest with a settling wobble, no scale change — pivots
+    // around the layer's own center (see the EntranceName doc comment).
+    case "swingIn":
+      return { ...BASE, opacity: p, rotate: Math.sin(p * Math.PI * 3) * (1 - p) * 22 };
+    // Multi-stop scale curve: overshoot, dip, smaller overshoot, settle.
+    case "heartbeatIn":
+      return { ...BASE, opacity: p, scale: interpolate(p, [0, 0.35, 0.55, 0.75, 1], [0.3, 1.22, 0.92, 1.06, 1]) };
+    // Same clip-path mechanism as circleReveal — a rotated-square polygon
+    // instead of a circle, reaching well past 100% so it fully covers the
+    // box regardless of aspect ratio.
+    case "diamondReveal": {
+      const r = p * 130;
+      return { ...BASE, clipPath: `polygon(50% ${50 - r}%, ${50 + r}% 50%, 50% ${50 + r}%, ${50 - r}% 50%)` };
+    }
     default:
       return BASE;
   }
@@ -518,6 +598,26 @@ export function exitMotion(name: ExitName, q: number): LayerMotion {
       const steps = 16;
       const stepped = Math.floor(q * steps) / steps;
       return { ...BASE, clipPath: `inset(0 0 0 ${stepped * 100}%)` };
+    }
+    case "slideOutTopLeft":
+      return { ...BASE, opacity: 1 - q, tx: -q * 90, ty: -q * 90 };
+    case "slideOutTopRight":
+      return { ...BASE, opacity: 1 - q, tx: q * 90, ty: -q * 90 };
+    case "slideOutBottomLeft":
+      return { ...BASE, opacity: 1 - q, tx: -q * 90, ty: q * 90 };
+    case "slideOutBottomRight":
+      return { ...BASE, opacity: 1 - q, tx: q * 90, ty: q * 90 };
+    case "rollOut":
+      return { ...BASE, opacity: 1 - q, tx: q * 110, rotate: q * 90 };
+    case "jackOutBox":
+      return { ...BASE, opacity: 1 - q, scale: interpolate(q, [0, 1], [1, 0]), rotate: Math.sin(q * Math.PI * 2.5) * q * 14 };
+    case "swingOut":
+      return { ...BASE, opacity: 1 - q, rotate: Math.sin(q * Math.PI * 3) * q * 22 };
+    case "heartbeatOut":
+      return { ...BASE, opacity: 1 - q, scale: interpolate(q, [0, 0.25, 0.45, 0.65, 1], [1, 1.06, 0.92, 1.22, 0.3]) };
+    case "diamondHide": {
+      const r = (1 - q) * 130;
+      return { ...BASE, clipPath: `polygon(50% ${50 - r}%, ${50 + r}% 50%, 50% ${50 + r}%, ${50 - r}% 50%)` };
     }
     default:
       return BASE;
