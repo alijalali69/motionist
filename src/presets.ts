@@ -391,6 +391,45 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
   };
 }
 
+// Shared LayerMotion -> CSS helpers — used by both PageScene.tsx (content
+// layers) and Logo.tsx (the Logo/Title/BG global overlays) so the two never
+// render the same LayerMotion two different ways. Live here (a leaf file
+// both already import from) rather than in PageScene.tsx, same reasoning as
+// glitchNoise below: importing them FROM PageScene.tsx would create
+// PageScene.tsx <-> Logo.tsx-adjacent cycles the moment either needs the
+// other's helper.
+export function motionTransform(m: LayerMotion): string {
+  const sx = m.scaleX ?? m.scale;
+  const sy = m.scaleY ?? m.scale;
+  const skew = m.skewX ? ` skewX(${m.skewX}deg)` : "";
+  return `perspective(900px) translate(${m.tx}px, ${m.ty}px) scale(${sx}, ${sy}) rotate(${m.rotate}deg) rotateY(${m.rotateY}deg)${skew}`;
+}
+export function motionFilter(m: LayerMotion): string | undefined {
+  const parts: string[] = [];
+  if (m.blur) parts.push(`blur(${m.blur}px)`);
+  if (m.tint) parts.push(`hue-rotate(${m.tint * 45}deg) saturate(${1 + m.tint * 0.6})`);
+  return parts.length ? parts.join(" ") : undefined;
+}
+// cardFlipIn/Out's "landing" shadow and glowPulseIn/Out's breathing glow —
+// both are just box-shadow at different colors/spreads, so one layer's
+// box-shadow can carry both at once (CSS box-shadow accepts a
+// comma-separated list).
+export function shadowStyle(shadow: number | undefined, glow: number | undefined): string | undefined {
+  const parts: string[] = [];
+  if (shadow) parts.push(`0 ${18 * shadow}px ${40 * shadow}px rgba(0,0,0,${0.45 * shadow})`);
+  if (glow) parts.push(`0 0 ${40 * glow}px ${10 * glow}px rgba(255,255,255,${0.8 * glow})`);
+  return parts.length ? parts.join(", ") : undefined;
+}
+// morphIn/Out's blob wobble (LayerMotion.morph) — just a CSS border-radius,
+// applied on the same div that clips its own content.
+export function blobRadius(amount: number, frame: number): string | undefined {
+  if (!amount) return undefined;
+  const w = (seed: number) => 35 + glitchNoise(frame, seed) * 25;
+  const h = [31, 32, 33, 34].map((s) => (amount * w(s)).toFixed(1)).join("% ");
+  const v = [41, 42, 43, 44].map((s) => (amount * w(s)).toFixed(1)).join("% ");
+  return `${h}% / ${v}%`;
+}
+
 // Spring feel per entrance — bouncy ones overshoot, the rest settle smoothly.
 export function entranceSpring(name: EntranceName) {
   const bouncy = name === "pop" || name === "growIn" || name === "dropIn";

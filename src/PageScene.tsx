@@ -13,6 +13,7 @@ import {
 import { Gif } from "@remotion/gif";
 import {
   entranceMotion, entranceProgress, exitMotion, exitProgress, combineMotions, ambientMotion, glitchNoise,
+  motionTransform, motionFilter, shadowStyle, blobRadius,
   type EntranceName, type ExitName, type EasingName, type LayerMotion,
 } from "./presets";
 
@@ -32,32 +33,9 @@ const ShineOverlay: React.FC<{ shine: number }> = ({ shine }) => (
   />
 );
 
-// cardFlipIn/Out's "landing" shadow (LayerMotion.shadow, 0..1 intensity) and
-// glowPulseIn/Out's breathing glow (LayerMotion.glow) — both are just
-// boxShadow at different colors/spreads, so one layer's box-shadow can
-// carry both at once (CSS box-shadow accepts a comma-separated list).
-function shadowStyle(shadow: number | undefined, glow: number | undefined): string | undefined {
-  const parts: string[] = [];
-  if (shadow) parts.push(`0 ${18 * shadow}px ${40 * shadow}px rgba(0,0,0,${0.45 * shadow})`);
-  if (glow) parts.push(`0 0 ${40 * glow}px ${10 * glow}px rgba(255,255,255,${0.8 * glow})`);
-  return parts.length ? parts.join(", ") : undefined;
-}
-
-// The transform/filter strings both LayerView and TextLayerView build,
-// pulled out once so the two never drift out of sync when a new field
-// (skewX, scaleX/scaleY, tint) gets added to LayerMotion.
-function motionTransform(m: LayerMotion): string {
-  const sx = m.scaleX ?? m.scale;
-  const sy = m.scaleY ?? m.scale;
-  const skew = m.skewX ? ` skewX(${m.skewX}deg)` : "";
-  return `perspective(900px) translate(${m.tx}px, ${m.ty}px) scale(${sx}, ${sy}) rotate(${m.rotate}deg) rotateY(${m.rotateY}deg)${skew}`;
-}
-function motionFilter(m: LayerMotion): string | undefined {
-  const parts: string[] = [];
-  if (m.blur) parts.push(`blur(${m.blur}px)`);
-  if (m.tint) parts.push(`hue-rotate(${m.tint * 45}deg) saturate(${1 + m.tint * 0.6})`);
-  return parts.length ? parts.join(" ") : undefined;
-}
+// shadowStyle/motionTransform/motionFilter now live in presets.ts (imported
+// above) — shared with Logo.tsx's AssetSlot so a content layer and a global
+// Logo/Title/BG overlay render the same LayerMotion the same way.
 
 // vhsIn/Out's scanline + jitter overlay (LayerMotion.scanline, 0..1
 // intensity). Deterministic from `frame` (not a CSS @keyframes loop) —
@@ -175,20 +153,8 @@ const LiquidOverlay: React.FC<{ amount: number; children: React.ReactNode }> = (
   </div>
 );
 
-// morphIn/Out's blob border-radius (LayerMotion.morph, 0..1 intensity) — 8
-// independently wobbling corner radii (frame-seeded, same glitchNoise as
-// everything else), each scaled by `amount` so 0 is a plain sharp rect and
-// 1 is a full organic blob. A cheap approximation of true shape-to-shape
-// morphing (which would need a path-interpolation dependency) — this is
-// just CSS border-radius, applied on the same div that already clips its
-// content via overflow:hidden.
-function blobRadius(amount: number, frame: number): string | undefined {
-  if (!amount) return undefined;
-  const w = (seed: number) => 35 + glitchNoise(frame, seed) * 25;
-  const h = [31, 32, 33, 34].map((s) => (amount * w(s)).toFixed(1)).join("% ");
-  const v = [41, 42, 43, 44].map((s) => (amount * w(s)).toFixed(1)).join("% ");
-  return `${h}% / ${v}%`;
-}
+// blobRadius (morphIn/Out's blob border-radius) now lives in presets.ts,
+// imported above — shared with Logo.tsx's AssetSlot.
 
 // burstIn/Out's confetti release (LayerMotion.burst, 0..1 progress) — a
 // handful of small bits fly outward from center only in the last 30% of

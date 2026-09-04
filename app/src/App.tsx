@@ -1642,6 +1642,10 @@ const AssetControls: React.FC<{
 }> = ({ slot, label, canvas, onChange, onRemove }) => {
   const [cw, ch] = canvas;
   const num = (v: string) => Math.round(parseFloat(v || "0"));
+  // Same frame<->second convention as ElementMotion's own sec/toFr below
+  // (hardcoded 30fps, matching the rest of the app's timing fields).
+  const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
+  const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
 
   // Scale the box around its own center so "bigger/smaller" feels natural.
   const scale = (factor: number) =>
@@ -1693,6 +1697,83 @@ const AssetControls: React.FC<{
         <div><label>Opacity {Math.round(slot.opacity * 100)}%</label>
           <input type="range" min={0} max={1} step={0.05} value={slot.opacity}
             onChange={(e) => onChange((s) => { s.opacity = parseFloat(e.target.value); })} /></div>
+      </div>
+
+      {/* Entrance/exit FX — same 91-effect vocabulary a page's own content
+          layers use, but ONE slot each (see LogoConfig in types.ts): this
+          overlay spans the whole reel, entrance plays once at frame 0, exit
+          plays once at the reel's own end. */}
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
+        <div className="subhead">Effects</div>
+        <div className="mini">
+          <label>In effect</label>
+          <div className="row" style={{ gap: 5 }}>
+            <select value={slot.entrance ?? "none"} style={{ flex: "1.3 1 0" }}
+              onChange={(e) => onChange((s) => { s.entrance = e.target.value === "none" ? undefined : e.target.value as any; })}>
+              <option value="none">none</option>
+              {ENTRANCE_CATEGORIES.map((cat) => (
+                <optgroup key={cat.label} label={cat.label}>
+                  {cat.names.map((n) => <option key={n} value={n}>{n}</option>)}
+                </optgroup>
+              ))}
+            </select>
+            <select value={slot.entranceEasing ?? ""} style={{ flex: "1 1 0" }}
+              disabled={!slot.entrance || slot.entrance === "none"}
+              title="This effect's own easing — auto = a curve chosen to fit it"
+              onChange={(e) => onChange((s) => { s.entranceEasing = e.target.value === "" ? undefined : e.target.value as any; })}>
+              <option value="">(auto)</option>
+              {EASINGS.map((en) => <option key={en} value={en}>{en}</option>)}
+            </select>
+          </div>
+        </div>
+        {slot.entrance && slot.entrance !== "none" && (
+          <div className="grid2 mini" style={{ marginTop: 4 }}>
+            <div><label>in delay (s)</label>
+              <NumField step={0.1} min={0} value={sec(slot.delay)}
+                onChange={(e) => onChange((s) => { s.delay = toFr(e.target.value); })} /></div>
+            <div><label>in dur (s)</label>
+              <DurationPresetField value={slot.inDuration} fallback={26}
+                onChange={(frames) => onChange((s) => { s.inDuration = frames; })} /></div>
+          </div>
+        )}
+
+        <div className="mini" style={{ marginTop: 8 }}>
+          <label>Out effect</label>
+          <div className="row" style={{ gap: 5 }}>
+            <select value={slot.exit ?? "none"} style={{ flex: "1.3 1 0" }}
+              onChange={(e) => onChange((s) => { s.exit = e.target.value === "none" ? undefined : e.target.value as any; })}>
+              <option value="none">none</option>
+              {EXIT_CATEGORIES.map((cat) => (
+                <optgroup key={cat.label} label={cat.label}>
+                  {cat.names.map((n) => <option key={n} value={n}>{n}</option>)}
+                </optgroup>
+              ))}
+            </select>
+            <select value={slot.exitEasing ?? ""} style={{ flex: "1 1 0" }}
+              disabled={!slot.exit || slot.exit === "none"}
+              title="This effect's own easing — auto = a curve chosen to fit it"
+              onChange={(e) => onChange((s) => { s.exitEasing = e.target.value === "" ? undefined : e.target.value as any; })}>
+              <option value="">(auto)</option>
+              {EASINGS.map((en) => <option key={en} value={en}>{en}</option>)}
+            </select>
+          </div>
+        </div>
+        {slot.exit && slot.exit !== "none" && (
+          <div className="grid2 mini" style={{ marginTop: 4 }}>
+            <div><label>out at (s) &mdash; blank = end of reel</label>
+              <div className="row" style={{ gap: 4 }}>
+                <NumField step={0.1} min={0} value={slot.outDelay != null ? sec(slot.outDelay) : ""}
+                  placeholder="auto" style={{ flex: 1 }}
+                  onChange={(e) => onChange((s) => { s.outDelay = e.target.value === "" ? undefined : toFr(e.target.value); })} />
+                <button className="btn small" title="Reset to auto (end of reel)"
+                  disabled={slot.outDelay == null}
+                  onClick={() => onChange((s) => { s.outDelay = undefined; })}>✕</button>
+              </div></div>
+            <div><label>out dur (s)</label>
+              <DurationPresetField value={slot.outDuration} fallback={24}
+                onChange={(frames) => onChange((s) => { s.outDuration = frames; })} /></div>
+          </div>
+        )}
       </div>
     </div>
   );

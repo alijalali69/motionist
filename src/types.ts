@@ -189,6 +189,22 @@ export type LogoConfig = {
   fallback: string | null; // static PSD logo PNG
   opacity: number;
   fit?: "contain" | "cover"; // how the asset fills its box (default contain)
+  // Optional entrance/exit FX — the same 91-effect vocabulary a page's own
+  // content layers use (see entranceMotion/exitMotion/combineMotions in
+  // presets.ts), but ONE slot each, not FX1/FX2/FX3 — the Logo/Title/BG
+  // slots are single static overlays spanning the whole reel, not a
+  // multi-effect content layer. Unset entrance/exit = static, exactly the
+  // pre-FX behavior. Rendered in Logo.tsx's AssetSlot; entrance plays once
+  // at reel frame 0, exit plays once at the reel's own last frames (the
+  // caller passes reelDurationInFrames for that — see Reel.tsx).
+  entrance?: EntranceName;
+  entranceEasing?: EasingName;
+  delay?: number;       // in-delay (frames) before entrance starts, default 0
+  inDuration?: number;  // entrance length (frames), default 26
+  exit?: ExitName;
+  exitEasing?: EasingName;
+  outDelay?: number;    // exit START (frames from reel start); unset = anchored to reel end
+  outDuration?: number; // exit length (frames), default 24
 };
 
 export type Caption = { fromFrame: number; toFrame: number; text: string };

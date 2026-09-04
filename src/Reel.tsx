@@ -122,7 +122,7 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean; transparen
       {/* Global background — fills the backdrop behind all pages. Skipped
           entirely on a transparent export too — it's a fill, same as bgColor,
           not something the user uploaded on purpose to sit under other footage. */}
-      {!transparent && <AssetSlot slot={project.bg ?? null} defaultFit="cover" />}
+      {!transparent && <AssetSlot slot={project.bg ?? null} defaultFit="cover" reelDuration={totalFrames} />}
 
       {/* Content pages: motion + transitions live here, and ONLY here. */}
       <TransitionSeries>
@@ -151,13 +151,13 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean; transparen
       </TransitionSeries>
 
       {/* Global title — locked overlay, same on every page. */}
-      <AssetSlot slot={project.title ?? null} defaultFit="contain" />
+      <AssetSlot slot={project.title ?? null} defaultFit="contain" reelDuration={totalFrames} />
 
       {/* Fixed chrome — locked overlay, no motion, immune to transitions. */}
       <Template layers={project.template.layers} />
 
       {/* Branded logo with its own uploaded animation (static fallback). */}
-      <AssetSlot slot={project.logo} defaultFit="contain" />
+      <AssetSlot slot={project.logo} defaultFit="contain" reelDuration={totalFrames} />
 
       {/* Reel-wide progress bar (or per-page segments/dots, per loaderStyle). */}
       {(project.loaderVisible ?? true) && (
