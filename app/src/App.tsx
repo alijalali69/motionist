@@ -2415,6 +2415,14 @@ const ElementMotion: React.FC<{
   }, []);
   const [savingPreset, setSavingPreset] = React.useState(false);
   const [presetName, setPresetName] = React.useState("");
+  // Group-name suggestions — a custom-rendered dropdown, not a native
+  // <input list="..."> datalist. Chromium's native datalist popup is an
+  // OS-compositor overlay whose position it computes itself, and in this
+  // app's window it was showing up detached from the field (mid-screen)
+  // instead of anchored under it — a known Chromium quirk, not something
+  // fixable from this side of the DOM. A plain absolutely-positioned list
+  // under our own CSS sidesteps it entirely.
+  const [showGroupSuggestions, setShowGroupSuggestions] = React.useState(false);
   const commitSavePreset = () => {
     const name = presetName.trim();
     if (!name || !onSaveMotionPreset) return;
@@ -2531,22 +2539,41 @@ const ElementMotion: React.FC<{
       <>
       {/* Layer group — plain shared name, not a real nested transform. Any
           two layers on this page sharing the same name move together
-          (position only) when either is dragged on the canvas. A datalist
-          (not a dropdown) so typing an EXISTING name joins that group and
-          typing a new one starts a fresh one, in the same field. */}
-      <div className="row mini" style={{ gap: 6, alignItems: "center", padding: "8px 12px", borderBottom: "1px solid var(--line)" }}>
+          (position only) when either is dragged on the canvas. A custom
+          suggestion list (not a native <input list> datalist — see
+          showGroupSuggestions above) so typing an EXISTING name joins that
+          group and typing a new one starts a fresh one, in the same field. */}
+      <div className="row mini" style={{ gap: 6, alignItems: "center", padding: "8px 12px", borderBottom: "1px solid var(--line)", position: "relative" }}>
         <label style={{ margin: 0, flexShrink: 0 }} title="Layers sharing the same group name move together when you drag any one of them on the canvas — position only, not size">Group</label>
-        <input type="text" list={`group-names-${layer.index}`} value={layer.groupId ?? ""} placeholder="none (ungrouped)"
+        <input type="text" value={layer.groupId ?? ""} placeholder="none (ungrouped)"
           style={{ flex: 1 }}
+          onFocus={() => setShowGroupSuggestions(true)}
+          onBlur={() => setTimeout(() => setShowGroupSuggestions(false), 150)}
           onChange={(e) => onChange((l) => { l.groupId = e.target.value.trim() || undefined; })} />
-        <datalist id={`group-names-${layer.index}`}>
-          {Array.from(new Set((pageLayers ?? []).map((l) => l.groupId).filter((g): g is string => !!g))).map((g) => (
-            <option key={g} value={g} />
-          ))}
-        </datalist>
         {layer.groupId && (
           <button className="btn small" title="Remove from group" onClick={() => onChange((l) => { l.groupId = undefined; })}>✕</button>
         )}
+        {showGroupSuggestions && (() => {
+          const names = Array.from(new Set((pageLayers ?? []).map((l) => l.groupId).filter((g): g is string => !!g)))
+            .filter((g) => g !== layer.groupId);
+          if (names.length === 0) return null;
+          return (
+            <div className="card compact" style={{
+              position: "absolute", left: 12, right: 12, top: "100%", marginTop: 2, zIndex: 5,
+              padding: 4, maxHeight: 140, overflowY: "auto",
+            }}>
+              {names.map((g) => (
+                // onMouseDown (not onClick) fires BEFORE the input's onBlur,
+                // so the click actually lands instead of the list vanishing
+                // out from under the pointer first.
+                <div key={g} className="btn small" style={{ width: "100%", textAlign: "left", marginBottom: 2 }}
+                  onMouseDown={(e) => { e.preventDefault(); onChange((l) => { l.groupId = g; }); setShowGroupSuggestions(false); }}>
+                  {g}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
       <div className="el-body">
         <div className="el-rail">
