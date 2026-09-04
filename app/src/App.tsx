@@ -2,7 +2,7 @@ import React from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { Reel } from "../../src/Reel";
 import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
-import { TEXT_ENTRANCE_NAMES, TEXT_EXIT_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS } from "../../src/presets";
+import { TEXT_ENTRANCE_NAMES, TEXT_EXIT_NAMES, LATIN_TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS } from "../../src/presets";
 import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
   listFonts, deleteProjectFiles, type IngestResult, type FontEntry,
@@ -1989,8 +1989,17 @@ const ElementMotion: React.FC<{
   // pure display choice, not stored data; always starts on Simple, same as
   // this whole component remounting (key={l.index}) on every layer switch.
   const [kfView, setKfView] = React.useState(false);
+  // letterPopIn splits into per-character DOM nodes — only offered when
+  // this text layer's own direction is already "ltr", never for Farsi/
+  // Arabic content (splitting individual letters breaks cursive joining;
+  // see the isLetterPop render-side gate in PageScene.tsx, which double-
+  // checks the same thing so a stray saved "letterPopIn" on rtl text can
+  // never actually render split).
   const inCategories = isTextLayer
-    ? [...ENTRANCE_CATEGORIES, { label: "Text reveal", names: TEXT_ENTRANCE_NAMES }]
+    ? [
+        ...ENTRANCE_CATEGORIES,
+        { label: "Text reveal", names: layer.direction === "ltr" ? [...TEXT_ENTRANCE_NAMES, ...LATIN_TEXT_ENTRANCE_NAMES] : TEXT_ENTRANCE_NAMES },
+      ]
     : ENTRANCE_CATEGORIES;
   const outCategories = isTextLayer
     ? [...EXIT_CATEGORIES, { label: "Text reveal", names: TEXT_EXIT_NAMES }]

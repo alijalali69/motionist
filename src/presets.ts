@@ -99,7 +99,27 @@ export type EntranceName =
   // face-crossing (near-zero width at the 90°/180° marks, selling an
   // edge-on moment) — no new field, just a richer curve over the existing
   // rotateY/scale than flipIn/cardFlipIn's single smooth turn.
-  | "cubeIn";
+  | "cubeIn"
+  // Border-radius wobbles into an organic blob as it clips the layer's own
+  // content, settling back to a plain rectangle — see LayerMotion.morph.
+  // Cheap approximation of true shape-to-shape morphing (which needs a
+  // path-interpolation dependency this doesn't take on).
+  | "morphIn"
+  // A confetti release near the very end of arrival — several small bits
+  // fly outward from center and fade. See LayerMotion.burst.
+  | "burstIn"
+  // A rounded-rect outline traces itself around the layer's own box as it
+  // enters — see LayerMotion.stroke. Generic (any layer's bounding box),
+  // not the exact geometry of a shape's own corner radius/stroke.
+  | "strokeIn"
+  // Text-only: pops in character by character with a spring, LATIN TEXT
+  // ONLY — see the direction === "ltr" gate in App.tsx's picker and the
+  // isLetterPop branch in PageScene.tsx. Splitting individual letters into
+  // separate DOM nodes is exactly what breaks cursive Farsi/Arabic joining
+  // (the same reason word/lineReveal only ever split on word/line
+  // boundaries) — this is offered ONLY when a layer's own direction is
+  // already "ltr", never for Farsi content.
+  | "letterPopIn";
 
 export const ENTRANCE_NAMES: EntranceName[] = [
   "none", "fade", "slideRight", "slideLeft", "slideUp", "slideDown",
@@ -111,6 +131,7 @@ export const ENTRANCE_NAMES: EntranceName[] = [
   "rollIn", "jackInBox", "swingIn", "heartbeatIn", "diamondReveal",
   "lightspeedIn", "squashStretchIn", "glowPulseIn", "vhsIn", "duotoneIn",
   "glitchIn", "dataMoshIn", "liquidIn", "cubeIn",
+  "morphIn", "burstIn", "strokeIn",
 ];
 
 // Text-only entrances — offered in a separate list so image/photo layers
@@ -120,6 +141,11 @@ export const TEXT_ENTRANCE_NAMES: EntranceName[] = ["wordReveal", "lineReveal", 
 // the first text-only exit the app has (word/lineReveal never got an exit
 // side). Added by the caller only for text layers, same pattern.
 export const TEXT_EXIT_NAMES: ExitName[] = ["scrambleOut"];
+// Text-only AND Latin-only — letterPopIn splits into per-character DOM
+// nodes, which breaks cursive Farsi/Arabic joining, so it's gated behind
+// `layer.direction === "ltr"` in the picker on top of the usual
+// text-layer check, never offered for Farsi content at all.
+export const LATIN_TEXT_ENTRANCE_NAMES: EntranceName[] = ["letterPopIn"];
 
 // Grouped for the FX picker — a flat 20+ option dropdown made every effect a
 // scroll-and-squint search; a header per motion family (rendered as a real
@@ -135,8 +161,8 @@ export const ENTRANCE_CATEGORIES: { label: string; names: EntranceName[] }[] = [
   { label: "Scale", names: ["pop", "zoomIn", "zoomOut", "growIn", "jackInBox", "heartbeatIn"] },
   { label: "Drop & float", names: ["dropIn", "riseIn", "floatIn"] },
   { label: "Rotate & flip", names: ["rotateIn", "flipIn", "cardFlipIn", "rollIn", "swingIn", "cubeIn"] },
-  { label: "Wipe & reveal", names: ["wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop", "circleReveal", "diamondReveal", "typewriter"] },
-  { label: "Glitch & texture", names: ["lightspeedIn", "squashStretchIn", "glowPulseIn", "vhsIn", "duotoneIn", "glitchIn", "dataMoshIn", "liquidIn"] },
+  { label: "Wipe & reveal", names: ["wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop", "circleReveal", "diamondReveal", "typewriter", "strokeIn"] },
+  { label: "Glitch & texture", names: ["lightspeedIn", "squashStretchIn", "glowPulseIn", "vhsIn", "duotoneIn", "glitchIn", "dataMoshIn", "liquidIn", "morphIn", "burstIn"] },
 ];
 
 export type AmbientName =
@@ -200,6 +226,9 @@ export type ExitName =
   | "dataMoshOut"
   | "liquidOut"
   | "cubeOut"
+  | "morphOut"
+  | "burstOut"
+  | "strokeOut"
   // Text-only — mirrors scrambleIn, reverses direction (see
   // TEXT_EXIT_NAMES and the isScrambleOut branch in PageScene.tsx).
   | "scrambleOut";
@@ -213,6 +242,7 @@ export const EXIT_NAMES: ExitName[] = [
   "rollOut", "jackOutBox", "swingOut", "heartbeatOut", "diamondHide",
   "lightspeedOut", "squashStretchOut", "glowPulseOut", "vhsOut", "duotoneOut",
   "glitchOut", "dataMoshOut", "liquidOut", "cubeOut",
+  "morphOut", "burstOut", "strokeOut",
 ];
 
 // Same grouping as ENTRANCE_CATEGORIES, mirrored for exits — see the comment
@@ -223,8 +253,8 @@ export const EXIT_CATEGORIES: { label: string; names: ExitName[] }[] = [
   { label: "Scale", names: ["popOut", "zoomOut", "shrinkOut", "jackOutBox", "heartbeatOut"] },
   { label: "Drop & rise", names: ["dropOut", "riseOut"] },
   { label: "Rotate & flip", names: ["rotateOut", "flipOut", "cardFlipOut", "rollOut", "swingOut", "cubeOut"] },
-  { label: "Wipe & hide", names: ["wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide", "diamondHide", "typewriterOut"] },
-  { label: "Glitch & texture", names: ["lightspeedOut", "squashStretchOut", "glowPulseOut", "vhsOut", "duotoneOut", "glitchOut", "dataMoshOut", "liquidOut"] },
+  { label: "Wipe & hide", names: ["wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide", "diamondHide", "typewriterOut", "strokeOut"] },
+  { label: "Glitch & texture", names: ["lightspeedOut", "squashStretchOut", "glowPulseOut", "vhsOut", "duotoneOut", "glitchOut", "dataMoshOut", "liquidOut", "morphOut", "burstOut"] },
 ];
 
 // Page-to-page transitions. `name` is stored on the page; `label` shows in the UI.
@@ -271,6 +301,9 @@ export type LayerMotion = {
   glitch?: number; // 0..1 RGB-split burst envelope — glitchIn/Out
   glitchBlocks?: number; // 0..1 block-tear/datamosh burst envelope — dataMoshIn/Out
   liquid?: number; // 0..1 organic SVG-warp crossfade intensity — liquidIn/Out
+  morph?: number; // 0..1 blob border-radius wobble intensity — morphIn/Out
+  burst?: number; // 0..1 progress driving a confetti release near the end — burstIn/Out
+  stroke?: number; // 0..1 outline draw-on progress — strokeIn/Out
 };
 
 const BASE: LayerMotion = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, rotateY: 0 };
@@ -308,6 +341,9 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
   let glitch: number | undefined;
   let glitchBlocks: number | undefined;
   let liquid: number | undefined;
+  let morph: number | undefined;
+  let burst: number | undefined;
+  let stroke: number | undefined;
   for (const m of motions) {
     opacity = Math.min(opacity, m.opacity);
     tx += m.tx; ty += m.ty;
@@ -336,6 +372,9 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
     if (m.glitch !== undefined) glitch = Math.max(glitch ?? 0, m.glitch);
     if (m.glitchBlocks !== undefined) glitchBlocks = Math.max(glitchBlocks ?? 0, m.glitchBlocks);
     if (m.liquid !== undefined) liquid = Math.max(liquid ?? 0, m.liquid);
+    if (m.morph !== undefined) morph = Math.max(morph ?? 0, m.morph);
+    if (m.burst !== undefined) burst = Math.max(burst ?? 0, m.burst);
+    if (m.stroke !== undefined) stroke = Math.max(stroke ?? 0, m.stroke);
     // Shine sweep, like clipPath: only one sweep makes sense on a layer at
     // once, first one set wins.
     if (shine === undefined && m.shine !== undefined) shine = m.shine;
@@ -348,7 +387,7 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
     // would carry redundant scaleX/scaleY: scale copies for no reason.
     scaleX: sawScaleXY ? scaleX : undefined,
     scaleY: sawScaleXY ? scaleY : undefined,
-    glow, scanline, tint, glitch, glitchBlocks, liquid,
+    glow, scanline, tint, glitch, glitchBlocks, liquid, morph, burst, stroke,
   };
 }
 
@@ -481,6 +520,10 @@ const DEFAULT_ENTRANCE_EASING: Partial<Record<EntranceName, EasingName>> = {
   // constant rate reads right; an eased curve would bunch the resolves up.
   scrambleIn: "linear",
   cubeIn: "linear", // the tumble shape is already baked into the multi-stop curve itself
+  morphIn: "easeOutCubic",
+  burstIn: "easeOutCubic",
+  strokeIn: "easeInOut",
+  letterPopIn: "linear", // each letter's own spring provides the actual character, this just paces the stagger
 };
 
 // What "(auto)" actually resolves to for a given effect — same fallback
@@ -530,6 +573,9 @@ const DEFAULT_EXIT_EASING: Partial<Record<ExitName, EasingName>> = {
   liquidOut: "easeInOut",
   scrambleOut: "linear",
   cubeOut: "linear",
+  morphOut: "easeInCubic",
+  burstOut: "easeInCubic",
+  strokeOut: "easeInOut",
 };
 
 export function resolvedExitEasing(name: ExitName, override: EasingName | undefined): EasingName {
@@ -715,6 +761,17 @@ export function entranceMotion(name: EntranceName, p: number): LayerMotion {
         rotateY: interpolate(p, [0, 1], [-270, 0]),
         scale: interpolate(p, [0, 0.30, 0.34, 0.63, 0.67, 1], [1, 1, 0.2, 0.2, 1, 1]),
       };
+    case "morphIn":
+      return { ...BASE, opacity: p, morph: p };
+    case "burstIn":
+      return { ...BASE, opacity: p, burst: p };
+    case "strokeIn":
+      return { ...BASE, opacity: p, stroke: p };
+    // Same no-op shape as wordReveal/lineReveal/scrambleIn — the real work
+    // (per-character spans, each with its own spring) happens entirely in
+    // TextLayerView's isLetterPop branch, not here.
+    case "letterPopIn":
+      return BASE;
     default:
       return BASE;
   }
@@ -822,6 +879,12 @@ export function exitMotion(name: ExitName, q: number): LayerMotion {
         rotateY: interpolate(q, [0, 1], [0, 270]),
         scale: interpolate(q, [0, 0.33, 0.37, 0.70, 0.74, 1], [1, 1, 0.2, 0.2, 1, 1]),
       };
+    case "morphOut":
+      return { ...BASE, opacity: 1 - q, morph: q };
+    case "burstOut":
+      return { ...BASE, opacity: 1 - q, burst: q };
+    case "strokeOut":
+      return { ...BASE, opacity: 1 - q, stroke: 1 - q };
     default:
       return BASE;
   }

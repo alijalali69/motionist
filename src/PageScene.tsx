@@ -179,6 +179,63 @@ const LiquidOverlay: React.FC<{ amount: number; children: React.ReactNode }> = (
     {children}
   </div>
 );
+
+// morphIn/Out's blob border-radius (LayerMotion.morph, 0..1 intensity) — 8
+// independently wobbling corner radii (frame-seeded, same glitchNoise as
+// everything else), each scaled by `amount` so 0 is a plain sharp rect and
+// 1 is a full organic blob. A cheap approximation of true shape-to-shape
+// morphing (which would need a path-interpolation dependency) — this is
+// just CSS border-radius, applied on the same div that already clips its
+// content via overflow:hidden.
+function blobRadius(amount: number, frame: number): string | undefined {
+  if (!amount) return undefined;
+  const w = (seed: number) => 35 + glitchNoise(frame, seed) * 25;
+  const h = [31, 32, 33, 34].map((s) => (amount * w(s)).toFixed(1)).join("% ");
+  const v = [41, 42, 43, 44].map((s) => (amount * w(s)).toFixed(1)).join("% ");
+  return `${h}% / ${v}%`;
+}
+
+// burstIn/Out's confetti release (LayerMotion.burst, 0..1 progress) — a
+// handful of small bits fly outward from center only in the last 30% of
+// `amount`'s own range, so it reads as a release right at the moment of
+// arrival/departure, not a burst spread evenly across the whole motion.
+// Deterministic from (frame, amount), same as every other glitch-family
+// overlay in this file.
+const PARTICLE_COLORS = ["#ff4d6d", "#ffd23f", "#3fa7ff", "#7cff6b", "#c96bff"];
+const BurstOverlay: React.FC<{ amount: number; frame: number }> = ({ amount, frame }) => {
+  const t = Math.min(1, Math.max(0, (amount - 0.7) / 0.3));
+  if (t <= 0) return null;
+  const bits = Array.from({ length: 10 }, (_, i) => {
+    const angle = (i / 10) * Math.PI * 2 + glitchNoise(frame, 50 + i) * 0.6;
+    const dist = t * (30 + glitchNoise(frame, 60 + i) * 55);
+    const size = 5 + glitchNoise(frame, 70 + i) * 6;
+    return (
+      <div key={i} style={{
+        position: "absolute", left: "50%", top: "50%",
+        width: size, height: size, borderRadius: 2,
+        background: PARTICLE_COLORS[i % PARTICLE_COLORS.length],
+        opacity: (1 - t) * amount,
+        transform: `translate(-50%, -50%) translate(${Math.cos(angle) * dist}px, ${Math.sin(angle) * dist}px) rotate(${dist * 4}deg)`,
+        pointerEvents: "none",
+      }} />
+    );
+  });
+  return <>{bits}</>;
+};
+
+// strokeIn/Out's outline draw-on (LayerMotion.stroke, 0..1 progress) — a
+// rounded-rect outline traces itself around the layer's own bounding box.
+// preserveAspectRatio="none" + vectorEffect="non-scaling-stroke" so it
+// stretches to any layer's real aspect ratio instead of assuming square;
+// the dash length (392, a rounded-rect perimeter's rough length in the
+// 0..100 viewBox this draws in) is an approximation, not exact per corner
+// radius — a stylized "traces itself" read, not a precise vector reveal.
+const StrokeDrawOverlay: React.FC<{ amount: number }> = ({ amount }) => (
+  <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible" }}>
+    <rect x="1.5" y="1.5" width="97" height="97" rx="4" fill="none" stroke="#ffffff" strokeWidth="1.5"
+      vectorEffect="non-scaling-stroke" strokeDasharray="392" strokeDashoffset={392 * (1 - amount)} />
+  </svg>
+);
 import type { Page, ContentLayer } from "./types";
 
 // Resolves a layer's up-to-3 combined entrance (or exit) slots into one
@@ -286,6 +343,12 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
   const isScrambleIn = layer.entrance === "scrambleIn" && !inExitPhase;
   const isScrambleOut = layer.exit === "scrambleOut" && inExitPhase;
   const isScramble = isScrambleIn || isScrambleOut;
+  // Per-character pop — the render-side half of the direction==="ltr" gate
+  // (the picker in App.tsx is the other half): even if a layer's own saved
+  // data somehow has entrance="letterPopIn" with direction="rtl" (an old
+  // save from before this gate existed, say), this still refuses to split
+  // Farsi/Arabic text into letters — falls through to the plain render.
+  const isLetterPop = layer.entrance === "letterPopIn" && !inExitPhase && (layer.direction ?? "rtl") === "ltr";
 
   let m;
   if (inExitPhase) {
@@ -345,6 +408,32 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
     );
   }
 
+  if (isLetterPop) {
+    // Individual characters, each with its own spring pop-in staggered by
+    // index — same shape as the word/line stagger below, just at letter
+    // granularity, which is exactly why it's Latin-only (see isLetterPop
+    // above and the direction gate in App.tsx).
+    const chars = (layer.text ?? "").split("");
+    const perChar = 14;
+    const window = Math.max(1, inDuration - perChar);
+    const n = Math.max(1, chars.length);
+    return (
+      <div style={boxStyle}>
+        <div style={{ ...textStyle, display: "flex", flexWrap: "wrap", justifyContent: justify, width: "100%" }}>
+          {chars.map((c, i) => {
+            const charDelay = layer.delay + Math.round((i / Math.max(1, n - 1)) * window);
+            const p = spring({ frame: frame - charDelay, fps, config: { damping: 11, mass: 0.7, stiffness: 140 }, durationInFrames: perChar });
+            return (
+              <span key={i} style={{ display: "inline-block", opacity: p, transform: `scale(${p}) translateY(${(1 - p) * 10}px)` }}>
+                {c === " " ? " " : c}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   if (!isStagger || inExitPhase) {
     const textNode = <div style={textStyle}>{layer.text}</div>;
     return (
@@ -355,6 +444,8 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
         {m.glitch !== undefined && <GlitchOverlay amount={m.glitch} frame={frame}>{textNode}</GlitchOverlay>}
         {m.glitchBlocks !== undefined && <DataMoshOverlay amount={m.glitchBlocks} frame={frame}>{textNode}</DataMoshOverlay>}
         {m.liquid !== undefined && <LiquidOverlay amount={m.liquid}>{textNode}</LiquidOverlay>}
+        {m.burst !== undefined && <BurstOverlay amount={m.burst} frame={frame} />}
+        {m.stroke !== undefined && <StrokeDrawOverlay amount={m.stroke} />}
       </div>
     );
   }
@@ -506,6 +597,7 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
         transformOrigin: "center center",
         clipPath: m.clipPath, // reveal/hide mask (wipe, circle) — undefined = no mask
         boxShadow: shadowStyle(m.shadow, m.glow),
+        borderRadius: m.morph !== undefined ? blobRadius(m.morph, frame) : undefined,
         overflow: "hidden", // the box IS the mask — anything inside gets cropped to its shape
       }}
     >
@@ -515,6 +607,8 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
       {m.glitch !== undefined && <GlitchOverlay amount={m.glitch} frame={frame}>{zoomedMedia}</GlitchOverlay>}
       {m.glitchBlocks !== undefined && <DataMoshOverlay amount={m.glitchBlocks} frame={frame}>{zoomedMedia}</DataMoshOverlay>}
       {m.liquid !== undefined && <LiquidOverlay amount={m.liquid}>{zoomedMedia}</LiquidOverlay>}
+      {m.burst !== undefined && <BurstOverlay amount={m.burst} frame={frame} />}
+      {m.stroke !== undefined && <StrokeDrawOverlay amount={m.stroke} />}
     </div>
   );
 };
