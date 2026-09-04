@@ -61,7 +61,20 @@ export type EntranceName =
   | "heartbeatIn"
   // Same clip-path mechanism as circleReveal, a rotated-square polygon
   // instead of a circle.
-  | "diamondReveal";
+  | "diamondReveal"
+  // Streaks in on a shear, straightens on arrival — needs LayerMotion.skewX.
+  | "lightspeedIn"
+  // Lands and flattens sideways before settling, real cartoon weight —
+  // needs LayerMotion.scaleX/scaleY independent of the uniform `scale`.
+  | "squashStretchIn"
+  // A breathing glow — see LayerMotion.glow, rendered as an extra boxShadow
+  // layered alongside cardFlipIn's cast-shadow one.
+  | "glowPulseIn"
+  // Scanline + jitter overlay, no image asset needed — see LayerMotion.scanline.
+  | "vhsIn"
+  // A hue/saturation pulse on arrival, like a color-grade flash — a plain
+  // CSS filter value, combined with `blur` in the same filter string.
+  | "duotoneIn";
 
 export const ENTRANCE_NAMES: EntranceName[] = [
   "none", "fade", "slideRight", "slideLeft", "slideUp", "slideDown",
@@ -71,6 +84,7 @@ export const ENTRANCE_NAMES: EntranceName[] = [
   "cardFlipIn", "shineIn", "typewriter",
   "slideTopLeft", "slideTopRight", "slideBottomLeft", "slideBottomRight",
   "rollIn", "jackInBox", "swingIn", "heartbeatIn", "diamondReveal",
+  "lightspeedIn", "squashStretchIn", "glowPulseIn", "vhsIn", "duotoneIn",
 ];
 
 // Text-only entrances — offered in a separate list so image/photo layers
@@ -92,6 +106,7 @@ export const ENTRANCE_CATEGORIES: { label: string; names: EntranceName[] }[] = [
   { label: "Drop & float", names: ["dropIn", "riseIn", "floatIn"] },
   { label: "Rotate & flip", names: ["rotateIn", "flipIn", "cardFlipIn", "rollIn", "swingIn"] },
   { label: "Wipe & reveal", names: ["wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop", "circleReveal", "diamondReveal", "typewriter"] },
+  { label: "Glitch & texture", names: ["lightspeedIn", "squashStretchIn", "glowPulseIn", "vhsIn", "duotoneIn"] },
 ];
 
 export type AmbientName =
@@ -145,7 +160,12 @@ export type ExitName =
   | "jackOutBox"
   | "swingOut"
   | "heartbeatOut"
-  | "diamondHide";
+  | "diamondHide"
+  | "lightspeedOut"
+  | "squashStretchOut"
+  | "glowPulseOut"
+  | "vhsOut"
+  | "duotoneOut";
 
 export const EXIT_NAMES: ExitName[] = [
   "none", "fadeOut", "slideOutLeft", "slideOutRight", "slideOutUp", "slideOutDown",
@@ -154,6 +174,7 @@ export const EXIT_NAMES: ExitName[] = [
   "cardFlipOut", "shineOut", "typewriterOut",
   "slideOutTopLeft", "slideOutTopRight", "slideOutBottomLeft", "slideOutBottomRight",
   "rollOut", "jackOutBox", "swingOut", "heartbeatOut", "diamondHide",
+  "lightspeedOut", "squashStretchOut", "glowPulseOut", "vhsOut", "duotoneOut",
 ];
 
 // Same grouping as ENTRANCE_CATEGORIES, mirrored for exits — see the comment
@@ -165,6 +186,7 @@ export const EXIT_CATEGORIES: { label: string; names: ExitName[] }[] = [
   { label: "Drop & rise", names: ["dropOut", "riseOut"] },
   { label: "Rotate & flip", names: ["rotateOut", "flipOut", "cardFlipOut", "rollOut", "swingOut"] },
   { label: "Wipe & hide", names: ["wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide", "diamondHide", "typewriterOut"] },
+  { label: "Glitch & texture", names: ["lightspeedOut", "squashStretchOut", "glowPulseOut", "vhsOut", "duotoneOut"] },
 ];
 
 // Page-to-page transitions. `name` is stored on the page; `label` shows in the UI.
@@ -197,6 +219,17 @@ export type LayerMotion = {
   clipPath?: string; // reveal/hide mask, applied on top of the other transforms
   shadow?: number; // 0..1 cast-shadow intensity — cardFlipIn/Out's "landing" shadow
   shine?: number; // 0..1 sweep position for a moving highlight overlay — shineIn/shineOut
+  skewX?: number; // degrees — lightspeedIn/Out's shear
+  // Independent axis scale, ONLY set by squashStretchIn/Out — every other
+  // effect keeps scaling both axes together via the plain `scale` above.
+  // Unset on a given axis falls back to that motion's own `scale` at
+  // render/combine time, so a layer that's never used squash-stretch
+  // behaves exactly as if these two fields didn't exist.
+  scaleX?: number;
+  scaleY?: number;
+  glow?: number; // 0..1 breathing box-shadow intensity — glowPulseIn/Out
+  scanline?: number; // 0..1 VHS scanline+jitter overlay opacity — vhsIn/Out
+  tint?: number; // 0..1 hue/saturation sweep intensity — duotoneIn/Out
 };
 
 const BASE: LayerMotion = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, rotateY: 0 };
@@ -223,10 +256,14 @@ const BASE: LayerMotion = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate:
 export function combineMotions(motions: LayerMotion[]): LayerMotion {
   if (motions.length === 0) return BASE;
   if (motions.length === 1) return motions[0];
-  let opacity = 1, tx = 0, ty = 0, scale = 1, blur = 0, rotate = 0, rotateY = 0;
+  let opacity = 1, tx = 0, ty = 0, scale = 1, blur = 0, rotate = 0, rotateY = 0, skewX = 0;
+  let scaleX = 1, scaleY = 1, sawScaleXY = false;
   let clipPath: string | undefined;
   let shadow: number | undefined;
   let shine: number | undefined;
+  let glow: number | undefined;
+  let scanline: number | undefined;
+  let tint: number | undefined;
   for (const m of motions) {
     opacity = Math.min(opacity, m.opacity);
     tx += m.tx; ty += m.ty;
@@ -234,16 +271,38 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
     blur += m.blur;
     rotate += m.rotate;
     rotateY += m.rotateY;
+    skewX += m.skewX ?? 0;
+    // Independent axis scale — same MULTIPLY rule as the uniform `scale`
+    // above, just per-axis. A motion with no scaleX/scaleY of its own
+    // (the overwhelming majority) contributes its plain `scale` on both
+    // axes, so combining squashStretch with a normal effect scales the
+    // normal effect's own axes correctly instead of silently treating it
+    // as 1.
+    scaleX *= m.scaleX ?? m.scale;
+    scaleY *= m.scaleY ?? m.scale;
+    if (m.scaleX !== undefined || m.scaleY !== undefined) sawScaleXY = true;
     if (!clipPath && m.clipPath) clipPath = m.clipPath;
-    // Shadow intensity: MAX, not sum — two combined effects both casting a
-    // shadow should read as one shadow at its strongest point, not a
-    // doubled-up value that could exceed 1.
+    // Shadow/glow/scanline/tint intensity: MAX, not sum — two combined
+    // effects both driving the same overlay should read as one overlay at
+    // its strongest point, not a doubled-up value that could exceed 1.
     if (m.shadow !== undefined) shadow = Math.max(shadow ?? 0, m.shadow);
+    if (m.glow !== undefined) glow = Math.max(glow ?? 0, m.glow);
+    if (m.scanline !== undefined) scanline = Math.max(scanline ?? 0, m.scanline);
+    if (m.tint !== undefined) tint = Math.max(tint ?? 0, m.tint);
     // Shine sweep, like clipPath: only one sweep makes sense on a layer at
     // once, first one set wins.
     if (shine === undefined && m.shine !== undefined) shine = m.shine;
   }
-  return { opacity, tx, ty, scale, blur, rotate, rotateY, clipPath, shadow, shine };
+  return {
+    opacity, tx, ty, scale, blur, rotate, rotateY, clipPath, shadow, shine,
+    skewX: skewX || undefined,
+    // Only surface scaleX/scaleY when at least one combined motion actually
+    // set one — otherwise every ordinary combo (none of them squash-stretch)
+    // would carry redundant scaleX/scaleY: scale copies for no reason.
+    scaleX: sawScaleXY ? scaleX : undefined,
+    scaleY: sawScaleXY ? scaleY : undefined,
+    glow, scanline, tint,
+  };
 }
 
 // Spring feel per entrance — bouncy ones overshoot, the rest settle smoothly.
@@ -360,6 +419,11 @@ const DEFAULT_ENTRANCE_EASING: Partial<Record<EntranceName, EasingName>> = {
   swingIn: "easeOutCubic",
   heartbeatIn: "easeOutCubic",
   diamondReveal: "easeInOut",
+  lightspeedIn: "easeOutCubic",
+  squashStretchIn: "linear", // the squash-stretch shape is already baked into the multi-stop curve itself
+  glowPulseIn: "easeInOut",
+  vhsIn: "easeInOut",
+  duotoneIn: "linear", // sine-shaped already, doesn't want another curve stacked on top
 };
 
 // What "(auto)" actually resolves to for a given effect — same fallback
@@ -399,6 +463,11 @@ const DEFAULT_EXIT_EASING: Partial<Record<ExitName, EasingName>> = {
   swingOut: "easeInCubic",
   heartbeatOut: "easeInCubic",
   diamondHide: "easeInOut",
+  lightspeedOut: "easeInCubic",
+  squashStretchOut: "linear",
+  glowPulseOut: "easeIn",
+  vhsOut: "easeInOut",
+  duotoneOut: "linear",
 };
 
 export function resolvedExitEasing(name: ExitName, override: EasingName | undefined): EasingName {
@@ -541,6 +610,32 @@ export function entranceMotion(name: EntranceName, p: number): LayerMotion {
       const r = p * 130;
       return { ...BASE, clipPath: `polygon(50% ${50 - r}%, ${50 + r}% 50%, 50% ${50 + r}%, ${50 - r}% 50%)` };
     }
+    // Streaks in on a shear, straightens on arrival.
+    case "lightspeedIn":
+      return { ...BASE, opacity: p, tx: (1 - p) * 140, skewX: -(1 - p) * 24 };
+    // Lands, flattens sideways, overshoots back, settles — the whole shape
+    // baked into one multi-stop curve on scaleX/scaleY over progress, same
+    // trick as heartbeatIn's scale curve.
+    case "squashStretchIn":
+      return {
+        ...BASE, opacity: p,
+        ty: interpolate(p, [0, 0.55, 1], [-70, 0, 0]),
+        scaleX: interpolate(p, [0, 0.55, 0.62, 0.7, 0.78, 1], [1, 1, 1.32, 0.85, 1.06, 1]),
+        scaleY: interpolate(p, [0, 0.55, 0.62, 0.7, 0.78, 1], [1, 1, 0.68, 1.18, 0.94, 1]),
+      };
+    // A breathing glow that builds in with the fade — see LayerMotion.glow.
+    case "glowPulseIn":
+      return { ...BASE, opacity: p, glow: p };
+    // Scanline + jitter overlay fading in alongside the layer — the jitter
+    // texture itself is computed from the current frame in PageScene (this
+    // function only ever sees progress, not frame, so it can't be the one
+    // driving a deterministic per-frame jitter).
+    case "vhsIn":
+      return { ...BASE, opacity: p, scanline: p };
+    // A hue/saturation flash that peaks mid-arrival and clears by the time
+    // it's settled — a sine of progress, not a permanent recolor.
+    case "duotoneIn":
+      return { ...BASE, opacity: p, tint: Math.sin(p * Math.PI) };
     default:
       return BASE;
   }
@@ -619,6 +714,21 @@ export function exitMotion(name: ExitName, q: number): LayerMotion {
       const r = (1 - q) * 130;
       return { ...BASE, clipPath: `polygon(50% ${50 - r}%, ${50 + r}% 50%, 50% ${50 + r}%, ${50 - r}% 50%)` };
     }
+    case "lightspeedOut":
+      return { ...BASE, opacity: 1 - q, tx: q * 140, skewX: -q * 24 };
+    case "squashStretchOut":
+      return {
+        ...BASE, opacity: 1 - q,
+        ty: q * -40,
+        scaleX: interpolate(q, [0, 0.15, 0.3, 1], [1, 1.25, 0.85, 0.4]),
+        scaleY: interpolate(q, [0, 0.15, 0.3, 1], [1, 0.75, 1.15, 0.4]),
+      };
+    case "glowPulseOut":
+      return { ...BASE, opacity: 1 - q, glow: 1 - q };
+    case "vhsOut":
+      return { ...BASE, opacity: 1 - q, scanline: 1 - q };
+    case "duotoneOut":
+      return { ...BASE, opacity: 1 - q, tint: Math.sin(q * Math.PI) };
     default:
       return BASE;
   }

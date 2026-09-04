@@ -13,7 +13,7 @@ import {
 import { Gif } from "@remotion/gif";
 import {
   entranceMotion, entranceProgress, exitMotion, exitProgress, combineMotions, ambientMotion,
-  type EntranceName, type ExitName, type EasingName,
+  type EntranceName, type ExitName, type EasingName, type LayerMotion,
 } from "./presets";
 
 // A moving diagonal highlight for shineIn/shineOut (LayerMotion.shine,
@@ -32,12 +32,54 @@ const ShineOverlay: React.FC<{ shine: number }> = ({ shine }) => (
   />
 );
 
-// cardFlipIn/Out's "landing" shadow (LayerMotion.shadow, 0..1 intensity) —
-// a plain boxShadow scaled by intensity, cheap and works on any layer.
-function shadowStyle(shadow: number | undefined): string | undefined {
-  if (!shadow) return undefined;
-  return `0 ${18 * shadow}px ${40 * shadow}px rgba(0,0,0,${0.45 * shadow})`;
+// cardFlipIn/Out's "landing" shadow (LayerMotion.shadow, 0..1 intensity) and
+// glowPulseIn/Out's breathing glow (LayerMotion.glow) — both are just
+// boxShadow at different colors/spreads, so one layer's box-shadow can
+// carry both at once (CSS box-shadow accepts a comma-separated list).
+function shadowStyle(shadow: number | undefined, glow: number | undefined): string | undefined {
+  const parts: string[] = [];
+  if (shadow) parts.push(`0 ${18 * shadow}px ${40 * shadow}px rgba(0,0,0,${0.45 * shadow})`);
+  if (glow) parts.push(`0 0 ${40 * glow}px ${10 * glow}px rgba(255,255,255,${0.8 * glow})`);
+  return parts.length ? parts.join(", ") : undefined;
 }
+
+// vhsIn/Out's scanline + jitter overlay (LayerMotion.scanline, 0..1
+// intensity). Deterministic from `frame` (not a CSS @keyframes loop) —
+// Remotion's headless render captures one frame at a time, not in real
+// time, so a live CSS animation has no reliable state to capture; every
+// visual change here has to be a plain function of the actual frame number
+// instead, same reasoning as the rest of this file's frame-driven motion.
+// The transform/filter strings both LayerView and TextLayerView build,
+// pulled out once so the two never drift out of sync when a new field
+// (skewX, scaleX/scaleY, tint) gets added to LayerMotion.
+function motionTransform(m: LayerMotion): string {
+  const sx = m.scaleX ?? m.scale;
+  const sy = m.scaleY ?? m.scale;
+  const skew = m.skewX ? ` skewX(${m.skewX}deg)` : "";
+  return `perspective(900px) translate(${m.tx}px, ${m.ty}px) scale(${sx}, ${sy}) rotate(${m.rotate}deg) rotateY(${m.rotateY}deg)${skew}`;
+}
+function motionFilter(m: LayerMotion): string | undefined {
+  const parts: string[] = [];
+  if (m.blur) parts.push(`blur(${m.blur}px)`);
+  if (m.tint) parts.push(`hue-rotate(${m.tint * 45}deg) saturate(${1 + m.tint * 0.6})`);
+  return parts.length ? parts.join(" ") : undefined;
+}
+
+const ScanlineOverlay: React.FC<{ scanline: number; frame: number }> = ({ scanline, frame }) => (
+  <div
+    style={{
+      position: "absolute", inset: 0, pointerEvents: "none",
+      opacity: scanline,
+      transform: `translateX(${Math.sin(frame * 0.9) * 1.5}px)`,
+      backgroundImage:
+        "repeating-linear-gradient(0deg, rgba(255,255,255,0.12) 0px, transparent 1px, transparent 3px)," +
+        "linear-gradient(180deg, transparent 40%, rgba(140,255,235,0.18) 50%, transparent 60%)",
+      backgroundSize: "100% 100%, 100% 260%",
+      backgroundPositionY: `0px, ${(frame * 5) % 260}%`,
+      mixBlendMode: "overlay",
+    }}
+  />
+);
 import type { Page, ContentLayer } from "./types";
 
 // Resolves a layer's up-to-3 combined entrance (or exit) slots into one
@@ -144,7 +186,7 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
   } else if (!isStagger) {
     m = combinedEntranceMotion(layer, frame, fps);
   } else {
-    m = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, clipPath: undefined as string | undefined };
+    m = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, rotateY: 0, clipPath: undefined as string | undefined };
   }
 
   const justify = layer.textAlign === "left" ? "flex-start" : layer.textAlign === "center" ? "center" : "flex-end";
@@ -164,11 +206,11 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
     position: "absolute",
     left: layer.left, top: layer.top, width: layer.width, height: layer.height,
     opacity: m.opacity * layer.opacity,
-    filter: m.blur ? `blur(${m.blur}px)` : undefined,
-    transform: `perspective(900px) translate(${m.tx}px, ${m.ty}px) scale(${m.scale}) rotate(${m.rotate}deg) rotateY(${m.rotateY}deg)`,
+    filter: motionFilter(m),
+    transform: motionTransform(m),
     transformOrigin: "center center",
     clipPath: m.clipPath,
-    boxShadow: shadowStyle(m.shadow),
+    boxShadow: shadowStyle(m.shadow, m.glow),
     overflow: "visible", // text isn't a mask — don't silently clip slightly-oversized content
     display: "flex",
     alignItems: "center",
@@ -180,6 +222,7 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
       <div style={boxStyle}>
         <div style={textStyle}>{layer.text}</div>
         {m.shine !== undefined && <ShineOverlay shine={m.shine} />}
+        {m.scanline !== undefined && <ScanlineOverlay scanline={m.scanline} frame={frame} />}
       </div>
     );
   }
@@ -309,11 +352,11 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
         width: layer.width,
         height: layer.height,
         opacity,
-        filter: m.blur ? `blur(${m.blur}px)` : undefined,
-        transform: `perspective(900px) translate(${m.tx}px, ${m.ty}px) scale(${m.scale}) rotate(${m.rotate}deg) rotateY(${m.rotateY}deg)`,
+        filter: motionFilter(m),
+        transform: motionTransform(m),
         transformOrigin: "center center",
         clipPath: m.clipPath, // reveal/hide mask (wipe, circle) — undefined = no mask
-        boxShadow: shadowStyle(m.shadow),
+        boxShadow: shadowStyle(m.shadow, m.glow),
         overflow: "hidden", // the box IS the mask — anything inside gets cropped to its shape
       }}
     >
@@ -328,6 +371,7 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
         {media}
       </div>
       {m.shine !== undefined && <ShineOverlay shine={m.shine} />}
+      {m.scanline !== undefined && <ScanlineOverlay scanline={m.scanline} frame={frame} />}
     </div>
   );
 };
