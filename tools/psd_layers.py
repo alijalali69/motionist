@@ -7,6 +7,7 @@ Usage:
     python tools/psd_layers.py file.psd --export layers/    # also export each layer as PNG
 """
 import argparse
+import re
 import sys
 from psd_tools import PSDImage
 
@@ -47,9 +48,36 @@ def ancestor_names(layer):
     return names
 
 
+def is_effectively_visible(layer):
+    """A layer's own `visible` flag only tells you it isn't hidden itself —
+    it says nothing about a hidden ANCESTOR GROUP, which hides everything
+    inside it in Photoshop regardless of each child's own flag. Same parent
+    walk as ancestor_names(), just checking .visible instead of collecting
+    names."""
+    if not layer.visible:
+        return False
+    parent = layer.parent
+    while parent is not None and getattr(parent, "name", None) is not None:
+        if isinstance(parent, Group) and not parent.visible:
+            return False
+        parent = getattr(parent, "parent", None)
+    return True
+
+
+# 'fixed'/'loader'/'subtitle' must be whole WORDS in the name, not a bare
+# substring — "Unfixed Banner" or "Subtitled Draft" used to false-positive
+# match "fixed"/"sub" and silently misroute. \b treats hyphens/underscores
+# as boundaries too (Python's \w includes underscore, so "logo_fixed" still
+# matches "fixed" as a real word — only a run of alpha characters like
+# "unfixed" fails to match now, which is exactly the fix).
+def _has_word(hay, word):
+    return re.search(r"\b" + re.escape(word) + r"\b", hay) is not None
+
+
 def route_hint(layer):
     """Classify a layer for the reel by naming convention. The keyword may appear
-    anywhere in the layer name OR in any ancestor group name (case-insensitive):
+    anywhere in the layer name OR in any ancestor group name (case-insensitive),
+    as a whole word:
     - 'fixed'    -> 'fixed'    (template chrome: 'Logo Fixed', a group named 'fixed', ...)
     - 'loader'   -> 'loader'   (position marker for the progress bar)
     - 'sub'/'subtitle' -> 'subtitle' (position marker for the caption safe-zone)
@@ -60,13 +88,13 @@ def route_hint(layer):
     hay = " ".join([name, *parents])
     # 'logo' wins over 'fixed' so the branded logo gets its own animated slot
     # (e.g. a layer named "Logo Fixed" routes to logo, not static chrome).
-    if "logo" in hay:
+    if _has_word(hay, "logo"):
         return "logo"
-    if "fixed" in hay:
+    if _has_word(hay, "fixed"):
         return "fixed"
-    if "loader" in hay:
+    if _has_word(hay, "loader"):
         return "loader"
-    if "subtitle" in hay or "subzone" in hay or name.startswith("sub"):
+    if _has_word(hay, "subtitle") or _has_word(hay, "subzone") or name.startswith("sub"):
         return "subtitle"
     return "content"
 
@@ -134,6 +162,16 @@ def main():
         for layer in psd.descendants():
             if isinstance(layer, Group):
                 continue
+            route = route_hint(layer)
+            # A hidden layer's own pixels shouldn't silently become visible
+            # reel content (a designer keeping hidden draft/alternate
+            # layers is completely normal Photoshop practice) — but per
+            # docs/PSD_SPEC.md, a loader/subtitle POSITION MARKER is
+            # explicitly allowed to be hidden ("the box still counts"),
+            # since its pixels are ignored downstream either way. Only
+            # genuine content gets filtered by visibility.
+            if route not in ("loader", "subtitle") and not is_effectively_visible(layer):
+                continue
             img = layer.composite()
             if img is None:
                 continue
@@ -155,7 +193,7 @@ def main():
                 "opacity": round(layer.opacity / 255, 3),
                 "text": layer.text if isinstance(layer, TypeLayer) else None,
                 "parents": ancestor_names(layer),
-                "route": route_hint(layer),
+                "route": route,
             })
             n += 1
         with open(os.path.join(args.export, "manifest.json"), "w", encoding="utf-8") as f:

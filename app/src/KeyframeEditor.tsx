@@ -77,6 +77,20 @@ export const KeyframeEditor: React.FC<{
   // relying on that fallback, once, so every row is independently
   // draggable from the moment you open this view — not just after you've
   // touched it once yourself.
+  // Was `[]` (mount-only) — fixed the "FX1 and FX2 move together" bug for a
+  // layer that already had FX2/3 active when the Keyframes panel first
+  // opened, but missed the same bug for FX2/3 added WHILE the panel stays
+  // mounted (adding "+FX2" doesn't remount this component, so a mount-only
+  // effect never re-seeds it — the newly-active slot keeps live-falling-
+  // back to FX1 exactly like before, just for a narrower trigger). Keying
+  // off the actual entrance/exit NAME sets (by value, not array identity —
+  // the arrays themselves are rebuilt fresh every render) makes this re-run
+  // exactly when a slot goes from inactive to active, and stay a no-op
+  // otherwise: dragging a block changes timing fields, never these names,
+  // so this doesn't re-fire on every drag tick, and every write inside is
+  // already `undefined`-guarded, so an extra run changes nothing.
+  const entranceKey = entranceNames.join("|");
+  const exitKey = exitNames.join("|");
   React.useEffect(() => {
     onChange((ll: any) => {
       for (let i = 1; i <= 2; i++) {
@@ -93,7 +107,7 @@ export const KeyframeEditor: React.FC<{
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [entranceKey, exitKey]);
 
   const rows: Row[] = [];
   entranceNames.forEach((name, i) => {
@@ -165,12 +179,29 @@ export const KeyframeEditor: React.FC<{
   );
 };
 
+// Each row.onMove/onResize commit goes through onChange -> update(), which
+// clones the WHOLE project and re-renders the entire Player (every layer's
+// entrance/exit motion recomputed, every glitch/liquid/particle overlay
+// re-rendered) — fine once, expensive at raw pointermove frequency (well
+// past 60/sec on a real mouse). Throttling the COMMIT while leaving the
+// visual readout (dragLive) unthrottled keeps the block feeling perfectly
+// responsive while cutting the actual expensive work by roughly this ratio.
+const DRAG_COMMIT_MS = 50; // ~20 commits/sec — plenty for a live-updating block
+
 const TrackRow: React.FC<{ row: Row; pageDuration: number }> = ({ row, pageDuration }) => {
   const areaRef = React.useRef<HTMLDivElement | null>(null);
   const dragRef = React.useRef<{ mode: "move" | "resize"; startX: number; startT0: number; startDur: number } | null>(null);
   // Mirrors dragRef into real state ONLY so the live seconds readout can
   // render/update during a drag — dragRef alone doesn't trigger a render.
   const [dragLive, setDragLive] = React.useState<{ mode: "move" | "resize"; frames: number } | null>(null);
+  // The single source of truth for "what's the latest computed value,
+  // right now" — read by onUp to guarantee the FINAL position always
+  // commits even if it landed inside a throttled window above and never
+  // reached row.onMove/onResize. A ref, not dragLive (React state): onUp
+  // needs this synchronously the instant it fires, not whichever value
+  // happened to have made it through React's own render timing by then.
+  const latestRef = React.useRef<{ mode: "move" | "resize"; frames: number } | null>(null);
+  const lastCommitRef = React.useRef(0);
 
   const left = (row.t0 / pageDuration) * 100;
   const width = (row.dur / pageDuration) * 100;
@@ -179,12 +210,14 @@ const TrackRow: React.FC<{ row: Row; pageDuration: number }> = ({ row, pageDurat
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
     dragRef.current = { mode: "move", startX: e.clientX, startT0: row.t0, startDur: row.dur };
+    lastCommitRef.current = 0; // next onMove always commits immediately — no stale throttle window carried over from a previous drag
     setDragLive({ mode: "move", frames: row.t0 });
   };
   const onHandleDown = (e: React.PointerEvent) => {
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
     dragRef.current = { mode: "resize", startX: e.clientX, startT0: row.t0, startDur: row.dur };
+    lastCommitRef.current = 0;
     setDragLive({ mode: "resize", frames: row.dur });
   };
   const onMove = (e: React.PointerEvent) => {
@@ -195,17 +228,21 @@ const TrackRow: React.FC<{ row: Row; pageDuration: number }> = ({ row, pageDurat
     // from the row's current (already-updated-mid-drag) position — see the
     // "jumps while dragging" fix.
     const dt = Math.round(((e.clientX - d.startX) / rect.width) * pageDuration);
-    if (d.mode === "move") {
-      const v = snapFrame(Math.max(0, d.startT0 + dt));
-      row.onMove(v);
-      setDragLive({ mode: "move", frames: v });
-    } else {
-      const v = snapFrame(clamp(d.startDur + dt, 1, pageDuration));
-      row.onResize(v);
-      setDragLive({ mode: "resize", frames: v });
-    }
+    const v = d.mode === "move"
+      ? snapFrame(Math.max(0, d.startT0 + dt))
+      : snapFrame(clamp(d.startDur + dt, 1, pageDuration));
+    latestRef.current = { mode: d.mode, frames: v };
+    setDragLive({ mode: d.mode, frames: v }); // every event — cheap, purely local, keeps the block/readout feeling instant
+    const now = performance.now();
+    if (now - lastCommitRef.current < DRAG_COMMIT_MS) return; // the expensive path (full project clone + re-render) — throttled
+    lastCommitRef.current = now;
+    if (d.mode === "move") row.onMove(v); else row.onResize(v);
   };
-  const onUp = () => { dragRef.current = null; setDragLive(null); };
+  const onUp = () => {
+    const last = latestRef.current;
+    if (last) { last.mode === "move" ? row.onMove(last.frames) : row.onResize(last.frames); }
+    dragRef.current = null; latestRef.current = null; setDragLive(null);
+  };
 
   // The real eased shape (sampled), redrawn whenever the ease actually
   // changes — this is the literal answer to "when easing is changed the

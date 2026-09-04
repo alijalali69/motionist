@@ -23,8 +23,16 @@ import { KeyframeEditor } from "./KeyframeEditor";
 const AMBIENTS = AMBIENT_NAMES;
 const EASINGS = EASING_NAMES;
 
+// structuredClone is a native deep clone — no JSON string round-trip, which
+// was the real cost here: update() calls this on every single edit,
+// including every pointermove during a drag (a keyframe block, a canvas
+// handle, a photo pan) — JSON.stringify+parse of the WHOLE project on every
+// mouse-pixel of movement was the actual cause of scrubbing lag on any
+// project of real size. Project is already guaranteed plain-JSON-shaped
+// data (it's persisted to disk as JSON), so this clones it exactly the
+// same, just without paying for two full string conversions to do it.
 function clone<T>(x: T): T {
-  return JSON.parse(JSON.stringify(x));
+  return structuredClone(x);
 }
 
 // A color swatch (native picker, for dragging around a color wheel) plus a

@@ -13,3 +13,6 @@ public/logos/
 public/_test_handle_asset.png
 .uploads/
 Motionist_for_assistant.zip
+
+# Python bytecode cache — regenerated locally by any tools/*.py run, not real content
+__pycache__/

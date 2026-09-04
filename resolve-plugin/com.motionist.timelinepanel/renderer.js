@@ -1,18 +1,12 @@
-// Kept in sync by hand with src/presets.ts's ENTRANCE_NAMES/TEXT_ENTRANCE_NAMES/
-// EXIT_NAMES — this panel has no build step/bundler to import them directly,
-// and Motionist's own code stays untouched by this plugin.
-const ENTRANCE_NAMES = [
-  "none", "fade", "slideRight", "slideLeft", "slideUp", "slideDown",
-  "pop", "zoomIn", "zoomOut", "growIn", "dropIn", "riseIn",
-  "blurIn", "rotateIn", "flipIn", "floatIn",
-  "wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop", "circleReveal",
-  "wordReveal", "lineReveal", // text-only
-];
-const EXIT_NAMES = [
-  "none", "fadeOut", "slideOutLeft", "slideOutRight", "slideOutUp", "slideOutDown",
-  "shrinkOut", "zoomOut", "popOut", "blurOut", "dropOut", "riseOut", "rotateOut", "flipOut",
-  "wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide",
-];
+// ENTRANCE_NAMES/EXIT_NAMES used to be hand-copied here from src/presets.ts
+// — that's exactly what silently drifted (24 effects added to presets.ts
+// this session were never reachable from this panel, since nothing ever
+// re-copied them). They're declared by effect-names.generated.js now,
+// loaded as the <script> right before this one in index.html — regenerated
+// from presets.ts's own arrays by tools/gen_resolve_effect_list.mjs
+// (install_resolve_plugin.bat runs it automatically; `node
+// tools/gen_resolve_effect_list.mjs` by hand any other time presets.ts's
+// effect lists change).
 
 const clipPicker = document.getElementById("clipPicker");
 const clipMeta = document.getElementById("clipMeta");

@@ -31,15 +31,35 @@ app.use("/out", express.static(path.join(ROOT, "out")));
 
 const upload = multer({ dest: path.join(ROOT, ".uploads") });
 
+// `timeoutMs` is opt-in (undefined = no timeout, the original unbounded
+// behavior — the actual render path via runStreaming() below is NOT this
+// function and already has its own job-based cancel button, so it's never
+// safe to impose a blanket timeout there). Passed explicitly at call sites
+// where a hang has no other recovery path (PSD/SVG ingest — a stuck
+// psd-tools/svgelements parse used to leave /api/ingest blocked forever
+// with no cancel button, unlike the render pipeline).
 function run(cmd, args, opts = {}) {
+  const { timeoutMs, ...spawnOpts } = opts;
   return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { cwd: ROOT, shell: true, ...opts });
-    let out = "", err = "";
+    const p = spawn(cmd, args, { cwd: ROOT, shell: true, ...spawnOpts });
+    let out = "", err = "", timedOut = false;
+    let timer = null;
+    if (timeoutMs) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        // shell:true launches cmd.exe, which launches the real work as a
+        // child of THAT — plain p.kill() only kills the shell and orphans
+        // the actual process, same reasoning as the render-cancel route.
+        if (p.pid) spawn("taskkill", ["/PID", String(p.pid), "/T", "/F"], { shell: true });
+      }, timeoutMs);
+    }
     p.stdout.on("data", (d) => (out += d));
     p.stderr.on("data", (d) => (err += d));
-    p.on("close", (code) =>
-      code === 0 ? resolve(out) : reject(new Error(`${cmd} exited ${code}\n${err}`))
-    );
+    p.on("close", (code) => {
+      if (timer) clearTimeout(timer);
+      if (timedOut) return reject(new Error(`${cmd} timed out after ${timeoutMs}ms and was killed`));
+      code === 0 ? resolve(out) : reject(new Error(`${cmd} exited ${code}\n${err}`));
+    });
   });
 }
 
@@ -420,7 +440,7 @@ app.post("/api/ingest", upload.single("psd"), async (req, res) => {
       JSON.stringify(req.file.path),
       "--export", JSON.stringify(exportDir),
       "--max-side", "1920",
-    ]);
+    ], { timeoutMs: 120_000 }); // 2min — generous for a huge multi-layer PSD, but bounded: previously unbounded, a stuck parse hung /api/ingest forever with no recovery
     fs.rmSync(req.file.path, { force: true });
     const manifest = readManifest(path.join(PUBLIC, "projects", projectId), pageId);
     const routed = routePage(projectId, pageId, manifest);
@@ -436,6 +456,11 @@ app.post("/api/ingest", upload.single("psd"), async (req, res) => {
       sourceName: req.file.originalname,
     });
   } catch (e) {
+    // The uploaded temp file was never cleaned up on a failed/timed-out
+    // ingest — only the success path removed it. force:true so a file
+    // that's already gone (e.g. the timeout's own taskkill beat us to it,
+    // unlikely but not impossible) doesn't turn this into a second error.
+    if (req.file?.path) fs.rmSync(req.file.path, { force: true });
     res.status(500).json({ error: String(e.message || e) });
   }
 });
@@ -752,5 +777,31 @@ app.get("/api/render/status/:jobId", (req, res) => {
   if (!job) return res.status(404).json({ error: "unknown or expired render job" });
   res.json(job);
 });
+
+// renderJobs is in-memory only (never persisted) — restarting this process
+// while a render is in flight orphans the underlying `remotion render`/
+// Chromium/ffmpeg child process with no way to discover or cancel it
+// afterward (its job entry, and the only pid that could `taskkill /T` it,
+// dies with this process). This is NOT a full fix for that — it can't be,
+// short of persisting job state to disk and reconciling on the next
+// startup — just a loud warning so a deliberate shutdown mid-render is a
+// visible choice, not a silent one. Real limitation, worth stating
+// plainly: `stop.bat` and a manual `taskkill /F` (what actually stops this
+// server day to day, including every dev-server restart this session)
+// force-terminate the process without giving it a chance to run this —
+// Windows' `/F` bypasses graceful signal delivery entirely. This only
+// fires for a plain Ctrl+C in an interactive terminal.
+function warnAboutRunningJobs() {
+  const running = [...renderJobs.values()].filter((j) => j.status === "running" || j.status === "cancelling");
+  if (running.length) {
+    console.warn(
+      `\n⚠ Shutting down with ${running.length} render(s) still in progress — ` +
+      `the underlying process${running.length > 1 ? "es" : ""} will keep running as ` +
+      `orphan${running.length > 1 ? "s" : ""} with no way to stop or track ${running.length > 1 ? "them" : "it"} from here.\n`
+    );
+  }
+}
+process.on("SIGINT", () => { warnAboutRunningJobs(); process.exit(0); });
+process.on("SIGTERM", () => { warnAboutRunningJobs(); process.exit(0); });
 
 app.listen(PORT, () => console.log(`Motionist server on http://localhost:${PORT}`));

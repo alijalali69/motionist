@@ -14,6 +14,19 @@ set "PLUGINS_ROOT=%~dp0resolve-plugin"
 set "DEST_ROOT=%PROGRAMDATA%\Blackmagic Design\DaVinci Resolve\Support\Workflow Integration Plugins"
 set "FAILED=0"
 
+rem Regenerate the Timeline panel's entrance/exit effect list from
+rem src/presets.ts's own arrays before copying, so an install always ships
+rem whatever effects the app currently has, not a hand-copied list that can
+rem silently drift out of sync (see tools/gen_resolve_effect_list.mjs).
+echo Regenerating Resolve Timeline panel's effect list from src/presets.ts ...
+node "%~dp0tools\gen_resolve_effect_list.mjs"
+if !errorlevel! NEQ 0 (
+  echo   Failed to regenerate the effect list - is Node.js installed and on PATH?
+  pause
+  exit /b 1
+)
+echo.
+
 for %%P in (com.motionist.reelpanel com.motionist.timelinepanel) do (
   set "SRC=%PLUGINS_ROOT%\%%P"
   set "DEST=%DEST_ROOT%\%%P"

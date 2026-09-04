@@ -15,6 +15,7 @@ import copy
 import io
 import json
 import os
+import re
 import sys
 import xml.etree.ElementTree as ET
 from svgelements import SVG as SVGEl
@@ -33,16 +34,23 @@ def local(tag):
     return tag.split("}")[-1]
 
 
+# Whole-word match, same fix and same reasoning as psd_layers.py's
+# route_hint — a bare substring check let "Unfixed Banner" or "Subtitled
+# Draft" false-positive-match "fixed"/"sub" and silently misroute.
+def _has_word(hay, word):
+    return re.search(r"\b" + re.escape(word) + r"\b", hay) is not None
+
+
 def route_hint(name):
-    """Same convention as the PSD extractor (keyword anywhere in the name)."""
+    """Same convention as the PSD extractor (keyword anywhere in the name, as a whole word)."""
     h = (name or "").lower()
-    if "logo" in h:
+    if _has_word(h, "logo"):
         return "logo"
-    if "fixed" in h:
+    if _has_word(h, "fixed"):
         return "fixed"
-    if "loader" in h:
+    if _has_word(h, "loader"):
         return "loader"
-    if "subtitle" in h or h.startswith("sub"):
+    if _has_word(h, "subtitle") or h.startswith("sub"):
         return "subtitle"
     return "content"
 

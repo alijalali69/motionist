@@ -70,6 +70,21 @@ async function getCurrentProjectAndTimeline() {
 //    "StyledText" input, but a MultiText-based title (also common, and
 //    also just called "Text" in the UI) nests its content instead, under
 //    "Text1.StyledText" — verified live on a real default title.
+// Fusion's StyledText can carry in-band rich-text formatting directives
+// (per-character size/color/font, etc, in {...}-delimited codes) — real
+// styled titles use these routinely, not just plain strings. Motionist's
+// own text layer renders whatever string it's given literally (no Fusion-
+// markup parser downstream), so a styled title pulled straight through
+// used to show visible garbage formatting codes baked into the rendered
+// text. A blunt strip of every {...} block is a pragmatic first pass, not
+// a real Fusion rich-text parser (a much bigger lift than this bug
+// warrants) — good enough to stop garbage codes from appearing on screen;
+// a title with genuinely fancy per-character styling just loses that
+// styling on the way into Motionist, rather than showing the raw codes.
+function stripFusionMarkup(s) {
+  return s.replace(/\{[^{}]*\}/g, "");
+}
+
 async function readTitleText(item) {
   const compCount = await item.GetFusionCompCount();
   if (!compCount) return null;
@@ -85,7 +100,7 @@ async function readTitleText(item) {
     if (!tool.GetInput) continue;
     let text = await tool.GetInput("StyledText");
     if (typeof text !== "string" || !text) text = await tool.GetInput("Text1.StyledText");
-    if (typeof text === "string" && text) return { text, toolName: attrs.TOOLS_Name };
+    if (typeof text === "string" && text) return { text: stripFusionMarkup(text), toolName: attrs.TOOLS_Name };
   }
   return null;
 }
@@ -201,12 +216,25 @@ function buildEphemeralProject({ text, fontFamily, fontSize, textColor, textAlig
   };
 }
 
+// No timeout used to be set at all here — if Motionist's local server was
+// running but stuck (a deadlocked process, not just "not running", which
+// ECONNREFUSED already covers via req.on("error")), this panel would sit
+// on "Rendering in Motionist…" forever with no recovery and no cancel
+// button. This ephemeral render is always a tiny one-page/one-layer text
+// clip, so 3 minutes is generous headroom (covers a cold-start Remotion
+// bundle) while still actually bounding the wait.
+const RENDER_TIMEOUT_MS = 3 * 60 * 1000;
+
 function postRender(projectJson) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(projectJson);
     const req = http.request(
       `${MOTIONIST_SERVER}/api/render`,
-      { method: "POST", headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } },
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+        timeout: RENDER_TIMEOUT_MS,
+      },
       (res) => {
         let data = "";
         res.on("data", (chunk) => (data += chunk));
@@ -216,6 +244,11 @@ function postRender(projectJson) {
         });
       }
     );
+    // The `timeout` option above only arms an idle-socket timer; it still
+    // needs this handler to actually abort the request and reject once it
+    // fires — without it, the socket just closes silently and neither
+    // resolve nor reject ever runs, which is its own hang.
+    req.on("timeout", () => req.destroy(new Error(`Motionist server didn't respond within ${RENDER_TIMEOUT_MS / 1000}s — is it running (start.bat)?`)));
     req.on("error", reject);
     req.write(body);
     req.end();
