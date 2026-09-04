@@ -12,6 +12,11 @@ export type Handle = {
   // drag instead. Used for the Alt-to-pan modifier on photo layers, whose
   // move/resize handle otherwise permanently sits on top of that same box.
   panPassthrough?: boolean;
+  // True for anything PhotoPanHandles can actually pan — a real photo/video
+  // layer, or a shape carrying a photo/video mask. Drives the Alt+drag hint
+  // in this handle's own tooltip (used to sniff `id.startsWith("photo")`,
+  // which silently dropped the hint — and the whole feature — for shapes).
+  pannable?: boolean;
 };
 
 type Guide = { axis: "x" | "y"; pos: number }; // canvas-space position of an active alignment line
@@ -226,8 +231,8 @@ const DragBox: React.FC<{
       onMouseLeave={() => setHovering(false)}
       onKeyDown={onKeyDown}
       title={
-        handle.id.startsWith("photo")
-          ? "Drag to move/resize the photo's frame — hold Alt and drag to reposition the photo inside it instead"
+        handle.pannable
+          ? "Drag to move/resize the frame — hold Alt and drag to reposition the photo/video inside it instead"
           : `Drag to move ${handle.label.toLowerCase()} — arrow keys to nudge (Shift = 10px)`
       }
       className="canvas-handle"

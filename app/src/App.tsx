@@ -962,16 +962,26 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     page?.layers.forEach((l, li) => {
       const isPhoto = l.role === "photo";
       if (l.assetKind !== "text" && l.assetKind !== "shape" && !isPhoto) return;
+      // A shape carrying a photo mask is pannable exactly like a real photo
+      // layer (see photoPanTargets below) — its move/resize handle needs to
+      // yield to PhotoPanHandles on Alt-hold too. Checking only `isPhoto`
+      // here missed this case entirely: a shape's own move/resize handle
+      // always sits on top of its photo-mask's pan zone with pointer-events
+      // stuck on "auto" regardless of Alt, since `isPhoto` is never true for
+      // an `assetKind: "shape"` layer — Alt+drag silently did nothing on any
+      // shape with an uploaded photo/video.
+      const isPannable = isPhoto || (l.assetKind === "shape" && !!l.shapePhotoFile);
       list.push({
         id: `${isPhoto ? "photo" : l.assetKind}-${li}`,
         label: isPhoto ? "PHOTO" : l.assetKind === "text" ? (l.text ? l.text.slice(0, 18) : "TEXT") : "SHAPE",
         color: isPhoto ? "#4fd1c5" : l.assetKind === "text" ? "#c46be0" : "#3ea6ff",
         box: { left: l.left, top: l.top, width: l.width, height: l.height },
-        // A photo's move/resize handle otherwise permanently shadows its own
-        // pan-crop zone underneath (same box, this handle wins the click) —
-        // hand the drag back to PhotoPanHandles while Alt is held instead of
-        // fighting over one gesture.
-        panPassthrough: isPhoto && altHeld,
+        // A pannable layer's move/resize handle otherwise permanently
+        // shadows its own pan-crop zone underneath (same box, this handle
+        // wins the click) — hand the drag back to PhotoPanHandles while Alt
+        // is held instead of fighting over one gesture.
+        panPassthrough: isPannable && altHeld,
+        pannable: isPannable,
         onChange: (b) => update((p) => {
           const layer = p.pages[sel].layers[li];
           layer.left = b.left; layer.top = b.top; layer.width = b.width; layer.height = b.height;
