@@ -468,6 +468,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const logoInput = React.useRef<HTMLInputElement>(null);
   const bgInput = React.useRef<HTMLInputElement>(null);
   const titleInput = React.useRef<HTMLInputElement>(null);
+  const audioInput = React.useRef<HTMLInputElement>(null);
   const newPhotoInput = React.useRef<HTMLInputElement>(null);
   const playerRef = React.useRef<PlayerRef>(null);
   const playerWrapRef = React.useRef<HTMLDivElement>(null);
@@ -684,7 +685,11 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         : `${isImage ? "Uploading" : "Extracting"} ${file.name}…`);
       try {
         if (isImage) {
-          const upload = await uploadAsset(file, `page_${Date.now()}`, projectId);
+          const raw = await uploadAsset(file, `page_${Date.now()}`, projectId);
+          // IMAGE_PAGE_EXTS (checked above) never lets an audio file reach
+          // here — narrows for TS since uploadAsset()'s return type is
+          // shared with the (audio-capable) Audio upload path.
+          const upload = { ...raw, kind: raw.kind === "audio" ? ("image" as const) : raw.kind };
           setProject((prev) => {
             if (!prev) return prev;
             const next = clone(prev);
@@ -708,9 +713,14 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     setBusy(`Uploading ${slotKey}…`); setErr(null);
     const oldFile = project?.[slotKey]?.file ?? null;
     try {
-      const { file: f, kind, width, height } = slotKey === "logo"
+      const { file: f, kind: rawKind, width, height } = slotKey === "logo"
         ? await uploadLogo(file, projectId)
         : await uploadAsset(file, slotKey, projectId);
+      // BG/Title/Logo pickers never accept audio extensions — this slot can
+      // only ever get image/video/gif/lottie back; narrows for TS since
+      // uploadAsset()'s return type is shared with the (audio-capable) Audio
+      // upload path.
+      const kind = rawKind === "audio" ? "image" : rawKind;
       update((p) => {
         // Size to the asset's real exported dimensions every time — on first
         // upload AND on replace, since a differently-shaped replacement
@@ -731,6 +741,39 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     if (oldFile) deleteProjectFiles(projectId, [oldFile]);
   };
 
+  // Global background-music track — separate from the LogoConfig slots
+  // above since AudioTrack isn't a LogoConfig (it has volume/trim/fade,
+  // no box/fit). Reuses the same generic /api/asset upload + normalization
+  // (server transcodes any source format to AAC/M4A — see saveMedia).
+  const onUploadAudio = async (file: File) => {
+    if (!project) return;
+    setBusy("Uploading audio…"); setErr(null);
+    const oldFile = project.audio?.file ?? null;
+    try {
+      const { file: f, duration } = await uploadAsset(file, "audio", projectId);
+      update((p) => {
+        p.audio = {
+          file: f,
+          duration,
+          volume: p.audio?.volume ?? 1,
+          startOffset: 0,
+          fadeInSec: p.audio?.fadeInSec ?? 0,
+          fadeOutSec: p.audio?.fadeOutSec ?? 0,
+          muted: false,
+        };
+      });
+      if (oldFile) deleteProjectFiles(projectId, [oldFile]);
+    } catch (e: any) { setErr(String(e.message || e)); }
+    finally { setBusy(null); }
+  };
+
+  const onRemoveAudio = () => {
+    if (!project) return;
+    const oldFile = project.audio?.file ?? null;
+    update((p) => { p.audio = null; });
+    if (oldFile) deleteProjectFiles(projectId, [oldFile]);
+  };
+
   // Upload a real photo/video into a placeholder box on the CURRENT page.
   // Replaces the file + kind; the box (left/top/width/height) is left as-is
   // — cover-fit auto-crops it in, and the user can drag/resize on the canvas
@@ -741,7 +784,10 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     const oldFile = project.pages[pageIndex].layers[layerIndex]?.file || null;
     setBusy("Uploading photo…"); setErr(null);
     try {
-      const { file: f, kind, width, height } = await uploadAsset(file, `photo_${pageId}_${layerIndex}`, projectId);
+      const { file: f, kind: rawKind, width, height } = await uploadAsset(file, `photo_${pageId}_${layerIndex}`, projectId);
+      // The photo picker's accept list excludes audio extensions — narrows
+      // for TS (see the matching comment in onSlotUpload above).
+      const kind = rawKind === "audio" ? "image" : rawKind;
       update((p) => {
         const layer = p.pages[pageIndex].layers[layerIndex];
         layer.file = f;
@@ -883,7 +929,9 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     const pageId = project.pages[pageIndex].id;
     setBusy("Uploading photo…"); setErr(null);
     try {
-      const { file: f, kind, width, height } = await uploadAsset(file, `photo_${pageId}_${Date.now()}`, projectId);
+      const { file: f, kind: rawKind, width, height } = await uploadAsset(file, `photo_${pageId}_${Date.now()}`, projectId);
+      // Same narrowing as onUploadPhoto above — this picker never accepts audio.
+      const kind = rawKind === "audio" ? "image" : rawKind;
       update((p) => {
         const page = p.pages[pageIndex];
         page.layers.unshift({
@@ -1266,6 +1314,55 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                 <AssetControls slot={project.logo} label="Logo" canvas={[project.width, project.height]}
                   onChange={(fn) => update((p) => { if (p.logo) fn(p.logo); })}
                   onRemove={() => onRemoveSlot("logo")} />
+              )}
+            </div>
+
+            {/* AUDIO — global background-music/sound bed, spans the whole reel.
+                Separate from a video layer's own embedded sound (that's
+                per-layer, via the mute toggle in the function panel). */}
+            <div className="card compact">
+              <button className={"btn upload" + (project.audio?.file ? " filled" : "")} onClick={() => audioInput.current?.click()}>
+                {project.audio?.file ? "Replace Audio" : "Upload Audio (music / sound bed)"}
+              </button>
+              <input ref={audioInput} className="hidden-file" type="file" accept=".mp3,.wav,.m4a,.ogg,.flac,.aac"
+                onChange={(e) => e.target.files?.[0] && onUploadAudio(e.target.files[0])} />
+              {project.audio?.file && (
+                <div className="mini" style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                  <div className="row between" style={{ alignItems: "center" }}>
+                    <span style={{ color: "var(--muted)" }}>
+                      {project.audio.duration != null
+                        ? `${Math.floor(project.audio.duration / 60)}:${String(Math.round(project.audio.duration % 60)).padStart(2, "0")} source`
+                        : "duration unknown"}
+                    </span>
+                    <div className="row" style={{ gap: 4 }}>
+                      <button className="btn small" title={project.audio.muted ? "Unmute" : "Mute"}
+                        onClick={() => update((p) => { if (p.audio) p.audio.muted = !p.audio.muted; })}>
+                        {project.audio.muted ? <SoundOffIcon /> : <SoundOnIcon />}
+                      </button>
+                      <button className="btn small" onClick={onRemoveAudio}>✕</button>
+                    </div>
+                  </div>
+                  <div className="row between mini" style={{ alignItems: "center" }}>
+                    <span style={{ color: "var(--muted)" }}>Volume</span>
+                    <NumField min={0} max={100} value={Math.round((project.audio.volume ?? 1) * 100)}
+                      onChange={(e) => update((p) => { if (p.audio) p.audio.volume = Math.min(100, Math.max(0, Math.round(parseFloat(e.target.value || "0")))) / 100; })} />
+                  </div>
+                  <div className="row between mini" style={{ alignItems: "center" }}>
+                    <span style={{ color: "var(--muted)" }} title="Trim into the source file — skips its intro">Start offset (s)</span>
+                    <NumField min={0} max={Math.floor(project.audio.duration ?? 0)} value={Math.round(project.audio.startOffset ?? 0)}
+                      onChange={(e) => update((p) => { if (p.audio) p.audio.startOffset = Math.max(0, Math.round(parseFloat(e.target.value || "0"))); })} />
+                  </div>
+                  <div className="row between mini" style={{ alignItems: "center" }}>
+                    <span style={{ color: "var(--muted)" }}>Fade in (s)</span>
+                    <NumField min={0} max={30} value={Math.round(project.audio.fadeInSec ?? 0)}
+                      onChange={(e) => update((p) => { if (p.audio) p.audio.fadeInSec = Math.max(0, Math.round(parseFloat(e.target.value || "0"))); })} />
+                  </div>
+                  <div className="row between mini" style={{ alignItems: "center" }}>
+                    <span style={{ color: "var(--muted)" }}>Fade out (s)</span>
+                    <NumField min={0} max={30} value={Math.round(project.audio.fadeOutSec ?? 0)}
+                      onChange={(e) => update((p) => { if (p.audio) p.audio.fadeOutSec = Math.max(0, Math.round(parseFloat(e.target.value || "0"))); })} />
+                  </div>
+                </div>
               )}
             </div>
 

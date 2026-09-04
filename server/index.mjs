@@ -504,7 +504,23 @@ function sniffKind(buf) {
   if (buf.length >= 6 && buf.toString("ascii", 0, 3) === "GIF") return "image"; // gif
   if (buf.length >= 12 && buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP") return "image"; // webp
   if (buf.length >= 12 && buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 11) === "AVI") return "video"; // avi
-  if (buf.length >= 8 && buf.toString("ascii", 4, 8) === "ftyp") return "video"; // mp4/mov/m4v (ISO base media)
+  if (buf.length >= 12 && buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WAVE") return "audio"; // wav
+  if (buf.length >= 8 && buf.toString("ascii", 4, 8) === "ftyp") {
+    // .m4a/.mp4/.mov all share the same ISO-base-media "ftyp" box — the
+    // "major brand" 4 bytes right after it is what actually tells an audio
+    // container apart from a video one.
+    const brand = buf.toString("ascii", 8, 12);
+    if (brand === "M4A " || brand === "M4B ") return "audio";
+    return "video"; // mp4/mov/m4v and everything else ISO-base-media
+  }
+  if (buf.length >= 3 && buf.toString("ascii", 0, 3) === "ID3") return "audio"; // mp3 (ID3v2-tagged)
+  // Raw MPEG audio frame sync with no ID3 tag — first 11 bits all 1, next 2
+  // bits (MPEG version) and 2 after that (layer) both non-zero for a real
+  // MP3 frame; loose enough to catch untagged mp3s without false-matching
+  // arbitrary binary data.
+  if (buf.length >= 2 && buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0 && (buf[1] & 0x18) !== 0x08 && (buf[1] & 0x06) !== 0x00) return "audio"; // mp3 (no ID3 tag)
+  if (buf.length >= 4 && buf.toString("ascii", 0, 4) === "OggS") return "audio"; // ogg
+  if (buf.length >= 4 && buf.toString("ascii", 0, 4) === "fLaC") return "audio"; // flac
   if (buf.length >= 4 && buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return "video"; // webm/mkv (EBML)
   if (buf.length >= 4 && buf[0] === 0x00 && buf[1] === 0x01 && buf[2] === 0x00 && buf[3] === 0x00) return "font"; // ttf
   if (buf.length >= 4 && buf.toString("ascii", 0, 4) === "OTTO") return "font"; // otf
@@ -526,6 +542,7 @@ const EXPECTED_KIND = {
   ".mp4": "video", ".mov": "video", ".webm": "video", ".mkv": "video", ".avi": "video", ".m4v": "video",
   ".ttf": "font", ".otf": "font", ".woff": "font", ".woff2": "font",
   ".json": "json",
+  ".mp3": "audio", ".wav": "audio", ".m4a": "audio", ".ogg": "audio", ".flac": "audio",
 };
 
 // Throws (with the temp upload already cleaned up) if the file's actual bytes
@@ -590,6 +607,21 @@ async function saveMedia(file, projectId, subdir, prefix) {
     ]);
     fs.rmSync(file.path, { force: true });
     result = { file: rel(name), kind: "video", abs: path.join(dir, name) };
+  } else if ([".mp3", ".wav", ".m4a", ".ogg", ".flac"].includes(ext)) {
+    // Normalized to AAC in an M4A container regardless of source format —
+    // same reasoning as video's transcode to one predictable codec: mixed
+    // mp3/wav/ogg/flac uploads all becoming one known-good format is what
+    // makes Remotion's <Audio> (both live preview and the final render's
+    // audio mixdown) reliable, instead of depending on the browser's own
+    // patchwork codec support for whatever format happened to be uploaded.
+    const name = `${prefix}_${stamp}.m4a`;
+    await run("ffmpeg", [
+      "-y", "-i", JSON.stringify(file.path),
+      "-vn", "-c:a", "aac", "-b:a", "192k",
+      JSON.stringify(path.join(dir, name)),
+    ]);
+    fs.rmSync(file.path, { force: true });
+    result = { file: rel(name), kind: "audio", abs: path.join(dir, name) };
   } else {
     // image (png/jpg/svg) — keep as-is
     const name = `${prefix}_${stamp}${ext}`;
@@ -598,7 +630,26 @@ async function saveMedia(file, projectId, subdir, prefix) {
   }
 
   const { width, height } = await probeDimensions(result.abs, result.kind);
-  return { file: result.file, kind: result.kind, width, height };
+  const duration = result.kind === "audio" || result.kind === "video" ? await probeDuration(result.abs) : null;
+  return { file: result.file, kind: result.kind, width, height, duration };
+}
+
+// Probes a media file's real duration in seconds — needed for the audio
+// track's trim UI (can't let the user pick a start offset past the end of
+// a file whose length they don't know) and generically useful for video too.
+async function probeDuration(absPath) {
+  try {
+    const out = await run("ffprobe", [
+      "-v", "error", "-show_entries", "format=duration",
+      "-of", "json", JSON.stringify(absPath),
+    ]);
+    const parsed = JSON.parse(out);
+    const d = parseFloat(parsed.format?.duration);
+    return Number.isFinite(d) ? d : null;
+  } catch (e) {
+    console.warn("probeDuration failed:", e.message);
+    return null;
+  }
 }
 
 // Deletes one or more per-project asset files (or, for a PSD/SVG-ingested

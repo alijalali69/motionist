@@ -71,9 +71,10 @@ export async function ingestPsd(file: File, projectId: string): Promise<IngestRe
 
 export type UploadedMedia = {
   file: string;
-  kind: "video" | "lottie" | "gif" | "image";
+  kind: "video" | "lottie" | "gif" | "image" | "audio";
   width: number | null;  // the asset's real exported pixel size, when detectable
   height: number | null;
+  duration: number | null; // source file's real length in seconds (video/audio only), from ffprobe
 };
 
 export async function uploadLogo(file: File, projectId: string): Promise<UploadedMedia> {

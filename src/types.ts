@@ -193,6 +193,21 @@ export type LogoConfig = {
 
 export type Caption = { fromFrame: number; toFrame: number; text: string };
 
+// One global background-music track for the whole reel — a real gap this
+// app had none of (video layers can carry their OWN embedded sound via
+// ContentLayer.videoMuted, but there was no way to add a separate song/
+// audio bed). `file` is normalized server-side to AAC/M4A regardless of
+// the source format uploaded (see saveMedia in server/index.mjs).
+export type AudioTrack = {
+  file: string | null;
+  duration: number | null; // the SOURCE file's own real length in seconds, from ffprobe — bounds how far `startOffset` can trim
+  volume: number; // 0..1, default 1
+  startOffset: number; // seconds into the source file where the reel's own audio starts (trim the song's intro, etc.)
+  fadeInSec: number; // 0 = no fade
+  fadeOutSec: number;
+  muted: boolean; // a toggle, not just deleting the track — matches ContentLayer.videoMuted's own convention
+};
+
 export type LoaderStyle = "bar" | "segmented" | "dots" | "folio";
 
 export type SubtitleStyle = {
@@ -224,6 +239,7 @@ export type Project = {
   subtitle: Box;
   subtitleStyle?: SubtitleStyle;
   captions?: Caption[]; // timed captions (from SRT); optional, overrides per-page text when present
+  audio?: AudioTrack | null; // global background music/sound bed, spans the whole reel
   pages: Page[];
 };
 

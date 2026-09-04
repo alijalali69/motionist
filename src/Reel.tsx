@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Audio, staticFile, useCurrentFrame } from "remotion";
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
 import { slide } from "@remotion/transitions/slide";
@@ -55,6 +55,27 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean; transparen
   // per page, Instagram-story style). The "bar" style just spans start-to-end.
   const loaderSegments = pages.map((p, i) => ({ start: starts[i], end: starts[i] + p.durationInFrames }));
 
+  // Global background-music track (see AudioTrack in types.ts) — spans the
+  // whole reel, independent of any per-layer video's own embedded sound.
+  // Fade in/out is expressed as a per-frame volume callback (not a flat
+  // number) because Remotion needs a real value at every captured frame,
+  // same reasoning as liquidBaseFreq above — no CSS/Web Audio fade exists
+  // at render time.
+  const audio = project.audio;
+  const totalFrames = pages.length ? starts[pages.length - 1] + pages[pages.length - 1].durationInFrames : 0;
+  const fadeInFrames = Math.round((audio?.fadeInSec ?? 0) * project.fps);
+  const fadeOutFrames = Math.round((audio?.fadeOutSec ?? 0) * project.fps);
+  const baseVolume = audio?.volume ?? 1;
+  const audioVolumeAt = (f: number) => {
+    if (baseVolume <= 0) return 0;
+    let v = baseVolume;
+    if (fadeInFrames > 0 && f < fadeInFrames) v *= f / fadeInFrames;
+    if (fadeOutFrames > 0 && f > totalFrames - fadeOutFrames) {
+      v *= Math.max(0, totalFrames - f) / fadeOutFrames;
+    }
+    return Math.max(0, Math.min(1, v));
+  };
+
   return (
     <AbsoluteFill style={{ backgroundColor: transparent ? "transparent" : (project.bgColor ?? "#e8e4dd") }}>
       {/* Hidden SVG filter defs, once for the whole reel — glitchIn/Out's RGB
@@ -87,6 +108,17 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean; transparen
           </filter>
         </defs>
       </svg>
+      {/* Global background-music track. Muted is a real toggle (matches
+          ContentLayer.videoMuted's convention) — kept out of the tree
+          entirely when muted, same as when there's no file yet. */}
+      {audio?.file && !audio.muted && (
+        <Audio
+          src={staticFile(audio.file)}
+          startFrom={Math.round((audio.startOffset ?? 0) * project.fps)}
+          volume={audioVolumeAt}
+        />
+      )}
+
       {/* Global background — fills the backdrop behind all pages. Skipped
           entirely on a transparent export too — it's a fill, same as bgColor,
           not something the user uploaded on purpose to sit under other footage. */}
