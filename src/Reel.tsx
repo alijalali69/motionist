@@ -49,6 +49,24 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean; transparen
 
   return (
     <AbsoluteFill style={{ backgroundColor: transparent ? "transparent" : (project.bgColor ?? "#e8e4dd") }}>
+      {/* Hidden SVG filter defs, once for the whole reel — glitchIn/Out's RGB
+          channel split (see GlitchOverlay in PageScene.tsx) needs a real
+          feColorMatrix to isolate a single color channel on arbitrary
+          content (photo/video/text alike); no CSS-only trick does that.
+          Defined once here (not per-PageScene) so a page-transition
+          crossfade, which can briefly mount two PageScenes at once, never
+          collides on the id. width/height 0 — the filters themselves are
+          referenced via url(#id), this element paints nothing of its own. */}
+      <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
+        <defs>
+          <filter id="glitchRedChannel" colorInterpolationFilters="sRGB">
+            <feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" />
+          </filter>
+          <filter id="glitchCyanChannel" colorInterpolationFilters="sRGB">
+            <feColorMatrix type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0" />
+          </filter>
+        </defs>
+      </svg>
       {/* Global background — fills the backdrop behind all pages. Skipped
           entirely on a transparent export too — it's a fill, same as bgColor,
           not something the user uploaded on purpose to sit under other footage. */}

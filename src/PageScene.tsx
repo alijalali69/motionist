@@ -43,12 +43,6 @@ function shadowStyle(shadow: number | undefined, glow: number | undefined): stri
   return parts.length ? parts.join(", ") : undefined;
 }
 
-// vhsIn/Out's scanline + jitter overlay (LayerMotion.scanline, 0..1
-// intensity). Deterministic from `frame` (not a CSS @keyframes loop) —
-// Remotion's headless render captures one frame at a time, not in real
-// time, so a live CSS animation has no reliable state to capture; every
-// visual change here has to be a plain function of the actual frame number
-// instead, same reasoning as the rest of this file's frame-driven motion.
 // The transform/filter strings both LayerView and TextLayerView build,
 // pulled out once so the two never drift out of sync when a new field
 // (skewX, scaleX/scaleY, tint) gets added to LayerMotion.
@@ -65,6 +59,12 @@ function motionFilter(m: LayerMotion): string | undefined {
   return parts.length ? parts.join(" ") : undefined;
 }
 
+// vhsIn/Out's scanline + jitter overlay (LayerMotion.scanline, 0..1
+// intensity). Deterministic from `frame` (not a CSS @keyframes loop) —
+// Remotion's headless render captures one frame at a time, not in real
+// time, so a live CSS animation has no reliable state to capture; every
+// visual change here — and every glitch/data-mosh jitter below — has to be
+// a plain function of the actual frame number instead.
 const ScanlineOverlay: React.FC<{ scanline: number; frame: number }> = ({ scanline, frame }) => (
   <div
     style={{
@@ -80,6 +80,68 @@ const ScanlineOverlay: React.FC<{ scanline: number; frame: number }> = ({ scanli
     }}
   />
 );
+
+// A cheap deterministic 0..1 pseudo-random value from (frame, seed) —
+// looks chaotic, renders identically on every pass of the same frame
+// (live preview and the actual export alike). Never Math.random() here;
+// glitchIn/dataMoshIn's whole point is that the same frame always glitches
+// the same way.
+function glitchNoise(frame: number, seed: number): number {
+  const x = Math.sin(frame * 12.9898 + seed * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+// glitchIn/Out's RGB channel-split — two real duplicates of the layer's
+// OWN content (not a flat overlay div, so it works identically over text,
+// photos, and video), each isolated to a single color channel (see the
+// feColorMatrix filters defined once in Reel.tsx) and jittered as a clipped
+// horizontal slice. Bursty, not constant: most frames render nothing extra
+// at all — reads as sudden corruption, not a steady wobble.
+const GlitchOverlay: React.FC<{ amount: number; frame: number; children: React.ReactNode }> = ({ amount, frame, children }) => {
+  if (!amount || glitchNoise(frame, 1) >= 0.32 * amount) return null;
+  const dxR = (glitchNoise(frame, 2) - 0.5) * 16 * amount;
+  const dxC = (glitchNoise(frame, 3) - 0.5) * 16 * amount;
+  const yR = glitchNoise(frame, 4) * 65;
+  const hR = 8 + glitchNoise(frame, 5) * 30;
+  const yC = glitchNoise(frame, 6) * 65;
+  const hC = 8 + glitchNoise(frame, 7) * 30;
+  const sliceStyle = (dx: number, y: number, h: number, filterId: string): React.CSSProperties => ({
+    position: "absolute", inset: 0, pointerEvents: "none", mixBlendMode: "screen",
+    transform: `translateX(${dx}px)`,
+    clipPath: `inset(${y}% 0 ${Math.max(0, 100 - y - h)}% 0)`,
+    filter: `url(#glitch${filterId}Channel)`,
+  });
+  return (
+    <>
+      <div style={sliceStyle(dxR, yR, hR, "Red")}>{children}</div>
+      <div style={sliceStyle(dxC, yC, hC, "Cyan")}>{children}</div>
+    </>
+  );
+};
+
+// dataMoshIn/Out's block-tear — several horizontal bands of the layer's own
+// content, each independently offset sideways with no color tint — the
+// compression-artifact "block copy" read, distinct from glitchIn's
+// chromatic-aberration read.
+const DataMoshOverlay: React.FC<{ amount: number; frame: number; children: React.ReactNode }> = ({ amount, frame, children }) => {
+  if (!amount || glitchNoise(frame, 11) >= 0.3 * amount) return null;
+  const bands = 4;
+  const slices = Array.from({ length: bands }, (_, i) => {
+    const y = (i / bands) * 100;
+    const h = 100 / bands;
+    const dx = (glitchNoise(frame, 20 + i) - 0.5) * 60 * amount;
+    return (
+      <div key={i} style={{
+        position: "absolute", inset: 0, pointerEvents: "none",
+        transform: `translateX(${dx}px)`,
+        clipPath: `inset(${y}% 0 ${100 - y - h}% 0)`,
+      }}>
+        {children}
+      </div>
+    );
+  });
+  return <>{slices}</>;
+};
 import type { Page, ContentLayer } from "./types";
 
 // Resolves a layer's up-to-3 combined entrance (or exit) slots into one
@@ -218,11 +280,14 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
   };
 
   if (!isStagger || inExitPhase) {
+    const textNode = <div style={textStyle}>{layer.text}</div>;
     return (
       <div style={boxStyle}>
-        <div style={textStyle}>{layer.text}</div>
+        {textNode}
         {m.shine !== undefined && <ShineOverlay shine={m.shine} />}
         {m.scanline !== undefined && <ScanlineOverlay scanline={m.scanline} frame={frame} />}
+        {m.glitch !== undefined && <GlitchOverlay amount={m.glitch} frame={frame}>{textNode}</GlitchOverlay>}
+        {m.glitchBlocks !== undefined && <DataMoshOverlay amount={m.glitchBlocks} frame={frame}>{textNode}</DataMoshOverlay>}
       </div>
     );
   }
@@ -343,6 +408,23 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
       <Img src={url} style={{ width: "100%", height: "100%", objectFit: fit, objectPosition, transform: `scale(${zoom})` }} />
     );
 
+  // The pan/zoom-wrapped media, reused as-is for both the normal render and
+  // (via GlitchOverlay/DataMoshOverlay's children) each glitch ghost copy —
+  // so a ghost inherits the exact same crop/pan/zoom as the base instead of
+  // duplicating that wrapper's own style object a second and third time.
+  const zoomedMedia = (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        transform: `translate(${pz.tx}px, ${pz.ty}px) scale(${pz.scale}) rotate(${pz.rotate}deg)`,
+        transformOrigin: "center center",
+      }}
+    >
+      {media}
+    </div>
+  );
+
   return (
     <div
       style={{
@@ -360,18 +442,11 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
         overflow: "hidden", // the box IS the mask — anything inside gets cropped to its shape
       }}
     >
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          transform: `translate(${pz.tx}px, ${pz.ty}px) scale(${pz.scale}) rotate(${pz.rotate}deg)`,
-          transformOrigin: "center center",
-        }}
-      >
-        {media}
-      </div>
+      {zoomedMedia}
       {m.shine !== undefined && <ShineOverlay shine={m.shine} />}
       {m.scanline !== undefined && <ScanlineOverlay scanline={m.scanline} frame={frame} />}
+      {m.glitch !== undefined && <GlitchOverlay amount={m.glitch} frame={frame}>{zoomedMedia}</GlitchOverlay>}
+      {m.glitchBlocks !== undefined && <DataMoshOverlay amount={m.glitchBlocks} frame={frame}>{zoomedMedia}</DataMoshOverlay>}
     </div>
   );
 };

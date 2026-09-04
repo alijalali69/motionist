@@ -74,7 +74,17 @@ export type EntranceName =
   | "vhsIn"
   // A hue/saturation pulse on arrival, like a color-grade flash — a plain
   // CSS filter value, combined with `blur` in the same filter string.
-  | "duotoneIn";
+  | "duotoneIn"
+  // Chromatic-aberration/RGB-split glitch — two real duplicates of the
+  // layer's own content (not a flat overlay), each isolated to one color
+  // channel and jittered in clipped slices. See LayerMotion.glitch and
+  // GlitchOverlay in PageScene.tsx. Bursty by design (see glitchNoise) —
+  // reads as sudden corruption, not a steady wobble.
+  | "glitchIn"
+  // Horizontal block-tear / datamosh — several bands of the layer's own
+  // content independently offset sideways, no color tint. See
+  // LayerMotion.glitchBlocks and DataMoshOverlay.
+  | "dataMoshIn";
 
 export const ENTRANCE_NAMES: EntranceName[] = [
   "none", "fade", "slideRight", "slideLeft", "slideUp", "slideDown",
@@ -85,6 +95,7 @@ export const ENTRANCE_NAMES: EntranceName[] = [
   "slideTopLeft", "slideTopRight", "slideBottomLeft", "slideBottomRight",
   "rollIn", "jackInBox", "swingIn", "heartbeatIn", "diamondReveal",
   "lightspeedIn", "squashStretchIn", "glowPulseIn", "vhsIn", "duotoneIn",
+  "glitchIn", "dataMoshIn",
 ];
 
 // Text-only entrances — offered in a separate list so image/photo layers
@@ -106,7 +117,7 @@ export const ENTRANCE_CATEGORIES: { label: string; names: EntranceName[] }[] = [
   { label: "Drop & float", names: ["dropIn", "riseIn", "floatIn"] },
   { label: "Rotate & flip", names: ["rotateIn", "flipIn", "cardFlipIn", "rollIn", "swingIn"] },
   { label: "Wipe & reveal", names: ["wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop", "circleReveal", "diamondReveal", "typewriter"] },
-  { label: "Glitch & texture", names: ["lightspeedIn", "squashStretchIn", "glowPulseIn", "vhsIn", "duotoneIn"] },
+  { label: "Glitch & texture", names: ["lightspeedIn", "squashStretchIn", "glowPulseIn", "vhsIn", "duotoneIn", "glitchIn", "dataMoshIn"] },
 ];
 
 export type AmbientName =
@@ -165,7 +176,9 @@ export type ExitName =
   | "squashStretchOut"
   | "glowPulseOut"
   | "vhsOut"
-  | "duotoneOut";
+  | "duotoneOut"
+  | "glitchOut"
+  | "dataMoshOut";
 
 export const EXIT_NAMES: ExitName[] = [
   "none", "fadeOut", "slideOutLeft", "slideOutRight", "slideOutUp", "slideOutDown",
@@ -175,6 +188,7 @@ export const EXIT_NAMES: ExitName[] = [
   "slideOutTopLeft", "slideOutTopRight", "slideOutBottomLeft", "slideOutBottomRight",
   "rollOut", "jackOutBox", "swingOut", "heartbeatOut", "diamondHide",
   "lightspeedOut", "squashStretchOut", "glowPulseOut", "vhsOut", "duotoneOut",
+  "glitchOut", "dataMoshOut",
 ];
 
 // Same grouping as ENTRANCE_CATEGORIES, mirrored for exits — see the comment
@@ -186,7 +200,7 @@ export const EXIT_CATEGORIES: { label: string; names: ExitName[] }[] = [
   { label: "Drop & rise", names: ["dropOut", "riseOut"] },
   { label: "Rotate & flip", names: ["rotateOut", "flipOut", "cardFlipOut", "rollOut", "swingOut"] },
   { label: "Wipe & hide", names: ["wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide", "diamondHide", "typewriterOut"] },
-  { label: "Glitch & texture", names: ["lightspeedOut", "squashStretchOut", "glowPulseOut", "vhsOut", "duotoneOut"] },
+  { label: "Glitch & texture", names: ["lightspeedOut", "squashStretchOut", "glowPulseOut", "vhsOut", "duotoneOut", "glitchOut", "dataMoshOut"] },
 ];
 
 // Page-to-page transitions. `name` is stored on the page; `label` shows in the UI.
@@ -230,6 +244,8 @@ export type LayerMotion = {
   glow?: number; // 0..1 breathing box-shadow intensity — glowPulseIn/Out
   scanline?: number; // 0..1 VHS scanline+jitter overlay opacity — vhsIn/Out
   tint?: number; // 0..1 hue/saturation sweep intensity — duotoneIn/Out
+  glitch?: number; // 0..1 RGB-split burst envelope — glitchIn/Out
+  glitchBlocks?: number; // 0..1 block-tear/datamosh burst envelope — dataMoshIn/Out
 };
 
 const BASE: LayerMotion = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, rotateY: 0 };
@@ -264,6 +280,8 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
   let glow: number | undefined;
   let scanline: number | undefined;
   let tint: number | undefined;
+  let glitch: number | undefined;
+  let glitchBlocks: number | undefined;
   for (const m of motions) {
     opacity = Math.min(opacity, m.opacity);
     tx += m.tx; ty += m.ty;
@@ -289,6 +307,8 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
     if (m.glow !== undefined) glow = Math.max(glow ?? 0, m.glow);
     if (m.scanline !== undefined) scanline = Math.max(scanline ?? 0, m.scanline);
     if (m.tint !== undefined) tint = Math.max(tint ?? 0, m.tint);
+    if (m.glitch !== undefined) glitch = Math.max(glitch ?? 0, m.glitch);
+    if (m.glitchBlocks !== undefined) glitchBlocks = Math.max(glitchBlocks ?? 0, m.glitchBlocks);
     // Shine sweep, like clipPath: only one sweep makes sense on a layer at
     // once, first one set wins.
     if (shine === undefined && m.shine !== undefined) shine = m.shine;
@@ -301,7 +321,7 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
     // would carry redundant scaleX/scaleY: scale copies for no reason.
     scaleX: sawScaleXY ? scaleX : undefined,
     scaleY: sawScaleXY ? scaleY : undefined,
-    glow, scanline, tint,
+    glow, scanline, tint, glitch, glitchBlocks,
   };
 }
 
@@ -424,6 +444,11 @@ const DEFAULT_ENTRANCE_EASING: Partial<Record<EntranceName, EasingName>> = {
   glowPulseIn: "easeInOut",
   vhsIn: "easeInOut",
   duotoneIn: "linear", // sine-shaped already, doesn't want another curve stacked on top
+  // Linear — the burst pattern itself (see glitchNoise in PageScene.tsx) is
+  // already the "shape"; an eased envelope on top would just muddy when
+  // bursts are actually allowed to fire.
+  glitchIn: "linear",
+  dataMoshIn: "linear",
 };
 
 // What "(auto)" actually resolves to for a given effect — same fallback
@@ -468,6 +493,8 @@ const DEFAULT_EXIT_EASING: Partial<Record<ExitName, EasingName>> = {
   glowPulseOut: "easeIn",
   vhsOut: "easeInOut",
   duotoneOut: "linear",
+  glitchOut: "linear",
+  dataMoshOut: "linear",
 };
 
 export function resolvedExitEasing(name: ExitName, override: EasingName | undefined): EasingName {
@@ -636,6 +663,12 @@ export function entranceMotion(name: EntranceName, p: number): LayerMotion {
     // it's settled — a sine of progress, not a permanent recolor.
     case "duotoneIn":
       return { ...BASE, opacity: p, tint: Math.sin(p * Math.PI) };
+    // Burst envelope ramps up with arrival — see LayerMotion.glitch and
+    // GlitchOverlay in PageScene.tsx for the actual RGB-split rendering.
+    case "glitchIn":
+      return { ...BASE, opacity: p, glitch: p };
+    case "dataMoshIn":
+      return { ...BASE, opacity: p, glitchBlocks: p };
     default:
       return BASE;
   }
@@ -729,6 +762,12 @@ export function exitMotion(name: ExitName, q: number): LayerMotion {
       return { ...BASE, opacity: 1 - q, scanline: 1 - q };
     case "duotoneOut":
       return { ...BASE, opacity: 1 - q, tint: Math.sin(q * Math.PI) };
+    // Burst envelope intensifies right as it's fading — corruption syncs
+    // with the vanish instead of fighting it.
+    case "glitchOut":
+      return { ...BASE, opacity: 1 - q, glitch: q };
+    case "dataMoshOut":
+      return { ...BASE, opacity: 1 - q, glitchBlocks: q };
     default:
       return BASE;
   }
