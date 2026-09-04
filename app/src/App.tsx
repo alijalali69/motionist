@@ -1312,10 +1312,21 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             the zoom% readout on its right edge is the one place the user
             can always see the artboard's current zoom, at any project
             shape, at any zoom level including 100%. */}
-        {project && (
+        {project && (() => {
+          // The function panel's own mute button controls whichever video is
+          // actually on this page — a page carries at most one main visual
+          // in practice (the PSD-slot photo, or a shape's photo mask), so
+          // "the page's video" is unambiguous; the first one found wins on
+          // the rare page that somehow has more than one.
+          const pageLayers = project.pages[sel]?.layers ?? [];
+          const videoLayerIndex = pageLayers.findIndex(
+            (l) => l.assetKind === "video" || (l.assetKind === "shape" && l.shapePhotoKind === "video")
+          );
+          const videoLayer = videoLayerIndex >= 0 ? pageLayers[videoLayerIndex] : null;
+          return (
           <div className="card compact" style={{ maxWidth: 420, width: "100%", flexShrink: 0 }}>
-            <div className="row" style={{ gap: 4, justifyContent: "space-between", alignItems: "center" }}>
-              <div className="row" style={{ gap: 4 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 4, alignItems: "center" }}>
+              <div className="row" style={{ gap: 4, justifySelf: "start" }}>
                 {project.height > project.width && (
                   <>
                     <button className={"btn small icon" + (showSafeZone ? " active" : "")}
@@ -1333,8 +1344,21 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                   </>
                 )}
               </div>
+              <div style={{ justifySelf: "center" }}>
+                {videoLayer && (
+                  <button className={"btn small icon" + (videoLayer.videoMuted ? "" : " active")}
+                    title={videoLayer.videoMuted ? "Muted — click to play with sound (in preview and export)" : "Playing with sound — click to mute (in preview and export)"}
+                    aria-label="Toggle this page's video sound" aria-pressed={!videoLayer.videoMuted}
+                    onClick={() => update((p) => {
+                      const l = p.pages[sel].layers[videoLayerIndex];
+                      l.videoMuted = !l.videoMuted;
+                    })}>
+                    {videoLayer.videoMuted ? <SoundOffIcon /> : <SoundOnIcon />}
+                  </button>
+                )}
+              </div>
               <button className="btn small" title="Canvas zoom — Ctrl+wheel over the preview to adjust, click to reset to 100%"
-                onClick={() => setZoom(1)} style={{ fontVariantNumeric: "tabular-nums" }}>
+                onClick={() => setZoom(1)} style={{ fontVariantNumeric: "tabular-nums", justifySelf: "end" }}>
                 {Math.round(zoom * 100)}%
               </button>
             </div>
@@ -1344,7 +1368,8 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               </p>
             )}
           </div>
-        )}
+          );
+        })()}
       </div>
 
       <div className="panel-resizer" onMouseDown={startPanelDrag("right")} title="Drag to resize" />
@@ -2080,17 +2105,6 @@ const ElementMotion: React.FC<{
                   <option value="contain">contain (whole photo, may letterbox)</option>
                 </select>
               </div>
-              {layer.assetKind === "video" && (
-                <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
-                  <span style={{ color: "var(--muted)" }}>Sound</span>
-                  <button className={"btn small icon" + (layer.videoMuted ? "" : " active")}
-                    title={layer.videoMuted ? "Muted — click to play with sound (in preview and export)" : "Playing with sound — click to mute (in preview and export)"}
-                    aria-pressed={!layer.videoMuted}
-                    onClick={() => onChange((l) => { l.videoMuted = !l.videoMuted; })}>
-                    {layer.videoMuted ? <SoundOffIcon /> : <SoundOnIcon />}
-                  </button>
-                </div>
-              )}
             </>
           )}
           <div className="mini" style={{ marginTop: 4 }}>
@@ -2203,17 +2217,6 @@ const ElementMotion: React.FC<{
                     <option value="contain">contain (whole photo, may letterbox)</option>
                   </select>
                 </div>
-                {layer.shapePhotoKind === "video" && (
-                  <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
-                    <span style={{ color: "var(--muted)" }}>Sound</span>
-                    <button className={"btn small icon" + (layer.videoMuted ? "" : " active")}
-                      title={layer.videoMuted ? "Muted — click to play with sound (in preview and export)" : "Playing with sound — click to mute (in preview and export)"}
-                      aria-pressed={!layer.videoMuted}
-                      onClick={() => onChange((l) => { l.videoMuted = !l.videoMuted; })}>
-                      {layer.videoMuted ? <SoundOffIcon /> : <SoundOnIcon />}
-                    </button>
-                  </div>
-                )}
               </>
             )}
           </div>
