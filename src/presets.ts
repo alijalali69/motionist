@@ -930,3 +930,45 @@ export function ambientMotion(
       return z;
   }
 }
+
+// A cheap deterministic 0..1 pseudo-random value from (frame, seed) — looks
+// chaotic, renders identically on every pass of the same frame (live
+// preview and export alike, unlike Math.random()). Lives here (not in
+// PageScene.tsx, where it originated for glitchIn/dataMoshIn) so
+// Backdrop.tsx can reuse it without a circular import between the two.
+export function glitchNoise(frame: number, seed: number): number {
+  const x = Math.sin(frame * 12.9898 + seed * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+// --- Backdrop treatments ------------------------------------------------
+// "The Backdrop Reel" research catalog, 24 named looks — but they decompose
+// into 4 independent layers (texture, color, grade, motion) of 6 options
+// each, not 24 separate hardcoded looks. Each layer is its own dropdown +
+// its own controls (see BgStyle in types.ts); stacking texture + color +
+// grade + motion at once gets you a richer composite than any single named
+// look, instead of being stuck picking exactly one of 24. Rendering itself
+// lives in src/Backdrop.tsx (frame-driven, not CSS @keyframes — same
+// determinism reason as glitchIn/liquidIn etc. in PageScene.tsx).
+export type BgTextureName = "none" | "filmGrain" | "paperGrain" | "halftone" | "canvasWeave" | "scratches" | "riso";
+export const BG_TEXTURE_NAMES: BgTextureName[] = ["none", "filmGrain", "paperGrain", "halftone", "canvasWeave", "scratches", "riso"];
+
+export type BgColorName = "none" | "mesh" | "duotone" | "aurora" | "spotlight" | "neonGlow" | "monoBreathe";
+export const BG_COLOR_NAMES: BgColorName[] = ["none", "mesh", "duotone", "aurora", "spotlight", "neonGlow", "monoBreathe"];
+
+export type BgGradeName = "none" | "vignette" | "letterbox" | "tealOrange" | "blackWhite" | "sepia" | "flare";
+export const BG_GRADE_NAMES: BgGradeName[] = ["none", "vignette", "letterbox", "tealOrange", "blackWhite", "sepia", "flare"];
+
+export type BgMotionName = "none" | "bokeh" | "dust" | "snow" | "embers" | "lightLeak" | "parallaxBlobs";
+export const BG_MOTION_NAMES: BgMotionName[] = ["none", "bokeh", "dust", "snow", "embers", "lightLeak", "parallaxBlobs"];
+
+// Per-style default colors (used whenever colorA/B/C are unset) — every
+// `color` style renders something reasonable with zero color config.
+export const BG_COLOR_DEFAULTS: Record<Exclude<BgColorName, "none">, [string, string, string]> = {
+  mesh: ["#ff6fa5", "#7c6bff", "#3fd6c8"],
+  duotone: ["#ff2b6d", "#1a1030", "#ffb43c"],
+  aurora: ["#46ffbe", "#7878ff", "#0a0e18"],
+  spotlight: ["#ffffff", "#000000", "#000000"],
+  neonGlow: ["#ff2b9d", "#7c3aff", "#2bd6f0"],
+  monoBreathe: ["#ff3d78", "#232130", "#232130"],
+};

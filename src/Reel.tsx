@@ -100,7 +100,8 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean; transparen
               key={`seq-${page.id}`}
               durationInFrames={page.durationInFrames}
             >
-              <PageScene page={page} background={transparent ? "transparent" : page.bgColor} />
+              <PageScene page={page} background={transparent ? "transparent" : page.bgColor}
+                bgStyle={transparent ? undefined : (page.bgStyle ?? project.bgStyle)} />
             </TransitionSeries.Sequence>
           );
           if (i === pages.length - 1) return [seq];

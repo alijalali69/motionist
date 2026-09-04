@@ -12,7 +12,7 @@ import {
 } from "remotion";
 import { Gif } from "@remotion/gif";
 import {
-  entranceMotion, entranceProgress, exitMotion, exitProgress, combineMotions, ambientMotion,
+  entranceMotion, entranceProgress, exitMotion, exitProgress, combineMotions, ambientMotion, glitchNoise,
   type EntranceName, type ExitName, type EasingName, type LayerMotion,
 } from "./presets";
 
@@ -86,11 +86,6 @@ const ScanlineOverlay: React.FC<{ scanline: number; frame: number }> = ({ scanli
 // (live preview and the actual export alike). Never Math.random() here;
 // glitchIn/dataMoshIn's whole point is that the same frame always glitches
 // the same way.
-function glitchNoise(frame: number, seed: number): number {
-  const x = Math.sin(frame * 12.9898 + seed * 78.233) * 43758.5453;
-  return x - Math.floor(x);
-}
-
 // scrambleIn/Out's decrypt-style reveal — Persian digits and a few
 // script-neutral symbols, not Latin letters: a Latin run embedded inside
 // RTL Farsi text triggers the Unicode bidi algorithm and can visibly
@@ -236,7 +231,8 @@ const StrokeDrawOverlay: React.FC<{ amount: number }> = ({ amount }) => (
       vectorEffect="non-scaling-stroke" strokeDasharray="392" strokeDashoffset={392 * (1 - amount)} />
   </svg>
 );
-import type { Page, ContentLayer } from "./types";
+import type { Page, ContentLayer, BgStyle } from "./types";
+import { Backdrop } from "./Backdrop";
 
 // Resolves a layer's up-to-3 combined entrance (or exit) slots into one
 // LayerMotion — each slot gets its own progress, easing, AND now its own
@@ -613,15 +609,22 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
   );
 };
 
-export const PageScene: React.FC<{ page: Page; background?: string }> = ({
+export const PageScene: React.FC<{ page: Page; background?: string; bgStyle?: BgStyle }> = ({
   page,
   background = "transparent", // let the global BG / reel backdrop show through
+  bgStyle,
 }) => {
   const frame = useCurrentFrame();
   const a = ambientMotion(page.ambient, frame, page.durationInFrames);
 
   return (
     <AbsoluteFill style={{ backgroundColor: background, overflow: "hidden" }}>
+      {/* Backdrop treatment (grain/gradient/grade/particles) — resolved by
+          the caller (Reel.tsx: page.bgStyle ?? project.bgStyle, the same
+          whole-object fallback page.bgColor already uses) so this component
+          stays decoupled from Project, same as `background` above. Sits
+          right on top of the flat color fill, under every real layer. */}
+      {bgStyle && <Backdrop style={bgStyle} frame={frame} />}
       {/* Each layer gets its OWN full-page ambient wrapper instead of one
           shared wrapper around all of them — at the default depth (1, same
           as every layer got before this existed) this renders pixel-

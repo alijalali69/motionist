@@ -1,8 +1,31 @@
 // Shared reel types. The whole reel is described by a Project object, which the
 // app edits in memory and passes to the Remotion Player (and to render via props).
-import type { EntranceName, AmbientName, ExitName, EasingName } from "./presets";
+import type { EntranceName, AmbientName, ExitName, EasingName, BgTextureName, BgColorName, BgGradeName, BgMotionName } from "./presets";
 
 export type Box = { left: number; top: number; width: number; height: number };
+
+// Backdrop treatment — the 4 layers from "The Backdrop Reel" research, each
+// independently optional and stacked (texture over color over grade, with
+// motion/particles on top of all three) instead of 24 separate hardcoded
+// looks. A named preset just fills these fields in one shot from
+// BG_PRESETS (see presets.ts) — the fields themselves are what actually
+// renders and what the UI controls adjust, so picking a preset is always a
+// starting point, never a locked choice. Every numeric knob is 0..1 unless
+// noted; every color falls back to a per-style default when unset, so a
+// bare `{ color: "mesh" }` already renders something reasonable.
+export type BgStyle = {
+  texture?: BgTextureName;      // "none" | grain/paper/halftone/etc — default "none"
+  textureIntensity?: number;    // default 0.5
+  color?: BgColorName;          // "none" = the plain bgColor/bg image shows through unchanged
+  colorA?: string; colorB?: string; colorC?: string; // hex — meaning depends on `color`'s own style
+  colorIntensity?: number;      // default 0.6
+  colorSpeed?: number;          // animation rate multiplier, default 1 (0 = frozen on its first frame)
+  grade?: BgGradeName;
+  gradeIntensity?: number;      // default 0.5
+  motion?: BgMotionName;
+  motionDensity?: number;       // particle-count multiplier, default 0.5
+  motionSpeed?: number;         // default 1
+};
 
 export type ContentLayer = {
   index: number;
@@ -149,6 +172,11 @@ export type Page = {
   layers: ContentLayer[];
   subtitle?: string; // per-page English caption; empty/absent => nothing shows
   bgColor?: string;  // per-page solid backdrop (e.g. a text-only page with no photo) — falls back to the project's bgColor when unset
+  // Per-page backdrop treatment — same fallback rule as bgColor: unset means
+  // "use the project's own bgStyle", not "no treatment at all". Whole-object
+  // fallback, not a per-field merge (matches bgColor's own semantics), so a
+  // page that sets ANY field of its own bgStyle owns the whole treatment.
+  bgStyle?: BgStyle;
 };
 
 // Pre-animated logo. `file` is the uploaded animation; `fallback` is the static
@@ -187,6 +215,7 @@ export type Project = {
   logo: LogoConfig | null;
   bg?: LogoConfig | null;    // global background, rendered behind all pages
   bgColor?: string;          // solid backdrop color, shows wherever bg/pages don't fully cover (default "#e8e4dd")
+  bgStyle?: BgStyle;         // global backdrop treatment — see BgStyle; a page's own bgStyle overrides this entirely
   swatches?: string[];       // user-saved hex colors for this project, offered next to every color picker
   title?: LogoConfig | null; // global title, rendered as a locked overlay
   loader: Box;

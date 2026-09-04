@@ -2,7 +2,8 @@ import React from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { Reel } from "../../src/Reel";
 import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
-import { TEXT_ENTRANCE_NAMES, TEXT_EXIT_NAMES, LATIN_TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS } from "../../src/presets";
+import { TEXT_ENTRANCE_NAMES, TEXT_EXIT_NAMES, LATIN_TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS, BG_TEXTURE_NAMES, BG_COLOR_NAMES, BG_GRADE_NAMES, BG_MOTION_NAMES } from "../../src/presets";
+import type { BgStyle } from "../../src/types";
 import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
   listFonts, deleteProjectFiles, type IngestResult, type FontEntry,
@@ -90,6 +91,113 @@ const ColorField: React.FC<{
           ))}
         </div>
       )}
+    </div>
+  );
+};
+
+// Shared by both the global "Background style" card and each page's own
+// override — same 4-layer picker (texture over color over grade, with
+// motion/particles on top of all three; see BgStyle/Backdrop.tsx) bound to
+// whichever BgStyle the caller passes. `onChange` mutates the RESOLVED
+// style object directly — the caller creates it on first touch (project.
+// bgStyle / page.bgStyle start unset, same create-on-first-edit pattern as
+// bgColor elsewhere), so this component never has to know which one it's
+// editing or how the "page follows the project" fallback works.
+const BgStyleEditor: React.FC<{
+  value: BgStyle;
+  onChange: (fn: (s: BgStyle) => void) => void;
+  swatches: string[];
+  onAddSwatch: (hex: string) => void;
+  onRemoveSwatch: (hex: string) => void;
+}> = ({ value, onChange, swatches, onAddSwatch, onRemoveSwatch }) => {
+  const pct = (n: number | undefined, def: number) => Math.round((n ?? def) * 100);
+  const setPct = (key: keyof BgStyle, max: number) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    onChange((s) => { (s as any)[key] = Math.min(max, Math.max(0, Math.round(parseFloat(e.target.value || "0")))) / 100; });
+  return (
+    <div className="mini" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div>
+        <div className="row between" style={{ alignItems: "center" }}>
+          <label style={{ margin: 0 }} title="Grain / paper / halftone / etc — analog surface texture">Texture</label>
+          <select value={value.texture ?? "none"} style={{ width: "auto" }}
+            onChange={(e) => onChange((s) => { s.texture = e.target.value as any; })}>
+            {BG_TEXTURE_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+        {value.texture && value.texture !== "none" && (
+          <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+            <span style={{ color: "var(--muted)" }}>Intensity</span>
+            <NumField min={0} max={100} value={pct(value.textureIntensity, 0.5)} onChange={setPct("textureIntensity", 100)} />
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="row between" style={{ alignItems: "center" }}>
+          <label style={{ margin: 0 }} title="Gradient / mesh / duotone / etc — replaces the flat backdrop color">Color</label>
+          <select value={value.color ?? "none"} style={{ width: "auto" }}
+            onChange={(e) => onChange((s) => { s.color = e.target.value as any; })}>
+            {BG_COLOR_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+        {value.color && value.color !== "none" && (
+          <>
+            <div className="row" style={{ marginTop: 4, gap: 4 }} title="Colors this style uses — meaning depends on which one is picked above">
+              <ColorField value={value.colorA ?? "#ffffff"} onChange={(hex) => onChange((s) => { s.colorA = hex; })}
+                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+              <ColorField value={value.colorB ?? "#000000"} onChange={(hex) => onChange((s) => { s.colorB = hex; })}
+                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+              <ColorField value={value.colorC ?? "#888888"} onChange={(hex) => onChange((s) => { s.colorC = hex; })}
+                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+            </div>
+            <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+              <span style={{ color: "var(--muted)" }}>Intensity</span>
+              <NumField min={0} max={100} value={pct(value.colorIntensity, 0.6)} onChange={setPct("colorIntensity", 100)} />
+            </div>
+            <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+              <span style={{ color: "var(--muted)" }} title="How fast this color style animates — 0 freezes it on its first frame">Speed</span>
+              <NumField min={0} max={200} value={pct(value.colorSpeed, 1)} onChange={setPct("colorSpeed", 200)} />
+            </div>
+          </>
+        )}
+      </div>
+
+      <div>
+        <div className="row between" style={{ alignItems: "center" }}>
+          <label style={{ margin: 0 }} title="Vignette / letterbox / color-grade / etc — cinematic framing and tone">Grade</label>
+          <select value={value.grade ?? "none"} style={{ width: "auto" }}
+            onChange={(e) => onChange((s) => { s.grade = e.target.value as any; })}>
+            {BG_GRADE_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+        {value.grade && value.grade !== "none" && (
+          <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+            <span style={{ color: "var(--muted)" }}>Intensity</span>
+            <NumField min={0} max={100} value={pct(value.gradeIntensity, 0.5)} onChange={setPct("gradeIntensity", 100)} />
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="row between" style={{ alignItems: "center" }}>
+          <label style={{ margin: 0 }} title="Bokeh / dust / snow / etc — drifting particles, frame-deterministic (not real-time physics)">Motion</label>
+          <select value={value.motion ?? "none"} style={{ width: "auto" }}
+            onChange={(e) => onChange((s) => { s.motion = e.target.value as any; })}>
+            {BG_MOTION_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+        {value.motion && value.motion !== "none" && (
+          <>
+            <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+              <span style={{ color: "var(--muted)" }}>Density</span>
+              <NumField min={0} max={100} value={pct(value.motionDensity, 0.5)} onChange={setPct("motionDensity", 100)} />
+            </div>
+            <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+              <span style={{ color: "var(--muted)" }}>Speed</span>
+              <NumField min={0} max={200} value={pct(value.motionSpeed, 1)} onChange={setPct("motionSpeed", 200)} />
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 };
@@ -1115,6 +1223,12 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               <div style={{ marginTop: 8 }}>
                 <ColorField value={project.bgColor ?? "#e8e4dd"}
                   onChange={(hex) => update((p) => { p.bgColor = hex; })}
+                  swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch} />
+              </div>
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
+                <div className="subhead">Background style</div>
+                <BgStyleEditor value={project.bgStyle ?? {}}
+                  onChange={(fn) => update((p) => { if (!p.bgStyle) p.bgStyle = {}; fn(p.bgStyle); })}
                   swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch} />
               </div>
             </div>
@@ -2685,6 +2799,19 @@ const PageInspector: React.FC<{
                   onClick={() => onChange((pg) => { pg.bgColor = undefined; })}>✕</button>
               )}
             </div>
+          </div>
+
+          <div className="card compact" style={{ marginTop: 10 }}>
+            <div className="row between" style={{ alignItems: "center" }}>
+              <div className="subhead">Background style {page.bgStyle ? "" : "(following the project's)"}</div>
+              {page.bgStyle && (
+                <button className="btn small" title="Clear — follow the project's background style instead"
+                  onClick={() => onChange((pg) => { pg.bgStyle = undefined; })}>✕</button>
+              )}
+            </div>
+            <BgStyleEditor value={page.bgStyle ?? {}}
+              onChange={(fn) => onChange((pg) => { if (!pg.bgStyle) pg.bgStyle = {}; fn(pg.bgStyle); })}
+              swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
           </div>
 
           <label>Ambient motion</label>
