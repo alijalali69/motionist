@@ -1213,7 +1213,20 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         pannable: isPannable,
         onChange: (b) => update((p) => {
           const layer = p.pages[sel].layers[li];
+          const dx = b.left - layer.left;
+          const dy = b.top - layer.top;
+          const isPureMove = b.width === layer.width && b.height === layer.height;
           layer.left = b.left; layer.top = b.top; layer.width = b.width; layer.height = b.height;
+          // Grouped layers move together — position only, not size (see
+          // ContentLayer.groupId in types.ts). Covers both pointer drag and
+          // the arrow-key nudge, which both call this same onChange.
+          if (isPureMove && layer.groupId && (dx !== 0 || dy !== 0)) {
+            p.pages[sel].layers.forEach((sib, si) => {
+              if (si !== li && sib.groupId === layer.groupId) {
+                sib.left += dx; sib.top += dy;
+              }
+            });
+          }
         }),
       });
     });
@@ -2383,7 +2396,11 @@ const ElementMotion: React.FC<{
   // textarea once, on mount, so placing text and typing is one continuous
   // motion instead of place-then-hunt-for-the-field.
   autoFocus?: boolean;
-}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, pageDuration, autoFocus }) => {
+  // Every layer on this page (this one included) — used only to list
+  // existing group names for the Group field's datalist and to count this
+  // layer's own group siblings; not used for rendering.
+  pageLayers?: LayerT[];
+}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, pageDuration, autoFocus, pageLayers }) => {
   const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
   const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
   const photoInput = React.useRef<HTMLInputElement>(null);
@@ -2512,6 +2529,25 @@ const ElementMotion: React.FC<{
 
       {expanded && (
       <>
+      {/* Layer group — plain shared name, not a real nested transform. Any
+          two layers on this page sharing the same name move together
+          (position only) when either is dragged on the canvas. A datalist
+          (not a dropdown) so typing an EXISTING name joins that group and
+          typing a new one starts a fresh one, in the same field. */}
+      <div className="row mini" style={{ gap: 6, alignItems: "center", padding: "8px 12px", borderBottom: "1px solid var(--line)" }}>
+        <label style={{ margin: 0, flexShrink: 0 }} title="Layers sharing the same group name move together when you drag any one of them on the canvas — position only, not size">Group</label>
+        <input type="text" list={`group-names-${layer.index}`} value={layer.groupId ?? ""} placeholder="none (ungrouped)"
+          style={{ flex: 1 }}
+          onChange={(e) => onChange((l) => { l.groupId = e.target.value.trim() || undefined; })} />
+        <datalist id={`group-names-${layer.index}`}>
+          {Array.from(new Set((pageLayers ?? []).map((l) => l.groupId).filter((g): g is string => !!g))).map((g) => (
+            <option key={g} value={g} />
+          ))}
+        </datalist>
+        {layer.groupId && (
+          <button className="btn small" title="Remove from group" onClick={() => onChange((l) => { l.groupId = undefined; })}>✕</button>
+        )}
+      </div>
       <div className="el-body">
         <div className="el-rail">
           <button className={"el-rail-btn" + (panel === "content" ? " active" : "")}
@@ -3217,6 +3253,7 @@ const PageInspector: React.FC<{
               autoFocus={l.index === newestLayerIndex}
               canvas={canvas}
               pageDuration={page.durationInFrames}
+              pageLayers={page.layers}
               onDelete={() => onDeleteLayer(li)} />
           )).reverse()}
         </>

@@ -149,6 +149,13 @@ export type ContentLayer = {
   // PhotoPanHandles' target filter in App.tsx).
   shapePhotoFile?: string;
   shapePhotoKind?: "image" | "video" | "gif";
+  // Layer group — a plain shared string, not a real nested transform/scene
+  // graph. Two or more layers on the SAME page sharing the same groupId
+  // move together by the same position delta when any one of them is
+  // dragged on the canvas (see the group-siblings block in App.tsx's
+  // canvasHandles onChange) — position only, not size: resizing one
+  // grouped layer resizes only itself. Unset/empty = ungrouped.
+  groupId?: string;
 };
 
 export type TemplateLayer = {
