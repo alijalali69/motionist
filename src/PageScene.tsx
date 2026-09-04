@@ -271,7 +271,7 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
       // rule that works no matter which kind got uploaded).
       <div style={{ width: "100%", height: "100%", boxSizing: "border-box", borderRadius: shapeRadius, border: shapeBorder, overflow: "hidden" }}>
         {layer.shapePhotoKind === "video" ? (
-          <OffthreadVideo src={staticFile(layer.shapePhotoFile)} transparent muted
+          <OffthreadVideo src={staticFile(layer.shapePhotoFile)} transparent muted={!!layer.videoMuted}
             style={{ width: "100%", height: "100%", objectFit: fit, objectPosition, transform: `scale(${zoom})` }} />
         ) : layer.shapePhotoKind === "gif" ? (
           <Gif src={staticFile(layer.shapePhotoFile)} fit={fit} width={layer.width} height={layer.height} />
@@ -292,7 +292,7 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
     )
   ) :
     layer.assetKind === "video" ? (
-      <OffthreadVideo src={url} transparent muted
+      <OffthreadVideo src={url} transparent muted={!!layer.videoMuted}
         style={{ width: "100%", height: "100%", objectFit: fit, objectPosition, transform: `scale(${zoom})` }} />
     ) : layer.assetKind === "gif" ? (
       <Gif src={url} fit={fit} width={layer.width} height={layer.height} />

@@ -550,10 +550,17 @@ async function saveMedia(file, projectId, subdir, prefix) {
     result = { file: rel(name), kind: "font", abs: path.join(dir, name) };
   } else if ([".mov", ".mp4", ".webm", ".mkv", ".avi", ".m4v"].includes(ext)) {
     const name = `${prefix}_${stamp}.webm`;
+    // Keep the source's own audio track (Opus, webm's native audio codec) —
+    // previously hardcoded `-an` (no audio), which silently threw the
+    // soundtrack away at upload time; no `muted` prop can bring back audio
+    // that was never kept in the transcoded file. A source with no audio
+    // stream at all just yields a video-only webm same as before — ffmpeg
+    // doesn't error over an absent optional stream when it isn't `-map`ped.
     await run("ffmpeg", [
       "-y", "-i", JSON.stringify(file.path),
       "-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p",
-      "-b:v", "3M", "-deadline", "good", "-cpu-used", "3", "-an",
+      "-b:v", "3M", "-deadline", "good", "-cpu-used", "3",
+      "-c:a", "libopus", "-b:a", "128k",
       JSON.stringify(path.join(dir, name)),
     ]);
     fs.rmSync(file.path, { force: true });

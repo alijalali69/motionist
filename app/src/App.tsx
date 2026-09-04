@@ -1692,6 +1692,21 @@ const InstagramUiToggleIcon: React.FC = () => (
     <path d="M7.5 12.5c-.13 0-.27-.03-.38-.11C4.4 10.8 1.5 8.7 1.5 5.9 1.5 3.9 3 2.5 4.9 2.5c1 0 1.9.5 2.6 1.3.7-.8 1.6-1.3 2.6-1.3 1.9 0 3.4 1.4 3.4 3.4 0 2.8-2.9 4.9-5.62 6.49-.11.08-.25.11-.38.11z" />
   </svg>
 );
+// A video's own Sound toggle — same speaker glyph either way, sound-wave
+// arcs swapped for a slash through it when muted, so the two states read
+// as clearly opposite at a glance, not just a color change.
+const SoundOnIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1.5 5.8h2.2L7 3v9L3.7 9.2H1.5z" />
+    <path d="M9.3 5.5c1.1 1 1.1 3 0 4M11.3 4c2 2 2 6 0 8" />
+  </svg>
+);
+const SoundOffIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1.5 5.8h2.2L7 3v9L3.7 9.2H1.5z" />
+    <path d="M9.3 5v4.2M12.3 5v4.2" strokeLinecap="round" transform="rotate(45 10.8 7.1)" />
+  </svg>
+);
 
 // "Add sequence" vs "Add page" — the split is where the content comes from
 // (imported/pre-designed vs. built here), not what it looks like when
@@ -2065,6 +2080,17 @@ const ElementMotion: React.FC<{
                   <option value="contain">contain (whole photo, may letterbox)</option>
                 </select>
               </div>
+              {layer.assetKind === "video" && (
+                <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+                  <span style={{ color: "var(--muted)" }}>Sound</span>
+                  <button className={"btn small icon" + (layer.videoMuted ? "" : " active")}
+                    title={layer.videoMuted ? "Muted — click to play with sound (in preview and export)" : "Playing with sound — click to mute (in preview and export)"}
+                    aria-pressed={!layer.videoMuted}
+                    onClick={() => onChange((l) => { l.videoMuted = !l.videoMuted; })}>
+                    {layer.videoMuted ? <SoundOffIcon /> : <SoundOnIcon />}
+                  </button>
+                </div>
+              )}
             </>
           )}
           <div className="mini" style={{ marginTop: 4 }}>
@@ -2177,6 +2203,17 @@ const ElementMotion: React.FC<{
                     <option value="contain">contain (whole photo, may letterbox)</option>
                   </select>
                 </div>
+                {layer.shapePhotoKind === "video" && (
+                  <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+                    <span style={{ color: "var(--muted)" }}>Sound</span>
+                    <button className={"btn small icon" + (layer.videoMuted ? "" : " active")}
+                      title={layer.videoMuted ? "Muted — click to play with sound (in preview and export)" : "Playing with sound — click to mute (in preview and export)"}
+                      aria-pressed={!layer.videoMuted}
+                      onClick={() => onChange((l) => { l.videoMuted = !l.videoMuted; })}>
+                      {layer.videoMuted ? <SoundOffIcon /> : <SoundOnIcon />}
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>

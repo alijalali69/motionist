@@ -86,6 +86,12 @@ export type ContentLayer = {
   photoZoom?: number; // default 1 (exact cover fit) — >1 zooms in, <1 (down to 0.3) shrinks the photo inside its frame
   naturalWidth?: number | null;  // uploaded asset's real pixel size (for pan math)
   naturalHeight?: number | null;
+  // Only matters when the uploaded asset is a video (assetKind "video", or
+  // shapePhotoKind "video" for a shape's photo mask) — unset/false = plays
+  // with its own embedded audio, both in the live preview AND the final
+  // export (OffthreadVideo's `muted` prop is respected by Remotion's render
+  // pipeline, not just live playback). true = silent in both.
+  videoMuted?: boolean;
   // How much of the PAGE's own ambient motion (kenburns, sway, etc. — set on
   // the page, not per-layer) this layer participates in. Unset/1 = moves
   // exactly with the page ambient (today's only behavior, still the
