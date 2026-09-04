@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  listProjects, createProject, deleteProject, type ProjectSummary,
+  listProjects, createProject, deleteProject, duplicateProject, type ProjectSummary,
   listFonts, uploadFontToLibrary, deleteFont, type FontEntry,
   listSizePresets, saveSizePreset, deleteSizePreset, type SizePresetEntry,
 } from "./api";
@@ -194,6 +194,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState<string | null>(null);
+  const [duplicatingId, setDuplicatingId] = React.useState<string | null>(null);
   const [managingFonts, setManagingFonts] = React.useState(false);
   const [sizeIdx, setSizeIdx] = React.useState(0); // index into SIZE_PRESETS, or -1 for custom (customW/customH)
   const [customW, setCustomW] = React.useState(1080);
@@ -279,6 +280,16 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
     setBusy(true);
     try { await deleteProject(id); setConfirmDelete(null); refresh(); }
     finally { setBusy(false); }
+  };
+
+  // Stays on the Dashboard (doesn't open the copy) — same "confirm what
+  // happened, let the user pick when to dive in" spirit as delete not
+  // opening anything either. The new card just appears in the grid.
+  const doDuplicate = async (id: string) => {
+    setDuplicatingId(id);
+    try { await duplicateProject(id); refresh(); }
+    catch (e: any) { setErr(String(e.message || e)); }
+    finally { setDuplicatingId(null); }
   };
 
   return (
@@ -376,11 +387,19 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
                   <div className="project-thumb-placeholder">{(p.name || "?").slice(0, 1).toUpperCase()}</div>
                 )}
                 {confirmDelete !== p.id ? (
-                  <button
-                    className="thumb-del"
-                    title="Delete project"
-                    onClick={(e) => { e.stopPropagation(); setConfirmDelete(p.id); }}
-                  >✕</button>
+                  <>
+                    <button
+                      className="thumb-dup"
+                      title="Duplicate project — a full independent copy, own assets included"
+                      disabled={duplicatingId === p.id}
+                      onClick={(e) => { e.stopPropagation(); doDuplicate(p.id); }}
+                    >{duplicatingId === p.id ? "…" : "⧉"}</button>
+                    <button
+                      className="thumb-del"
+                      title="Delete project"
+                      onClick={(e) => { e.stopPropagation(); setConfirmDelete(p.id); }}
+                    >✕</button>
+                  </>
                 ) : (
                   <div className="thumb-confirm" onClick={(e) => e.stopPropagation()}>
                     <span>Delete?</span>

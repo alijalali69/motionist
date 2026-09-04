@@ -444,6 +444,18 @@ a.dl { color: var(--accent2); }
 .project-card:hover .thumb-del { opacity: 1; }
 .thumb-del:hover { background: var(--warn); border-color: var(--warn); }
 
+.thumb-dup {
+  position: absolute; top: 8px; left: 8px;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(14, 16, 19, 0.75); color: var(--text);
+  border: 1px solid rgba(255,255,255,0.12);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; cursor: pointer; opacity: 0; transition: opacity 0.12s;
+}
+.project-card:hover .thumb-dup { opacity: 1; }
+.thumb-dup:hover { background: var(--accent); border-color: var(--accent); }
+.thumb-dup[disabled] { opacity: 0.5; cursor: default; }
+
 .thumb-confirm {
   position: absolute; inset: 0;
   background: rgba(10, 11, 13, 0.88);

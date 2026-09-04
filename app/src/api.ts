@@ -30,6 +30,16 @@ export async function deleteProject(id: string): Promise<void> {
   await fetch(`/api/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+// A full independent copy — its own project id AND its own asset folder
+// (every uploaded photo/video/font-reference/audio file gets physically
+// duplicated server-side, not just the JSON) — see the /api/projects/:id/
+// duplicate route in server/index.mjs.
+export async function duplicateProject(id: string): Promise<Project> {
+  const r = await fetch(`/api/projects/${encodeURIComponent(id)}/duplicate`, { method: "POST" });
+  if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || "duplicate failed");
+  return r.json();
+}
+
 export async function loadProject(id: string): Promise<Project | null> {
   const r = await fetch(`/api/projects/${encodeURIComponent(id)}`);
   if (!r.ok) return null;

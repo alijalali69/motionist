@@ -411,6 +411,54 @@ app.delete("/api/projects/:id", (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Duplicate a project: a full independent copy, own assets included ------
+// Every asset path stored anywhere in a project (bg/title/logo/audio, each
+// page's layers, ingested PSD/SVG page art) is always written by this same
+// server as the literal string "projects/<projectId>/<subdir>/<file>" — see
+// saveMedia's `rel` and /api/ingest's exportDir above, and tools/compose.mjs
+// on the Python-extraction side. That means a plain string-replace of the
+// id prefix, after physically copying the whole asset folder, re-points
+// every reference at the new copy correctly with no per-field asset logic
+// needed — a page's layers array, its bgStyle, everything just falls out of
+// one recursive walk.
+app.post("/api/projects/:id/duplicate", (req, res) => {
+  try {
+    const oldId = req.params.id;
+    const src = readProject(oldId);
+    if (!src) return res.status(404).json({ error: "project not found" });
+
+    const newId = newProjectId();
+    const srcDir = path.join(PUBLIC, "projects", oldId);
+    const destDir = path.join(PUBLIC, "projects", newId);
+    if (fs.existsSync(srcDir)) fs.cpSync(srcDir, destDir, { recursive: true });
+
+    const project = structuredClone(src);
+    project.projectId = newId;
+    project.name = `${src.name || src.projectId} copy`;
+    const now = new Date().toISOString();
+    project.createdAt = now;
+    project.updatedAt = now;
+
+    const oldPrefix = `projects/${oldId}/`;
+    const newPrefix = `projects/${newId}/`;
+    const walk = (v) => {
+      if (Array.isArray(v)) { v.forEach(walk); return; }
+      if (v && typeof v === "object") {
+        for (const k of Object.keys(v)) {
+          if (typeof v[k] === "string" && v[k].startsWith(oldPrefix)) v[k] = newPrefix + v[k].slice(oldPrefix.length);
+          else if (v[k] && typeof v[k] === "object") walk(v[k]);
+        }
+      }
+    };
+    walk(project);
+
+    writeProject(project);
+    res.json(project);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
 // --- Single project load / save -----------------------------------------------
 app.get("/api/projects/:id", (req, res) => {
   const project = readProject(req.params.id);
