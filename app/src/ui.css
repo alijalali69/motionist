@@ -49,8 +49,17 @@ body {
 
 .app {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   overflow: hidden;
+}
+/* The 3-column layout (Pages/Assets | Canvas | Inspector) lives here now,
+   below the full-width topbar — was .app's own direct flex-row children
+   before the topbar existed. */
+.workspace {
+  flex: 1;
+  display: flex;
+  min-height: 0;
 }
 
 /* Draggable divider between a side panel and the center preview — widths
@@ -490,15 +499,42 @@ a.dl { color: var(--accent2); }
   box-shadow: 0 20px 60px rgba(0,0,0,0.5);
 }
 
-/* --- Editor header (back to dashboard) --------------------------------- */
-
-.editor-header {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  margin-bottom: 4px;
+/* --- Topbar — brand/back, project name + autosave, undo/redo, Render --- */
+/* One full-width bar above the 3-column workspace, instead of a stacked
+   "back button + autosave/undo row" then a separate big project-name input
+   further down the left column. The brand mark IS the back-to-Dashboard
+   control (click the logo — same convention as Figma/Notion), which is
+   what frees up the row for Render to sit right there too. */
+.topbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 9px 16px; flex: none;
+  background: var(--panel); border-bottom: 1px solid var(--line);
 }
-.back-btn {
-  width: auto; padding: 5px 10px; font-size: 12px;
+.topbar-brand {
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: none; padding: 2px; margin: 0;
+  cursor: pointer; color: var(--text); width: auto;
 }
+.topbar-brand:hover { color: var(--accent2); }
+.topbar-brand b { font-size: 14px; font-weight: 700; }
+.topbar-icon { width: 20px; height: 20px; display: block; }
+.topbar-divider { width: 1px; height: 22px; background: var(--line); flex: none; }
+.topbar-proj { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* `input.topbar-proj-name` (not just `.topbar-proj-name`) — same reason the
+   old project-name-input rule needed it: a bare class loses to the generic
+   `input[type="text"]` rule's own specificity (element + attribute), which
+   would otherwise silently win and paint this as a bland, full-width,
+   panel2-background box instead of an inline name field. */
+input.topbar-proj-name {
+  font-size: 14px; font-weight: 600; color: var(--text);
+  background: transparent; border: 1px solid transparent;
+  padding: 2px 5px; margin: -2px 0 -2px -5px; border-radius: 6px; width: auto; min-width: 140px;
+}
+input.topbar-proj-name:hover { border-color: var(--line); background: var(--panel2); }
+input.topbar-proj-name:focus { border-color: var(--accent); background: var(--panel2); outline: none; }
+input.topbar-proj-name::placeholder { color: var(--muted); font-weight: 600; }
+.topbar-spacer { flex: 1; }
+.topbar-acts { display: flex; align-items: center; gap: 8px; }
 /* Autosave status — small and ambient (Google Docs/Figma style), not a
    banner: "Saved" is the calm/expected state, "Unsaved" is transient
    (the debounce window before the next autosave fires), never an error. */
@@ -554,20 +590,6 @@ a.dl { color: var(--accent2); }
 .canvas-handle:focus-visible {
   outline: 2px solid #fff;
 }
-/* `input.project-name-input` (not just `.project-name-input`) so this beats
-   the generic `input[type="text"]` rule's specificity — otherwise that rule
-   silently wins and this renders as a bland, easy-to-miss input box instead
-   of a prominent project name. */
-input.project-name-input {
-  font-size: 19px; font-weight: 700; letter-spacing: 0.2px;
-  color: var(--text);
-  background: transparent; border: 1px solid transparent;
-  padding: 5px 7px; margin: 2px 0 6px -7px; width: calc(100% + 7px);
-  border-radius: 8px;
-}
-input.project-name-input:hover { border-color: var(--line); background: var(--panel2); }
-input.project-name-input:focus { border-color: var(--accent); background: var(--panel2); }
-input.project-name-input::placeholder { color: var(--muted); font-weight: 600; }
 
 /* --- Selected-element groups (Text / Effects / Keyframes boxes) --------- */
 /* Nested one level inside the layer card (also .card.compact) — a slightly

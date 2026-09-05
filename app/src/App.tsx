@@ -1264,29 +1264,54 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
 
   return (
     <div className="app">
+      {/* Datum header — a single full-width bar instead of the old stacked
+          "back button + autosave/undo row" / "big project-name input" pair.
+          The brand mark doubles as the back-to-Dashboard control (click the
+          logo, same convention as Figma/Notion) rather than a separate text
+          button, so Render/undo/redo/project-name/autosave all fit one row. */}
+      <header className="topbar">
+        <button className="topbar-brand" onClick={onBack} title="Back to Dashboard">
+          <img src="/brand/motionist-icon.svg" alt="" className="topbar-icon" />
+          <b>Motionist</b>
+        </button>
+        <div className="topbar-divider" />
+        <div className="topbar-proj">
+          <input
+            className="topbar-proj-name"
+            value={project?.name ?? ""}
+            placeholder="Loading…"
+            disabled={!project}
+            onChange={(e) => update((p) => { p.name = e.target.value; })}
+          />
+          {project && (
+            <span className="autosave-status" title="Every change saves on its own a moment after you stop editing">
+              {autosaveState === "saved" && <><span className="dot good" />Saved</>}
+              {autosaveState === "saving" && <><span className="dot" />Saving…</>}
+              {autosaveState === "unsaved" && <><span className="dot warn" />Unsaved</>}
+            </span>
+          )}
+        </div>
+        <div className="topbar-spacer" />
+        <div className="topbar-acts">
+          <button className="btn small" title="Undo (Ctrl+Z)" disabled={historyRef.current.length === 0} onClick={undo}>↶</button>
+          <button className="btn small" title="Redo (Ctrl+Shift+Z)" disabled={futureRef.current.length === 0} onClick={redo}>↷</button>
+          {renderProgress ? (
+            <button className="btn danger small" onClick={onStopRender}
+              disabled={renderProgress.status === "cancelling"}
+              title="Stop this render — the partial file gets deleted, nothing is saved">
+              {renderProgress.status === "cancelling" ? "Stopping…" : `■ Stop · ${Math.round(renderProgress.percent)}%`}
+            </button>
+          ) : (
+            <button className="btn primary small" onClick={onRender} disabled={!project}
+              title={transparentExport ? "Render ProRes (alpha)" : "Render MP4"}>
+              {transparentExport ? "Render ProRes" : "Render"}
+            </button>
+          )}
+        </div>
+      </header>
+      <div className="workspace">
       {/* LEFT: project + pages */}
       <div className="col" style={{ width: leftW, flex: `0 0 ${leftW}px` }}>
-        <div className="editor-header">
-          <button className="btn back-btn" onClick={onBack}>← Dashboard</button>
-          <div className="row" style={{ gap: 8 }}>
-            {project && (
-              <span className="autosave-status" title="Every change saves on its own a moment after you stop editing">
-                {autosaveState === "saved" && <><span className="dot good" />Saved</>}
-                {autosaveState === "saving" && <><span className="dot" />Saving…</>}
-                {autosaveState === "unsaved" && <><span className="dot warn" />Unsaved</>}
-              </span>
-            )}
-            <button className="btn small" title="Undo (Ctrl+Z)" disabled={historyRef.current.length === 0} onClick={undo}>↶</button>
-            <button className="btn small" title="Redo (Ctrl+Shift+Z)" disabled={futureRef.current.length === 0} onClick={redo}>↷</button>
-          </div>
-        </div>
-        <input
-          className="project-name-input"
-          value={project?.name ?? ""}
-          placeholder="Loading…"
-          disabled={!project}
-          onChange={(e) => update((p) => { p.name = e.target.value; })}
-        />
         {/* Where the content comes from, not what it looks like when you're
             done: Sequence pulls in already-designed pages (PSD/SVG/photo,
             in filename order); Page starts one empty page you build here
@@ -1775,6 +1800,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             newestLayerIndex={newestLayerIndex}
           />
         ) : <p className="sub">Select a page.</p>}
+      </div>
       </div>
     </div>
   );
