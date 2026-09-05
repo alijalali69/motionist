@@ -850,10 +850,15 @@ app.post("/api/asset", upload.single("asset"), async (req, res) => {
 // response, not a job to poll) and the new job-based /api/render/start
 // (what the app's own UI uses for a real progress bar).
 function buildRenderArgs(project) {
-  // `transparent`/`exportName` are transient flags riding on the same
-  // body, not real Project fields — never persisted anywhere but this
-  // scratch file.
+  // `transparent`/`exportName`/`quality`/`destDir` are transient flags
+  // riding on the same body, not real Project fields — never persisted
+  // anywhere but this scratch file.
   const transparent = !!project.transparent;
+  // A folder the user picked via the Render menu's "Browse…" (see
+  // /api/browse-folder below) — an absolute path outside this app's own
+  // out/ folder, so it can't be served back over /out (that only serves
+  // ROOT/out) — the client shows the real path instead of a download link.
+  const destDir = typeof project.destDir === "string" && project.destDir.trim() ? project.destDir.trim() : null;
   // Mirror into src/project.json — that's what Root.tsx's defaultProps and
   // the Remotion CLI's --props flag read from.
   fs.writeFileSync(LEGACY_PROJECT_JSON, JSON.stringify(project, null, 2), "utf-8");
@@ -865,25 +870,64 @@ function buildRenderArgs(project) {
   // which showed up as a colored glow/halo around soft edges and broken
   // transparency once imported. ProRes 4444 doesn't have that problem.
   const outName = `${safeName}_${Date.now()}.${transparent ? "mov" : "mp4"}`;
-  const args = ["remotion", "render", "Reel", `out/${outName}`, "--props=src/project.json"];
+  const outAbsPath = destDir ? path.join(destDir, outName) : path.join(ROOT, "out", outName);
+  // Relative "out/<name>" (not the absolute path) when writing into our own
+  // out/ folder, matching every existing render call — an absolute path
+  // works with the Remotion CLI either way, this just avoids changing the
+  // no-custom-folder behavior at all. Quoted when it's a user-picked
+  // absolute path specifically — run()/runStreaming() spawn with shell:true,
+  // which does NOT escape array args (see runRenderWithBrowserFallback's own
+  // comment on this exact failure mode), so an unquoted "C:\Users\Name\
+  // Videos" truncates at the first space. outName itself never needs this
+  // (safeName is already sanitized to [a-z0-9] only, no spaces possible).
+  const outArg = destDir ? `"${outAbsPath}"` : `out/${outName}`;
+  const args = ["remotion", "render", "Reel", outArg, "--props=src/project.json"];
   // yuva444p10le needs each rendered frame captured as PNG (Remotion's
   // default JPEG capture format has no alpha channel to carry through).
-  if (transparent) args.push("--codec=prores", "--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png");
-  return { args, outName };
+  // Quality only applies to the plain MP4 path — an alpha export's whole
+  // point is lossless-ish ProRes, not a size/quality tradeoff.
+  if (transparent) {
+    args.push("--codec=prores", "--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png");
+  } else {
+    // Lower CRF = higher quality/bigger file (standard x264 scale, 0-51).
+    // "balanced" is omitted on purpose — Remotion's own unset default
+    // already sits right there, so the common case gets no extra flag.
+    const CRF = { high: 16, small: 30 };
+    const crf = CRF[project.quality];
+    if (crf !== undefined) args.push(`--crf=${crf}`);
+  }
+  return { args, outName, outAbsPath, servableUrl: destDir ? null : `/out/${outName}` };
 }
+
+// --- Native folder picker for the Render menu's "Browse…" (destination
+// folder) — a website has no API to hand back a WRITABLE folder path, but
+// this server IS the user's own machine, so it just runs a real Windows
+// folder-browser dialog server-side and reports back whatever got picked.
+// No timeout: the user might sit on the dialog for a while, that's fine.
+app.post("/api/browse-folder", async (req, res) => {
+  try {
+    const scriptPath = path.join(ROOT, "tools", "browse_folder.ps1");
+    const out = await run("powershell", ["-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File", JSON.stringify(scriptPath)]);
+    const selected = out.trim();
+    res.json({ path: selected || null }); // null = user cancelled the dialog
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
 
 // --- Render the reel to MP4 (or, for an alpha export, a transparent WebM) ---
 // Kept synchronous on purpose — the Resolve plugin's bridge calls this
 // directly and expects the finished file's {url, path} in one response.
 app.post("/api/render", async (req, res) => {
   try {
-    const { args, outName } = buildRenderArgs(req.body);
+    const { args, outAbsPath, servableUrl } = buildRenderArgs(req.body);
     await runRenderWithBrowserFallback(args, () => {});
     // `path` is the absolute filesystem path — the Resolve plugin's bridge
     // needs a real path (not a URL) to hand the file to Resolve's Media
     // Pool. Harmless to expose: this is a single-user local server, and the
-    // path is inside this project's own `out/` folder either way.
-    res.json({ url: `/out/${outName}`, path: path.join(ROOT, "out", outName) });
+    // path is inside this project's own `out/` folder (or the user's own
+    // chosen destination, via the Render menu's "Browse…") either way.
+    res.json({ url: servableUrl, path: outAbsPath });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
@@ -895,10 +939,10 @@ const renderJobs = new Map(); // jobId -> { status, percent, phase, frame, total
 let renderJobSeq = 0;
 
 app.post("/api/render/start", (req, res) => {
-  let outName;
+  let outAbsPath, servableUrl;
   let args;
   try {
-    ({ args, outName } = buildRenderArgs(req.body));
+    ({ args, outAbsPath, servableUrl } = buildRenderArgs(req.body));
   } catch (e) {
     return res.status(500).json({ error: String(e.message || e) });
   }
@@ -906,8 +950,6 @@ app.post("/api/render/start", (req, res) => {
   const job = { status: "running", percent: 0, phase: "bundling", frame: 0, totalFrames: 0, pid: null };
   renderJobs.set(jobId, job);
   res.json({ jobId });
-
-  const outPath = path.join(ROOT, "out", outName);
 
   runRenderWithBrowserFallback(
     args,
@@ -919,8 +961,8 @@ app.post("/api/render/start", (req, res) => {
   )
     .then(() => {
       job.status = "done"; job.percent = 100;
-      job.url = `/out/${outName}`;
-      job.path = outPath;
+      job.url = servableUrl;
+      job.path = outAbsPath;
     })
     .catch((e) => {
       // The cancel route below sets "cancelling" synchronously, before the
@@ -931,7 +973,7 @@ app.post("/api/render/start", (req, res) => {
         job.status = "cancelled";
         // A killed render leaves a broken/incomplete file sitting in out/ —
         // clean it up rather than leave a corrupt video behind.
-        fs.rm(outPath, { force: true }, () => {});
+        fs.rm(outAbsPath, { force: true }, () => {});
       } else {
         job.status = "error";
         job.error = String(e.message || e);

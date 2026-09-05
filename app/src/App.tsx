@@ -6,6 +6,7 @@ import { TEXT_ENTRANCE_NAMES, TEXT_EXIT_NAMES, LATIN_TEXT_ENTRANCE_NAMES, AMBIEN
 import type { BgStyle } from "../../src/types";
 import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
+  browseFolder, type RenderQuality,
   listFonts, deleteProjectFiles, type IngestResult, type FontEntry,
   listMotionPresets, saveMotionPreset, deleteMotionPreset, type MotionPresetEntry,
   listPageTemplates, loadPageTemplate, savePageTemplate, deletePageTemplate, type PageTemplateSummary,
@@ -430,6 +431,23 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       exportNameSeededFor.current = project.projectId;
     }
   }, [project?.projectId, project?.name]);
+  // Render menu — opened from the header's Render button. Quality only
+  // matters for a plain MP4 (an alpha export is always ProRes, no size/
+  // quality tradeoff); destDir is an absolute folder from browseFolder(),
+  // blank = the app's own out/ folder (served at /out, download link
+  // shown). renderPath mirrors renderUrl for the "done" state — the one
+  // thing that's always real is the absolute path, whether or not the file
+  // is also servable back over /out.
+  const [showRenderMenu, setShowRenderMenu] = React.useState(false);
+  const [renderQuality, setRenderQuality] = React.useState<RenderQuality>("balanced");
+  const [destDir, setDestDir] = React.useState("");
+  const [browsingFolder, setBrowsingFolder] = React.useState(false);
+  const [renderPath, setRenderPath] = React.useState<string | null>(null);
+  // Separate from the general `err` state (shown in the left column, for
+  // every other action's failures) — a render/browse-folder error belongs
+  // on the render-result banner under the player, not mixed in with an
+  // unrelated upload failure that might be showing at the same time.
+  const [renderErr, setRenderErr] = React.useState<string | null>(null);
   // Left/right panel widths — draggable via the resizer bars between them and
   // the center preview, remembered across reloads (per-browser, not part of
   // the project). Center always takes whatever's left (min 320px so the
@@ -1073,10 +1091,14 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
 
   const onRender = async () => {
     if (!project) return;
-    setErr(null); setRenderUrl(null); setRenderProgress({ percent: 0 });
+    setRenderErr(null); setRenderUrl(null); setRenderPath(null); setRenderProgress({ percent: 0 });
+    setShowRenderMenu(false);
     try {
       await saveProject(project); // keep the saved copy in sync with what's rendered
-      const jobId = await startRenderJob(project, transparentExport, exportName);
+      const jobId = await startRenderJob(project, {
+        transparent: transparentExport, exportName, quality: renderQuality,
+        destDir: destDir.trim() || undefined,
+      });
       renderJobIdRef.current = jobId;
       // Poll until the job reports done/error/cancelled — /api/render/start
       // returns immediately instead of blocking for the whole render,
@@ -1089,6 +1111,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         if (status.status === "cancelled") break; // stopped on purpose — not an error, nothing to show
         if (status.status === "done") {
           setRenderUrl(status.url ?? null);
+          setRenderPath(status.path ?? null);
           // Same Resolve Media Pool hand-off renderReel() used to do —
           // fire-and-forget, a failure here shouldn't fail a render that
           // already succeeded.
@@ -1101,13 +1124,26 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         }
         setRenderProgress({ percent: status.percent, phase: status.phase, frame: status.frame, totalFrames: status.totalFrames, status: status.status });
       }
-    } catch (e: any) { setErr(String(e.message || e)); }
+    } catch (e: any) { setRenderErr(String(e.message || e)); }
     finally { setRenderProgress(null); renderJobIdRef.current = null; }
   };
 
   const onStopRender = () => {
     if (!renderJobIdRef.current) return;
-    cancelRenderJob(renderJobIdRef.current).catch((e) => setErr(String(e.message || e)));
+    cancelRenderJob(renderJobIdRef.current).catch((e) => setRenderErr(String(e.message || e)));
+  };
+
+  // Opens a real Windows folder dialog (server-side — see /api/browse-folder)
+  // and blocks until the user picks a folder or cancels; browsingFolder just
+  // disables the button meanwhile so a second click can't stack a second
+  // dialog on top of the first.
+  const onBrowseFolder = async () => {
+    setBrowsingFolder(true); setRenderErr(null);
+    try {
+      const picked = await browseFolder();
+      if (picked) setDestDir(picked);
+    } catch (e: any) { setRenderErr(String(e.message || e)); }
+    finally { setBrowsingFolder(false); }
   };
 
   const movePage = (i: number, dir: -1 | 1) => {
@@ -1293,6 +1329,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         </div>
         <div className="topbar-spacer" />
         <div className="topbar-acts">
+          <button className="btn small" onClick={onSave} disabled={!project} title="Save now (autosave already covers this a moment after you stop editing)">Save</button>
           <button className="btn small" title="Undo (Ctrl+Z)" disabled={historyRef.current.length === 0} onClick={undo}>↶</button>
           <button className="btn small" title="Redo (Ctrl+Shift+Z)" disabled={futureRef.current.length === 0} onClick={redo}>↷</button>
           {renderProgress ? (
@@ -1302,16 +1339,80 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               {renderProgress.status === "cancelling" ? "Stopping…" : `■ Stop · ${Math.round(renderProgress.percent)}%`}
             </button>
           ) : (
-            <button className="btn primary small" onClick={onRender} disabled={!project}
-              title={transparentExport ? "Render ProRes (alpha)" : "Render MP4"}>
-              {transparentExport ? "Render ProRes" : "Render"}
-            </button>
+            <div className="render-menu-wrap">
+              <button className="btn primary small" disabled={!project}
+                onClick={() => setShowRenderMenu((v) => !v)}>
+                Render ▾
+              </button>
+              {showRenderMenu && (
+                <>
+                  {/* Transparent full-screen catcher, not a dimmed .modal-backdrop —
+                      this is an anchored dropdown menu, not a centered dialog; a
+                      dimming overlay would fight that read. Sits behind the panel,
+                      any click on it (i.e. anywhere outside the panel) closes. */}
+                  <div className="dropdown-catcher" onClick={() => setShowRenderMenu(false)} />
+                  <div className="render-menu card compact" onClick={(e) => e.stopPropagation()}>
+                    <div className="subhead">Export settings</div>
+                    <label style={{ margin: "0 0 4px" }}>File name</label>
+                    <input type="text" value={exportName} placeholder={project?.name || project?.projectId || "reel"}
+                      style={{ marginBottom: 8 }}
+                      onChange={(e) => setExportName(e.target.value)} />
+
+                    <label style={{ margin: "0 0 4px" }}>Quality {transparentExport && "(alpha ignores this — always full quality)"}</label>
+                    <div className="segmented" style={{ width: "100%", marginBottom: 8 }}>
+                      {(["high", "balanced", "small"] as const).map((q) => (
+                        <button key={q} type="button" className={"tab" + (renderQuality === q ? " active" : "")}
+                          disabled={transparentExport}
+                          onClick={() => setRenderQuality(q)}>
+                          {q === "high" ? "High" : q === "balanced" ? "Balanced" : "Small file"}
+                        </button>
+                      ))}
+                    </div>
+
+                    <label className="row" style={{ gap: 6, alignItems: "center", marginBottom: 8 }}>
+                      <input type="checkbox" checked={transparentExport}
+                        onChange={(e) => setTransparentExport(e.target.checked)} />
+                      Transparent background (alpha, ProRes .mov — for Resolve/editors)
+                    </label>
+
+                    <label style={{ margin: "0 0 4px" }}>Save to</label>
+                    <div className="row" style={{ gap: 6, marginBottom: 10 }}>
+                      <input type="text" readOnly value={destDir || "(default) this app's own out/ folder"}
+                        title={destDir || undefined} style={{ flex: 1, color: destDir ? undefined : "var(--muted)" }} />
+                      <button className="btn small" style={{ width: "auto" }} disabled={browsingFolder} onClick={onBrowseFolder}>
+                        {browsingFolder ? "…" : "Browse…"}
+                      </button>
+                      {destDir && (
+                        <button className="btn small" style={{ width: "auto" }} title="Reset to the default out/ folder"
+                          onClick={() => setDestDir("")}>✕</button>
+                      )}
+                    </div>
+
+                    <button className="btn primary" onClick={onRender} disabled={!project}>
+                      {transparentExport ? "Render ProRes (alpha)" : "Render MP4"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
       </header>
       <div className="workspace">
       {/* LEFT: project + pages */}
       <div className="col" style={{ width: leftW, flex: `0 0 ${leftW}px` }}>
+        {/* General status — errors/busy from any panel action here (uploads,
+            ingest, presets…), not just rendering any more (that moved to
+            the header's Render menu + the canvas overlay). Was folded into
+            the old Export card; this is its only display site now, so it
+            needs its own home instead of disappearing with that card. */}
+        {busy && <p className="spin" style={{ marginTop: 8 }}>{busy}</p>}
+        {err && (
+          <p className="err row between" style={{ alignItems: "center", gap: 8, marginTop: 8 }}>
+            <span>{err}</span>
+            <button className="btn small" title="Dismiss" onClick={() => setErr(null)}>✕</button>
+          </p>
+        )}
         {/* Where the content comes from, not what it looks like when you're
             done: Sequence pulls in already-designed pages (PSD/SVG/photo,
             in filename order); Page starts one empty page you build here
@@ -1549,57 +1650,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           </>
         )}
 
-        <h2>Export</h2>
-        <div className="card compact">
-          <label style={{ margin: "0 0 4px" }}>File name</label>
-          <input type="text" value={exportName} placeholder={project?.name || project?.projectId || "reel"}
-            style={{ marginBottom: 8 }}
-            onChange={(e) => setExportName(e.target.value)} />
-          <label className="row" style={{ gap: 6, alignItems: "center", marginBottom: 8 }}>
-            <input type="checkbox" checked={transparentExport}
-              onChange={(e) => setTransparentExport(e.target.checked)} />
-            Transparent background (alpha export, ProRes .mov — for Resolve/editors)
-          </label>
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn" onClick={onSave} disabled={!project}>Save</button>
-            {renderProgress ? (
-              <button className="btn danger" onClick={onStopRender}
-                disabled={renderProgress.status === "cancelling"}
-                title="Stop this render — the partial file gets deleted, nothing is saved">
-                {renderProgress.status === "cancelling" ? "Stopping…" : "■ Stop"}
-              </button>
-            ) : (
-              <button className="btn primary" onClick={onRender} disabled={!project}>
-                {transparentExport ? "Render ProRes (alpha)" : "Render MP4"}
-              </button>
-            )}
-          </div>
-          {renderProgress && (
-            <div style={{ marginTop: 8 }}>
-              <div className="row between mini" style={{ marginBottom: 4 }}>
-                <span className="hint" style={{ margin: 0 }}>
-                  {renderProgress.phase === "bundling" && "Bundling…"}
-                  {renderProgress.phase === "rendering" &&
-                    (renderProgress.totalFrames ? `Rendering… ${renderProgress.frame}/${renderProgress.totalFrames} frames` : "Rendering…")}
-                  {renderProgress.phase === "encoding" && "Encoding…"}
-                  {!renderProgress.phase && "Starting…"}
-                </span>
-                <span className="hint" style={{ margin: 0, fontVariantNumeric: "tabular-nums" }}>{Math.round(renderProgress.percent)}%</span>
-              </div>
-              <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${Math.min(100, Math.max(0, renderProgress.percent))}%` }} />
-              </div>
-            </div>
-          )}
-          {renderUrl && <p className="hint">Done → <a className="dl" href={renderUrl} target="_blank" rel="noreferrer">download reel</a></p>}
-          {busy && <p className="spin">{busy}</p>}
-          {err && (
-            <p className="err row between" style={{ alignItems: "center", gap: 8 }}>
-              <span>{err}</span>
-              <button className="btn small" title="Dismiss" onClick={() => setErr(null)}>✕</button>
-            </p>
-          )}
-        </div>
       </div>
 
       <div className="panel-resizer" onMouseDown={startPanelDrag("left")} title="Drag to resize" />
@@ -1696,12 +1746,53 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             )}
             {showSafeZone && project.height > project.width && <SafeZoneOverlay canvas={[project.width, project.height]} />}
             {showInstagramUI && project.height > project.width && <InstagramUIOverlay canvas={[project.width, project.height]} />}
+            {/* Render progress — ON the canvas itself (not a side panel), so
+                it's visible no matter which inspector tab is open. */}
+            {renderProgress && (
+              <div className="render-overlay">
+                <div className="progress-track">
+                  <div className="progress-fill" style={{ width: `${Math.min(100, Math.max(0, renderProgress.percent))}%` }} />
+                </div>
+                <div className="render-overlay-row">
+                  <span>
+                    {renderProgress.phase === "bundling" && "Bundling…"}
+                    {renderProgress.phase === "rendering" &&
+                      (renderProgress.totalFrames ? `Rendering… ${renderProgress.frame}/${renderProgress.totalFrames} frames` : "Rendering…")}
+                    {renderProgress.phase === "encoding" && "Encoding…"}
+                    {!renderProgress.phase && "Starting…"}
+                  </span>
+                  <span className="tabular">{Math.round(renderProgress.percent)}%</span>
+                  <button className="btn small" style={{ width: "auto" }} onClick={onStopRender}
+                    disabled={renderProgress.status === "cancelling"}
+                    title="Stop this render — the partial file gets deleted, nothing is saved">
+                    {renderProgress.status === "cancelling" ? "Stopping…" : "✕ Stop"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : <p className="sub">Loading…</p>}
         </div>
         {project && (
           <div className="row" style={{ gap: 8, alignItems: "center", flexShrink: 0 }}>
             <PlayerControls playerRef={playerRef} durationInFrames={reelDuration(project)} fps={project.fps} />
+          </div>
+        )}
+        {/* Render result — done/error, shown right under the transport bar
+            (still "on the player," just not layered over the canvas once
+            there's nothing left actively progressing). Cleared by starting
+            a new render (onRender resets both) or dismissing here. */}
+        {!renderProgress && (renderUrl || renderPath || renderErr) && (
+          <div className="render-result">
+            {renderErr ? (
+              <span className="err" style={{ margin: 0, flex: 1 }}>{renderErr}</span>
+            ) : renderUrl ? (
+              <span className="hint" style={{ margin: 0, flex: 1 }}>Done → <a className="dl" href={renderUrl} target="_blank" rel="noreferrer">download reel</a></span>
+            ) : (
+              <span className="hint" style={{ margin: 0, flex: 1 }}>Done → saved to <span className="tabular" style={{ fontFamily: "var(--mono)" }}>{renderPath}</span></span>
+            )}
+            <button className="btn small" style={{ width: "auto" }} title="Dismiss"
+              onClick={() => { setRenderUrl(null); setRenderPath(null); setRenderErr(null); }}>✕</button>
           </div>
         )}
         {/* Meta's published Reels/Stories safe margins only mean anything on

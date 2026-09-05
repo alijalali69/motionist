@@ -307,15 +307,27 @@ export type RenderJobStatus = {
   phase?: "bundling" | "rendering" | "encoding";
   frame?: number;
   totalFrames?: number;
-  url?: string;
+  // `url` is null (not just absent) once a custom destination folder was
+  // used — that file lives outside public/out, so there's nothing to serve
+  // it back from; the real absolute `path` is the only way to point at it.
+  url?: string | null;
   path?: string;
   error?: string;
 };
 
-export async function startRenderJob(project: Project, transparent?: boolean, exportName?: string): Promise<string> {
+export type RenderQuality = "high" | "balanced" | "small";
+
+export async function startRenderJob(project: Project, opts?: {
+  transparent?: boolean;
+  exportName?: string;
+  quality?: RenderQuality;
+  destDir?: string; // absolute folder path from browseFolder() — omitted = the app's own out/ folder
+}): Promise<string> {
   const extra: Record<string, unknown> = {};
-  if (transparent) extra.transparent = true;
-  if (exportName && exportName.trim()) extra.exportName = exportName.trim();
+  if (opts?.transparent) extra.transparent = true;
+  if (opts?.exportName && opts.exportName.trim()) extra.exportName = opts.exportName.trim();
+  if (opts?.quality) extra.quality = opts.quality;
+  if (opts?.destDir) extra.destDir = opts.destDir;
   const body = Object.keys(extra).length ? { ...project, ...extra } : project;
   const r = await fetch("/api/render/start", {
     method: "POST",
@@ -325,6 +337,17 @@ export async function startRenderJob(project: Project, transparent?: boolean, ex
   if (!r.ok) throw new Error((await r.json()).error || "render failed to start");
   const data = await r.json();
   return data.jobId as string;
+}
+
+// Opens a native folder-browser dialog SERVER-side (see /api/browse-folder
+// in server/index.mjs) — a website has no way to hand back a writable
+// folder path on its own, but the server here is the user's own machine.
+// Resolves to null if the user cancelled the dialog.
+export async function browseFolder(): Promise<string | null> {
+  const r = await fetch("/api/browse-folder", { method: "POST" });
+  if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || "couldn't open the folder picker");
+  const data = await r.json();
+  return data.path ?? null;
 }
 
 export async function getRenderJobStatus(jobId: string): Promise<RenderJobStatus> {

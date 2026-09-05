@@ -563,6 +563,34 @@ input.topbar-proj-name::placeholder { color: var(--muted); font-weight: 600; }
   border-radius: 3px;
   transition: width 0.3s ease;
 }
+
+/* --- Render menu (header's Render button) — an anchored dropdown, not a
+   centered modal, so the catcher behind it stays fully transparent (a
+   dimmed .modal-backdrop would fight that read). --- */
+.render-menu-wrap { position: relative; }
+.dropdown-catcher { position: fixed; inset: 0; z-index: 40; background: none; }
+.render-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 41;
+  width: 300px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+}
+
+/* --- Render progress overlay — sits ON the canvas itself (playerWrapRef),
+   not in a side panel, so it's visible regardless of which inspector tab
+   is open. */
+.render-overlay {
+  position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 6;
+  background: rgba(13, 15, 18, 0.85); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.render-overlay-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 11px; color: var(--muted); margin-top: 6px;
+}
+.render-overlay-row .tabular { color: var(--text); font-variant-numeric: tabular-nums; }
+.render-result {
+  display: flex; align-items: center; gap: 8px;
+}
 /* Upload buttons — a plain button while empty (border/text only pick up
    accent color on hover, same "color carries the state" language as the
    icon toggles); turn solid green once something is uploaded, so
