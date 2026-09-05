@@ -557,6 +557,29 @@ input.topbar-proj-name::placeholder { color: var(--muted); font-weight: 600; }
   border: 1px solid var(--line);
   overflow: hidden;
 }
+/* --- Global asset tiles (BG/Title/Logo/Audio) — a 2x2 icon grid instead of
+   4 stacked full-width "Upload …" buttons; each slot's own detail card
+   (position/opacity/FX, or the waveform+volume/trim/fade controls for
+   Audio) still renders below, unchanged — only the upload TRIGGER moved. */
+.assetgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.assettile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 7px;
+  padding: 11px 10px; background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 10px; cursor: pointer; color: var(--text); text-align: left;
+}
+.assettile:hover { border-color: var(--accent); }
+.assettile svg { color: var(--muted); width: 17px; height: 17px; }
+.assettile.filled svg { color: var(--accent2); }
+.assettile .lbl { font-size: 12px; font-weight: 600; }
+.assettile .st {
+  display: flex; align-items: center; gap: 5px;
+  font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.assettile .st::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--muted); flex: none; }
+.assettile.filled .st { color: var(--good); }
+.assettile.filled .st::before { background: var(--good); }
+
 .waveform {
   width: 100%; border-radius: 6px; background: var(--bg);
   border: 1px solid var(--line); overflow: hidden;

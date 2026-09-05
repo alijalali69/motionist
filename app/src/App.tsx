@@ -1538,13 +1538,40 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           <>
             <h2>Global assets (all pages)</h2>
 
+            {/* One tile grid triggers all 4 uploads — each slot's own detail
+                card (position/opacity/FX below, or Audio's waveform+volume/
+                trim/fade) still renders right after it, unchanged; only the
+                upload trigger itself moved out of 4 stacked full-width
+                buttons into this 2x2 grid. */}
+            <div className="assetgrid">
+              <button className={"assettile" + (project.bg?.file ? " filled" : "")} onClick={() => bgInput.current?.click()}
+                title={project.bg?.file ? "Replace Background" : "Upload Background"}>
+                <BgTileIcon /><span className="lbl">Background</span><span className="st">{project.bg?.file ? "uploaded" : "empty"}</span>
+              </button>
+              <button className={"assettile" + (project.title?.file ? " filled" : "")} onClick={() => titleInput.current?.click()}
+                title={project.title?.file ? "Replace Title" : "Upload Title"}>
+                <TitleTileIcon /><span className="lbl">Title</span><span className="st">{project.title?.file ? "uploaded" : "empty"}</span>
+              </button>
+              <button className={"assettile" + (project.logo?.file ? " filled" : "")} onClick={() => logoInput.current?.click()}
+                title={project.logo?.file ? "Replace Logo" : "Upload Logo (top-right)"}>
+                <LogoTileIcon /><span className="lbl">Logo</span><span className="st">{project.logo?.file ? "uploaded" : "empty"}</span>
+              </button>
+              <button className={"assettile" + (project.audio?.file ? " filled" : "")} onClick={() => audioInput.current?.click()}
+                title={project.audio?.file ? "Replace Audio" : "Upload Audio (music / sound bed)"}>
+                <AudioTileIcon /><span className="lbl">Audio</span><span className="st">{project.audio?.file ? "uploaded" : "empty"}</span>
+              </button>
+            </div>
+            <input ref={bgInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.svg,.webm,.mov,.mp4,.gif"
+              onChange={(e) => e.target.files?.[0] && onSlotUpload("bg", e.target.files[0])} />
+            <input ref={titleInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.svg,.webm,.mov,.mp4,.gif,.json"
+              onChange={(e) => e.target.files?.[0] && onSlotUpload("title", e.target.files[0])} />
+            <input ref={logoInput} className="hidden-file" type="file" accept=".json,.webm,.mov,.mp4,.gif,.png,.svg"
+              onChange={(e) => e.target.files?.[0] && onSlotUpload("logo", e.target.files[0])} />
+            <input ref={audioInput} className="hidden-file" type="file" accept=".mp3,.wav,.m4a,.ogg,.flac,.aac"
+              onChange={(e) => e.target.files?.[0] && onUploadAudio(e.target.files[0])} />
+
             {/* BG */}
             <div className="card compact">
-              <button className={"btn upload" + (project.bg?.file ? " filled" : "")} onClick={() => bgInput.current?.click()}>
-                {project.bg?.file ? "Replace Background" : "Upload Background"}
-              </button>
-              <input ref={bgInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.svg,.webm,.mov,.mp4,.gif"
-                onChange={(e) => e.target.files?.[0] && onSlotUpload("bg", e.target.files[0])} />
               {project.bg && (
                 <AssetControls slot={project.bg} label="BG" canvas={[project.width, project.height]}
                   onChange={(fn) => update((p) => { if (p.bg) fn(p.bg); })}
@@ -1563,45 +1590,33 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               </div>
             </div>
 
-            {/* TITLE */}
-            <div className="card compact">
-              <button className={"btn upload" + (project.title?.file ? " filled" : "")} onClick={() => titleInput.current?.click()}>
-                {project.title?.file ? "Replace Title" : "Upload Title"}
-              </button>
-              <input ref={titleInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.svg,.webm,.mov,.mp4,.gif,.json"
-                onChange={(e) => e.target.files?.[0] && onSlotUpload("title", e.target.files[0])} />
-              {project.title && (
+            {/* TITLE — empty tile shows nothing below it, same as Logo/Audio;
+                unlike BG (which always has real global content: bgColor +
+                BgStyleEditor apply project-wide regardless of an uploaded
+                image), there's nothing to show here until a file exists. */}
+            {project.title && (
+              <div className="card compact">
                 <AssetControls slot={project.title} label="Title" canvas={[project.width, project.height]}
                   onChange={(fn) => update((p) => { if (p.title) fn(p.title); })}
                   onRemove={() => onRemoveSlot("title")} />
-              )}
-            </div>
+              </div>
+            )}
 
             {/* LOGO */}
-            <div className="card compact">
-              <button className={"btn upload" + (project.logo?.file ? " filled" : "")} onClick={() => logoInput.current?.click()}>
-                {project.logo?.file ? "Replace Logo" : "Upload Logo (top-right)"}
-              </button>
-              <input ref={logoInput} className="hidden-file" type="file" accept=".json,.webm,.mov,.mp4,.gif,.png,.svg"
-                onChange={(e) => e.target.files?.[0] && onSlotUpload("logo", e.target.files[0])} />
-              {project.logo && (
+            {project.logo && (
+              <div className="card compact">
                 <AssetControls slot={project.logo} label="Logo" canvas={[project.width, project.height]}
                   onChange={(fn) => update((p) => { if (p.logo) fn(p.logo); })}
                   onRemove={() => onRemoveSlot("logo")} />
-              )}
-            </div>
+              </div>
+            )}
 
             {/* AUDIO — global background-music/sound bed, spans the whole reel.
                 Separate from a video layer's own embedded sound (that's
                 per-layer, via the mute toggle in the function panel). */}
-            <div className="card compact">
-              <button className={"btn upload" + (project.audio?.file ? " filled" : "")} onClick={() => audioInput.current?.click()}>
-                {project.audio?.file ? "Replace Audio" : "Upload Audio (music / sound bed)"}
-              </button>
-              <input ref={audioInput} className="hidden-file" type="file" accept=".mp3,.wav,.m4a,.ogg,.flac,.aac"
-                onChange={(e) => e.target.files?.[0] && onUploadAudio(e.target.files[0])} />
-              {project.audio?.file && (
-                <div className="mini" style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+            {project.audio?.file && (
+              <div className="card compact">
+                <div className="mini" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <Waveform src={`/${project.audio.file}`} />
                   <div className="row between" style={{ alignItems: "center" }}>
                     <span style={{ color: "var(--muted)" }}>
@@ -1638,8 +1653,8 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                       onChange={(e) => update((p) => { if (p.audio) p.audio.fadeOutSec = Math.max(0, Math.round(parseFloat(e.target.value || "0"))); })} />
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* LOADER */}
             <h2>Loader</h2>
@@ -2306,6 +2321,33 @@ const SoundOffIcon: React.FC = () => (
   <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
     <path d="M1.5 5.8h2.2L7 3v9L3.7 9.2H1.5z" />
     <path d="M9.3 5v4.2M12.3 5v4.2" strokeLinecap="round" transform="rotate(45 10.8 7.1)" />
+  </svg>
+);
+
+// Global asset tiles (Background/Title/Logo/Audio) — same 15x15/currentColor
+// thin-outline convention as every other icon in the app, one silhouette
+// per asset type so the 2x2 grid reads at a glance without the text label.
+const BgTileIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3">
+    <rect x="1" y="2.5" width="13" height="10" rx="1.2" />
+    <circle cx="5" cy="6" r="1.3" />
+    <path d="M14 9.5L10 6L6.5 9L5 7.8L1 11.5" strokeLinejoin="round" />
+  </svg>
+);
+const TitleTileIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+    <path d="M2 4h11M2 7.5h8M2 11h5" />
+  </svg>
+);
+const LogoTileIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round">
+    <path d="M7.5 1.5L13 4.7V10.3L7.5 13.5L2 10.3V4.7Z" />
+    <path d="M7.5 1.5V13.5M2 4.7L13 10.3M13 4.7L2 10.3" />
+  </svg>
+);
+const AudioTileIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+    <path d="M1.5 7.5h1.8L5 3.5v8L7.2 7.5H15" />
   </svg>
 );
 
