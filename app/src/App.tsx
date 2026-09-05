@@ -20,6 +20,7 @@ import { SafeZoneOverlay } from "./SafeZoneOverlay";
 import { InstagramUIOverlay } from "./InstagramUIOverlay";
 import { TextPlacementOverlay } from "./TextPlacementOverlay";
 import { NumField } from "./NumField";
+import { Waveform } from "./Waveform";
 import { KeyframeEditor } from "./KeyframeEditor";
 
 const AMBIENTS = AMBIENT_NAMES;
@@ -1601,6 +1602,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                 onChange={(e) => e.target.files?.[0] && onUploadAudio(e.target.files[0])} />
               {project.audio?.file && (
                 <div className="mini" style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                  <Waveform src={`/${project.audio.file}`} />
                   <div className="row between" style={{ alignItems: "center" }}>
                     <span style={{ color: "var(--muted)" }}>
                       {project.audio.duration != null
