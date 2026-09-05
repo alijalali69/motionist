@@ -47,11 +47,29 @@ async function decodePeaks(src: string, columns: number): Promise<Float32Array> 
   }
 }
 
+function fmtSec(sec: number): string {
+  const s = Math.max(0, sec);
+  const m = Math.floor(s / 60);
+  const r = Math.floor(s % 60);
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+
 // Static waveform strip for the uploaded audio track — decoded once
 // (cached by src), redrawn to fit whatever width the card actually has via
 // ResizeObserver, same "derive scale from the real rendered size" pattern
-// CanvasHandles already uses for the canvas overlays.
-export const Waveform: React.FC<{ src: string; height?: number }> = ({ src, height = 36 }) => {
+// CanvasHandles already uses for the canvas overlays. At rest it's plain
+// gray; while the reel is actually playing, the played portion (up to
+// `currentSec`, the position within THIS audio file's own timeline — the
+// caller already accounts for startOffset) lights up in the accent color
+// with a live timecode, same "played vs. remaining" language most audio
+// editors use.
+export const Waveform: React.FC<{
+  src: string;
+  height?: number;
+  playing?: boolean;
+  currentSec?: number;
+  durationSec?: number | null;
+}> = ({ src, height = 36, playing, currentSec, durationSec }) => {
   const wrapRef = React.useRef<HTMLDivElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = React.useState(0);
@@ -91,6 +109,14 @@ export const Waveform: React.FC<{ src: string; height?: number }> = ({ src, heig
     return () => { cancelled = true; };
   }, [src]);
 
+  // Playing + a known duration is what turns any of this on at all — at
+  // rest (or scrubbing/paused — deliberately, per how this was asked for)
+  // the whole strip stays flat gray, no progress split, no timecode.
+  const showProgress = !!playing && durationSec != null && durationSec > 0 && currentSec != null;
+  const progressCol = showProgress
+    ? Math.min(columns, Math.max(0, Math.round((currentSec! / durationSec!) * columns)))
+    : 0;
+
   React.useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !peaks || !width) return;
@@ -103,17 +129,19 @@ export const Waveform: React.FC<{ src: string; height?: number }> = ({ src, heig
     ctx.clearRect(0, 0, width, height);
     const mid = height / 2;
     const barGap = width / columns;
-    const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent2").trim() || "#63bbff";
-    ctx.fillStyle = accent;
+    const style = getComputedStyle(document.documentElement);
+    const grayed = style.getPropertyValue("--muted").trim() || "#8b939e";
+    const accent = style.getPropertyValue("--accent").trim() || "#3ea6ff";
     for (let col = 0; col < columns; col++) {
       const min = peaks[col * 2];
       const max = peaks[col * 2 + 1];
       const x = col * barGap;
       const yTop = mid - max * mid;
       const barHeight = Math.max(1, (max - min) * mid);
+      ctx.fillStyle = showProgress && col < progressCol ? accent : grayed;
       ctx.fillRect(x, yTop, Math.max(1, barGap - 0.5), barHeight);
     }
-  }, [peaks, width, height, columns]);
+  }, [peaks, width, height, columns, showProgress, progressCol]);
 
   return (
     <div ref={wrapRef} className="waveform" style={{ height }}>
@@ -122,7 +150,12 @@ export const Waveform: React.FC<{ src: string; height?: number }> = ({ src, heig
       ) : !peaks ? (
         <span className="hint" style={{ margin: 0 }}>Loading waveform…</span>
       ) : (
-        <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
+        <>
+          <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
+          {showProgress && (
+            <span className="waveform-time">{fmtSec(currentSec!)} / {fmtSec(durationSec!)}</span>
+          )}
+        </>
       )}
     </div>
   );

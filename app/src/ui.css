@@ -614,9 +614,16 @@ input.topbar-proj-name::placeholder { color: var(--muted); font-weight: 600; }
 .assettile.wide .lbl { flex: 1; }
 
 .waveform {
+  position: relative;
   width: 100%; border-radius: 6px; background: var(--bg);
   border: 1px solid var(--line); overflow: hidden;
   display: flex; align-items: center; justify-content: center;
+}
+.waveform-time {
+  position: absolute; right: 5px; bottom: 3px;
+  font-family: var(--mono); font-size: 9.5px; color: var(--text);
+  background: rgba(13, 15, 18, 0.75); padding: 1px 5px; border-radius: 4px;
+  pointer-events: none; font-variant-numeric: tabular-nums;
 }
 .waveform .hint { padding: 0 8px; text-align: center; }
 

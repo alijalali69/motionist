@@ -547,6 +547,37 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const playerWrapRef = React.useRef<HTMLDivElement>(null);
   const centerRef = React.useRef<HTMLDivElement>(null);
 
+  // Same frameupdate/play/pause subscription PlayerControls keeps on this
+  // same playerRef — a second independent listener, not a shared one, is
+  // fine (Player supports multiple) and avoids threading frame/playing
+  // through props just for the audio Waveform's playhead below.
+  const [playerFrame, setPlayerFrame] = React.useState(0);
+  const [playerPlaying, setPlayerPlaying] = React.useState(false);
+  React.useEffect(() => {
+    const p = playerRef.current;
+    if (!p) return;
+    const onFrame = (e: { detail: { frame: number } }) => setPlayerFrame(e.detail.frame);
+    const onPlay = () => setPlayerPlaying(true);
+    const onPause = () => setPlayerPlaying(false);
+    p.addEventListener("frameupdate", onFrame);
+    p.addEventListener("play", onPlay);
+    p.addEventListener("pause", onPause);
+    return () => {
+      p.removeEventListener("frameupdate", onFrame);
+      p.removeEventListener("play", onPlay);
+      p.removeEventListener("pause", onPause);
+    };
+    // `!!project` (not just [playerRef], whose identity never changes, and
+    // not the whole `project` object, which is a new reference on every
+    // single edit) — <Player> itself only mounts once project finishes
+    // loading, so on first render (project still null) playerRef.current is
+    // null and this would otherwise attach nothing, permanently, the moment
+    // project later loads. PlayerControls' own identical subscription never
+    // hits this because it isn't mounted at all until
+    // `{project && <PlayerControls>}` — this effect lives one level up, in
+    // a component that's already mounted before project exists.
+  }, [playerRef, !!project]);
+
   // Canvas zoom — 1 = today's fit-to-panel size, adjustable with Ctrl+wheel
   // over the preview. Session-only (not persisted): opening a project always
   // starts at a predictable fit, not wherever a past session's zoom happened
@@ -1664,7 +1695,10 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             {project.audio?.file && (
               <div className="card compact">
                 <div className="mini" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <Waveform src={`/${project.audio.file}`} />
+                  <Waveform src={`/${project.audio.file}`}
+                    playing={playerPlaying}
+                    currentSec={(project.audio.startOffset ?? 0) + playerFrame / project.fps}
+                    durationSec={project.audio.duration} />
                   <div className="row between" style={{ alignItems: "center" }}>
                     <span style={{ color: "var(--muted)" }}>
                       {project.audio.duration != null
