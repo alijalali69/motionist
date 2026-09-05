@@ -500,6 +500,13 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   });
   React.useEffect(() => { localStorage.setItem("motionist:leftW", String(leftW)); }, [leftW]);
   React.useEffect(() => { localStorage.setItem("motionist:rightW", String(rightW)); }, [rightW]);
+  // Collapsed state is separate from width — collapsing doesn't lose the
+  // panel's own resized width, it just hides it (0px) until expanded again,
+  // same as VSCode/Figma's own sidebar toggle.
+  const [leftCollapsed, setLeftCollapsed] = React.useState(() => localStorage.getItem("motionist:leftCollapsed") === "1");
+  const [rightCollapsed, setRightCollapsed] = React.useState(() => localStorage.getItem("motionist:rightCollapsed") === "1");
+  React.useEffect(() => { localStorage.setItem("motionist:leftCollapsed", leftCollapsed ? "1" : "0"); }, [leftCollapsed]);
+  React.useEffect(() => { localStorage.setItem("motionist:rightCollapsed", rightCollapsed ? "1" : "0"); }, [rightCollapsed]);
   const startPanelDrag = (side: "left" | "right") => (e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
@@ -1438,7 +1445,10 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       </header>
       <div className="workspace">
       {/* LEFT: project + pages */}
-      <div className="col" style={{ width: leftW, flex: `0 0 ${leftW}px` }}>
+      <div className="col" style={{
+        width: leftCollapsed ? 0 : leftW, flex: `0 0 ${leftCollapsed ? 0 : leftW}px`,
+        padding: leftCollapsed ? 0 : undefined, overflowX: "hidden",
+      }}>
         {/* General status — errors/busy from any panel action here (uploads,
             ingest, presets…), not just rendering any more (that moved to
             the header's Render menu + the canvas overlay). Was folded into
@@ -1706,7 +1716,15 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
 
       </div>
 
-      <div className="panel-resizer" onMouseDown={startPanelDrag("left")} title="Drag to resize" />
+      <div className={"panel-resizer" + (leftCollapsed ? " collapsed" : "")}
+        onMouseDown={leftCollapsed ? undefined : startPanelDrag("left")}
+        title={leftCollapsed ? undefined : "Drag to resize"}>
+        <button type="button" className="panel-toggle" title={leftCollapsed ? "Expand panel" : "Collapse panel"}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => setLeftCollapsed((v) => !v)}>
+          {leftCollapsed ? "›" : "‹"}
+        </button>
+      </div>
 
       {/* CENTER: live preview */}
       <div ref={centerRef} className="center" style={{ flex: "1 1 auto", minWidth: 320 }}>
@@ -1918,10 +1936,21 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         })()}
       </div>
 
-      <div className="panel-resizer" onMouseDown={startPanelDrag("right")} title="Drag to resize" />
+      <div className={"panel-resizer" + (rightCollapsed ? " collapsed" : "")}
+        onMouseDown={rightCollapsed ? undefined : startPanelDrag("right")}
+        title={rightCollapsed ? undefined : "Drag to resize"}>
+        <button type="button" className="panel-toggle" title={rightCollapsed ? "Expand panel" : "Collapse panel"}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => setRightCollapsed((v) => !v)}>
+          {rightCollapsed ? "‹" : "›"}
+        </button>
+      </div>
 
       {/* RIGHT: page inspector */}
-      <div className="col" style={{ width: rightW, flex: `0 0 ${rightW}px` }}>
+      <div className="col" style={{
+        width: rightCollapsed ? 0 : rightW, flex: `0 0 ${rightCollapsed ? 0 : rightW}px`,
+        padding: rightCollapsed ? 0 : undefined, overflowX: "hidden",
+      }}>
         {project && project.pages[sel] ? (
           <PageInspector
             key={project.pages[sel].id}
