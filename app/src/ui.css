@@ -579,6 +579,25 @@ input.topbar-proj-name::placeholder { color: var(--muted); font-weight: 600; }
 .assettile .st::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--muted); flex: none; }
 .assettile.filled .st { color: var(--good); }
 .assettile.filled .st::before { background: var(--good); }
+/* Currently-open tile (BG style's Texture/Color/Grade/Motion, Loader) —
+   distinct from .filled (has a real non-"none" value): a tile can be
+   filled AND collapsed, or empty and expanded, independently. */
+.assettile.expanded { border-color: var(--accent); }
+
+/* Same tile language, reused for BG style's 4 categories (a picker with
+   an expand/collapse of its own is one specific choice, not "uploaded"),
+   and for Loader (a single wide tile instead of a 2/4-column grid — it's
+   the only item in its own row). */
+.tilegrid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.assettile.mini { padding: 8px 5px; gap: 4px; }
+.assettile.mini svg { width: 14px; height: 14px; }
+.assettile.mini .lbl { font-size: 10px; }
+.assettile.mini .st { font-size: 8px; }
+.assettile.wide {
+  flex-direction: row; align-items: center; gap: 9px; width: 100%;
+  box-sizing: border-box;
+}
+.assettile.wide .lbl { flex: 1; }
 
 .waveform {
   width: 100%; border-radius: 6px; background: var(--bg);

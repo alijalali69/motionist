@@ -114,6 +114,8 @@ const ColorField: React.FC<{
 // bgStyle / page.bgStyle start unset, same create-on-first-edit pattern as
 // bgColor elsewhere), so this component never has to know which one it's
 // editing or how the "page follows the project" fallback works.
+type BgCategory = "texture" | "color" | "grade" | "motion";
+
 const BgStyleEditor: React.FC<{
   value: BgStyle;
   onChange: (fn: (s: BgStyle) => void) => void;
@@ -121,94 +123,129 @@ const BgStyleEditor: React.FC<{
   onAddSwatch: (hex: string) => void;
   onRemoveSwatch: (hex: string) => void;
 }> = ({ value, onChange, swatches, onAddSwatch, onRemoveSwatch }) => {
+  // Collapsed by default — clicking a tile opens ONLY that category's own
+  // controls below the tile row; clicking it again (or another tile)
+  // closes/switches. Independent of whether a category is "filled" (has a
+  // real non-"none" value) — a tile can be filled and collapsed, or empty
+  // and expanded, at the same time.
+  const [expanded, setExpanded] = React.useState<BgCategory | null>(null);
+  const toggle = (cat: BgCategory) => setExpanded((cur) => (cur === cat ? null : cat));
   const pct = (n: number | undefined, def: number) => Math.round((n ?? def) * 100);
   const setPct = (key: keyof BgStyle, max: number) => (e: React.ChangeEvent<HTMLInputElement>) =>
     onChange((s) => { (s as any)[key] = Math.min(max, Math.max(0, Math.round(parseFloat(e.target.value || "0")))) / 100; });
+
   return (
     <div className="mini" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div>
-        <div className="row between" style={{ alignItems: "center" }}>
-          <label style={{ margin: 0 }} title="Grain / paper / halftone / etc — analog surface texture">Texture</label>
-          <select value={value.texture ?? "none"} style={{ width: "auto" }}
-            onChange={(e) => onChange((s) => { s.texture = e.target.value as any; })}>
-            {BG_TEXTURE_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </div>
-        {value.texture && value.texture !== "none" && (
-          <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
-            <span style={{ color: "var(--muted)" }}>Intensity</span>
-            <NumField min={0} max={100} value={pct(value.textureIntensity, 0.5)} onChange={setPct("textureIntensity", 100)} />
-          </div>
-        )}
+      <div className="tilegrid-4">
+        <button type="button" className={"assettile mini" + (value.texture && value.texture !== "none" ? " filled" : "") + (expanded === "texture" ? " expanded" : "")}
+          title="Grain / paper / halftone / etc — analog surface texture" onClick={() => toggle("texture")}>
+          <TextureTileIcon /><span className="lbl">Texture</span><span className="st">{value.texture ?? "none"}</span>
+        </button>
+        <button type="button" className={"assettile mini" + (value.color && value.color !== "none" ? " filled" : "") + (expanded === "color" ? " expanded" : "")}
+          title="Gradient / mesh / duotone / etc — replaces the flat backdrop color" onClick={() => toggle("color")}>
+          <ColorTileIcon /><span className="lbl">Color</span><span className="st">{value.color ?? "none"}</span>
+        </button>
+        <button type="button" className={"assettile mini" + (value.grade && value.grade !== "none" ? " filled" : "") + (expanded === "grade" ? " expanded" : "")}
+          title="Vignette / letterbox / color-grade / etc — cinematic framing and tone" onClick={() => toggle("grade")}>
+          <GradeTileIcon /><span className="lbl">Grade</span><span className="st">{value.grade ?? "none"}</span>
+        </button>
+        <button type="button" className={"assettile mini" + (value.motion && value.motion !== "none" ? " filled" : "") + (expanded === "motion" ? " expanded" : "")}
+          title="Bokeh / dust / snow / etc — drifting particles, frame-deterministic (not real-time physics)" onClick={() => toggle("motion")}>
+          <MotionTileIcon /><span className="lbl">Motion</span><span className="st">{value.motion ?? "none"}</span>
+        </button>
       </div>
 
-      <div>
-        <div className="row between" style={{ alignItems: "center" }}>
-          <label style={{ margin: 0 }} title="Gradient / mesh / duotone / etc — replaces the flat backdrop color">Color</label>
-          <select value={value.color ?? "none"} style={{ width: "auto" }}
-            onChange={(e) => onChange((s) => { s.color = e.target.value as any; })}>
-            {BG_COLOR_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </div>
-        {value.color && value.color !== "none" && (
-          <>
-            <div className="row" style={{ marginTop: 4, gap: 4 }} title="Colors this style uses — meaning depends on which one is picked above">
-              <ColorField value={value.colorA ?? "#ffffff"} onChange={(hex) => onChange((s) => { s.colorA = hex; })}
-                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
-              <ColorField value={value.colorB ?? "#000000"} onChange={(hex) => onChange((s) => { s.colorB = hex; })}
-                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
-              <ColorField value={value.colorC ?? "#888888"} onChange={(hex) => onChange((s) => { s.colorC = hex; })}
-                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
-            </div>
+      {expanded === "texture" && (
+        <div>
+          <div className="row between" style={{ alignItems: "center" }}>
+            <label style={{ margin: 0 }}>Texture</label>
+            <select value={value.texture ?? "none"} style={{ width: "auto" }}
+              onChange={(e) => onChange((s) => { s.texture = e.target.value as any; })}>
+              {BG_TEXTURE_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          {value.texture && value.texture !== "none" && (
             <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
               <span style={{ color: "var(--muted)" }}>Intensity</span>
-              <NumField min={0} max={100} value={pct(value.colorIntensity, 0.6)} onChange={setPct("colorIntensity", 100)} />
+              <NumField min={0} max={100} value={pct(value.textureIntensity, 0.5)} onChange={setPct("textureIntensity", 100)} />
             </div>
-            <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
-              <span style={{ color: "var(--muted)" }} title="How fast this color style animates — 0 freezes it on its first frame">Speed</span>
-              <NumField min={0} max={200} value={pct(value.colorSpeed, 1)} onChange={setPct("colorSpeed", 200)} />
-            </div>
-          </>
-        )}
-      </div>
-
-      <div>
-        <div className="row between" style={{ alignItems: "center" }}>
-          <label style={{ margin: 0 }} title="Vignette / letterbox / color-grade / etc — cinematic framing and tone">Grade</label>
-          <select value={value.grade ?? "none"} style={{ width: "auto" }}
-            onChange={(e) => onChange((s) => { s.grade = e.target.value as any; })}>
-            {BG_GRADE_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
+          )}
         </div>
-        {value.grade && value.grade !== "none" && (
-          <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
-            <span style={{ color: "var(--muted)" }}>Intensity</span>
-            <NumField min={0} max={100} value={pct(value.gradeIntensity, 0.5)} onChange={setPct("gradeIntensity", 100)} />
+      )}
+
+      {expanded === "color" && (
+        <div>
+          <div className="row between" style={{ alignItems: "center" }}>
+            <label style={{ margin: 0 }}>Color</label>
+            <select value={value.color ?? "none"} style={{ width: "auto" }}
+              onChange={(e) => onChange((s) => { s.color = e.target.value as any; })}>
+              {BG_COLOR_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
           </div>
-        )}
-      </div>
-
-      <div>
-        <div className="row between" style={{ alignItems: "center" }}>
-          <label style={{ margin: 0 }} title="Bokeh / dust / snow / etc — drifting particles, frame-deterministic (not real-time physics)">Motion</label>
-          <select value={value.motion ?? "none"} style={{ width: "auto" }}
-            onChange={(e) => onChange((s) => { s.motion = e.target.value as any; })}>
-            {BG_MOTION_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
+          {value.color && value.color !== "none" && (
+            <>
+              <div className="row" style={{ marginTop: 4, gap: 4 }} title="Colors this style uses — meaning depends on which one is picked above">
+                <ColorField value={value.colorA ?? "#ffffff"} onChange={(hex) => onChange((s) => { s.colorA = hex; })}
+                  swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+                <ColorField value={value.colorB ?? "#000000"} onChange={(hex) => onChange((s) => { s.colorB = hex; })}
+                  swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+                <ColorField value={value.colorC ?? "#888888"} onChange={(hex) => onChange((s) => { s.colorC = hex; })}
+                  swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+              </div>
+              <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+                <span style={{ color: "var(--muted)" }}>Intensity</span>
+                <NumField min={0} max={100} value={pct(value.colorIntensity, 0.6)} onChange={setPct("colorIntensity", 100)} />
+              </div>
+              <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+                <span style={{ color: "var(--muted)" }} title="How fast this color style animates — 0 freezes it on its first frame">Speed</span>
+                <NumField min={0} max={200} value={pct(value.colorSpeed, 1)} onChange={setPct("colorSpeed", 200)} />
+              </div>
+            </>
+          )}
         </div>
-        {value.motion && value.motion !== "none" && (
-          <>
+      )}
+
+      {expanded === "grade" && (
+        <div>
+          <div className="row between" style={{ alignItems: "center" }}>
+            <label style={{ margin: 0 }}>Grade</label>
+            <select value={value.grade ?? "none"} style={{ width: "auto" }}
+              onChange={(e) => onChange((s) => { s.grade = e.target.value as any; })}>
+              {BG_GRADE_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          {value.grade && value.grade !== "none" && (
             <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
-              <span style={{ color: "var(--muted)" }}>Density</span>
-              <NumField min={0} max={100} value={pct(value.motionDensity, 0.5)} onChange={setPct("motionDensity", 100)} />
+              <span style={{ color: "var(--muted)" }}>Intensity</span>
+              <NumField min={0} max={100} value={pct(value.gradeIntensity, 0.5)} onChange={setPct("gradeIntensity", 100)} />
             </div>
-            <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
-              <span style={{ color: "var(--muted)" }}>Speed</span>
-              <NumField min={0} max={200} value={pct(value.motionSpeed, 1)} onChange={setPct("motionSpeed", 200)} />
-            </div>
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      )}
+
+      {expanded === "motion" && (
+        <div>
+          <div className="row between" style={{ alignItems: "center" }}>
+            <label style={{ margin: 0 }}>Motion</label>
+            <select value={value.motion ?? "none"} style={{ width: "auto" }}
+              onChange={(e) => onChange((s) => { s.motion = e.target.value as any; })}>
+              {BG_MOTION_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          {value.motion && value.motion !== "none" && (
+            <>
+              <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+                <span style={{ color: "var(--muted)" }}>Density</span>
+                <NumField min={0} max={100} value={pct(value.motionDensity, 0.5)} onChange={setPct("motionDensity", 100)} />
+              </div>
+              <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
+                <span style={{ color: "var(--muted)" }}>Speed</span>
+                <NumField min={0} max={200} value={pct(value.motionSpeed, 1)} onChange={setPct("motionSpeed", 200)} />
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -2077,46 +2114,55 @@ const LoaderControls: React.FC<{
   onChangeVisible: (v: boolean) => void;
 }> = ({ loader, style, visible, canvas, onChangeBox, onChangeStyle, onChangeVisible }) => {
   const [cw, ch] = canvas;
+  const [expanded, setExpanded] = React.useState(false);
   const num = (v: string) => Math.round(parseFloat(v || "0"));
   const centerX = () => onChangeBox((b) => { b.left = Math.round((cw - b.width) / 2); });
 
   return (
-    <div className="card compact">
-      <div className="row between">
-        <span className="tag">Loader box</span>
-        <label className="row" style={{ gap: 6, fontSize: 12, color: "var(--muted)", cursor: "pointer" }}>
-          <input type="checkbox" checked={visible} style={{ width: "auto" }}
-            onChange={(e) => onChangeVisible(e.target.checked)} />
-          Show loader
-        </label>
-      </div>
-      <div className="mini" style={{ marginTop: 6 }}>
-        <label>Style</label>
-        <select value={style} disabled={!visible} onChange={(e) => onChangeStyle(e.target.value as LoaderStyle)}>
-          {LOADER_STYLES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
-      </div>
-      {style !== "folio" && (
-        <div className="row" style={{ marginTop: 6 }}>
-          <button className="btn small" disabled={!visible} onClick={centerX}>Center X</button>
+    <div>
+      <button type="button" className={"assettile wide" + (visible ? " filled" : "") + (expanded ? " expanded" : "")}
+        title="Style, position, and visibility for the reel-wide progress bar" onClick={() => setExpanded((v) => !v)}>
+        <LoaderTileIcon /><span className="lbl">Loader</span><span className="st">{visible ? style : "off"}</span>
+      </button>
+      {expanded && (
+        <div className="card compact" style={{ marginTop: 8 }}>
+          <div className="row between">
+            <span className="tag">Loader box</span>
+            <label className="row" style={{ gap: 6, fontSize: 12, color: "var(--muted)", cursor: "pointer" }}>
+              <input type="checkbox" checked={visible} style={{ width: "auto" }}
+                onChange={(e) => onChangeVisible(e.target.checked)} />
+              Show loader
+            </label>
+          </div>
+          <div className="mini" style={{ marginTop: 6 }}>
+            <label>Style</label>
+            <select value={style} disabled={!visible} onChange={(e) => onChangeStyle(e.target.value as LoaderStyle)}>
+              {LOADER_STYLES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </div>
+          {style !== "folio" && (
+            <div className="row" style={{ marginTop: 6 }}>
+              <button className="btn small" disabled={!visible} onClick={centerX}>Center X</button>
+            </div>
+          )}
+          <div className="grid2 mini" style={{ marginTop: 6 }}>
+            <div><label>X</label><NumField value={loader.left}
+              onChange={(e) => onChangeBox((b) => { b.left = num(e.target.value); })} /></div>
+            <div><label>Y</label><NumField value={loader.top}
+              onChange={(e) => onChangeBox((b) => { b.top = num(e.target.value); })} /></div>
+            {style !== "folio" && (
+              <>
+                <div><label>Width</label><NumField value={loader.width}
+                  onChange={(e) => onChangeBox((b) => { b.width = num(e.target.value); })} /></div>
+                <div><label>Height</label><NumField value={loader.height}
+                  onChange={(e) => onChangeBox((b) => { b.height = num(e.target.value); })} /></div>
+              </>
+            )}
+          </div>
+          {style === "folio" && (
+            <p className="hint" style={{ marginTop: 6 }}>Folio is a fixed-size numeral — X/Y position it, drag the handle on canvas to place the corner.</p>
+          )}
         </div>
-      )}
-      <div className="grid2 mini" style={{ marginTop: 6 }}>
-        <div><label>X</label><NumField value={loader.left}
-          onChange={(e) => onChangeBox((b) => { b.left = num(e.target.value); })} /></div>
-        <div><label>Y</label><NumField value={loader.top}
-          onChange={(e) => onChangeBox((b) => { b.top = num(e.target.value); })} /></div>
-        {style !== "folio" && (
-          <>
-            <div><label>Width</label><NumField value={loader.width}
-              onChange={(e) => onChangeBox((b) => { b.width = num(e.target.value); })} /></div>
-            <div><label>Height</label><NumField value={loader.height}
-              onChange={(e) => onChangeBox((b) => { b.height = num(e.target.value); })} /></div>
-          </>
-        )}
-      </div>
-      {style === "folio" && (
-        <p className="hint" style={{ marginTop: 6 }}>Folio is a fixed-size numeral — X/Y position it, drag the handle on canvas to place the corner.</p>
       )}
     </div>
   );
@@ -2348,6 +2394,39 @@ const LogoTileIcon: React.FC = () => (
 const AudioTileIcon: React.FC = () => (
   <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
     <path d="M1.5 7.5h1.8L5 3.5v8L7.2 7.5H15" />
+  </svg>
+);
+
+// BG style's 4 categories + Loader — same tile-icon convention, one
+// silhouette per category.
+const TextureTileIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="currentColor">
+    <circle cx="3" cy="3.5" r="0.9" /><circle cx="8" cy="2.5" r="0.9" /><circle cx="12.5" cy="4" r="0.9" />
+    <circle cx="5.5" cy="7" r="0.9" /><circle cx="11" cy="8" r="0.9" /><circle cx="2" cy="9.5" r="0.9" />
+    <circle cx="7.5" cy="11.5" r="0.9" /><circle cx="13" cy="12" r="0.9" />
+  </svg>
+);
+const ColorTileIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3">
+    <circle cx="5.5" cy="7.5" r="4" /><circle cx="9.5" cy="7.5" r="4" />
+  </svg>
+);
+const GradeTileIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3">
+    <rect x="1" y="1" width="13" height="13" rx="2" />
+    <circle cx="7.5" cy="7.5" r="2.6" />
+  </svg>
+);
+const MotionTileIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+    <path d="M1.5 4.5h6M1.5 7.5h9M1.5 10.5h5" />
+    <circle cx="12.5" cy="7.5" r="1.1" fill="currentColor" stroke="none" />
+  </svg>
+);
+const LoaderTileIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+    <rect x="1" y="6.5" width="13" height="2" rx="1" />
+    <rect x="1" y="6.5" width="7" height="2" rx="1" fill="currentColor" stroke="none" />
   </svg>
 );
 
