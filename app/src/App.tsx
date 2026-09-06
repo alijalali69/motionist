@@ -2,7 +2,7 @@ import React from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { Reel } from "../../src/Reel";
 import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
-import { TEXT_ENTRANCE_NAMES, TEXT_EXIT_NAMES, LATIN_TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS, BG_TEXTURE_NAMES, BG_COLOR_NAMES, BG_GRADE_NAMES, BG_MOTION_NAMES } from "../../src/presets";
+import { TEXT_ENTRANCE_NAMES, TEXT_EXIT_NAMES, LATIN_TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS, BG_TEXTURE_NAMES, BG_COLOR_NAMES, BG_GRADE_NAMES, BG_MOTION_NAMES, entranceMotion, exitMotion, motionTransform, motionFilter, shadowStyle, type EntranceName, type ExitName } from "../../src/presets";
 import type { BgStyle } from "../../src/types";
 import {
   loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
@@ -2136,15 +2136,8 @@ const AssetControls: React.FC<{
         <div className="mini">
           <label>In effect</label>
           <div className="row" style={{ gap: 5 }}>
-            <select value={slot.entrance ?? "none"} style={{ flex: "1.3 1 0" }}
-              onChange={(e) => onChange((s) => { s.entrance = e.target.value === "none" ? undefined : e.target.value as any; })}>
-              <option value="none">none</option>
-              {ENTRANCE_CATEGORIES.map((cat) => (
-                <optgroup key={cat.label} label={cat.label}>
-                  {cat.names.map((n) => <option key={n} value={n}>{n}</option>)}
-                </optgroup>
-              ))}
-            </select>
+            <EffectPicker value={slot.entrance ?? "none"} kind="entrance" categories={ENTRANCE_CATEGORIES}
+              onChange={(v) => onChange((s) => { s.entrance = v === "none" ? undefined : v as any; })} />
             <select value={slot.entranceEasing ?? ""} style={{ flex: "1 1 0" }}
               disabled={!slot.entrance || slot.entrance === "none"}
               title="This effect's own easing — auto = a curve chosen to fit it"
@@ -2168,15 +2161,8 @@ const AssetControls: React.FC<{
         <div className="mini" style={{ marginTop: 8 }}>
           <label>Out effect</label>
           <div className="row" style={{ gap: 5 }}>
-            <select value={slot.exit ?? "none"} style={{ flex: "1.3 1 0" }}
-              onChange={(e) => onChange((s) => { s.exit = e.target.value === "none" ? undefined : e.target.value as any; })}>
-              <option value="none">none</option>
-              {EXIT_CATEGORIES.map((cat) => (
-                <optgroup key={cat.label} label={cat.label}>
-                  {cat.names.map((n) => <option key={n} value={n}>{n}</option>)}
-                </optgroup>
-              ))}
-            </select>
+            <EffectPicker value={slot.exit ?? "none"} kind="exit" categories={EXIT_CATEGORIES}
+              onChange={(v) => onChange((s) => { s.exit = v === "none" ? undefined : v as any; })} />
             <select value={slot.exitEasing ?? ""} style={{ flex: "1 1 0" }}
               disabled={!slot.exit || slot.exit === "none"}
               title="This effect's own easing — auto = a curve chosen to fit it"
@@ -2624,6 +2610,109 @@ const KeyframesIcon: React.FC = () => (
   </svg>
 );
 
+// A hover-to-preview grid, replacing the old name-only <select> — the
+// preview isn't a hand-approximated CSS animation, it's the SAME
+// entranceMotion/exitMotion + motionTransform/motionFilter/shadowStyle this
+// layer actually renders with, just played on the button's own label at a
+// fraction of the scale. Reusing the real functions means the preview can
+// never drift from what picking that effect actually does.
+const FX_PREVIEW_SCALE = 0.4;
+const FX_PREVIEW_CYCLE_MS = 2600; // matches the "slower, with a small pause" the hover-chip prototype settled on
+
+// Drives one label's inline style through a rest -> play -> hold -> reverse
+// loop for as long as it's hovered — one shared rAF handle, since only one
+// button is ever being hovered at a time. `kind` picks entranceMotion vs
+// exitMotion; "none" is a no-op (nothing to preview).
+function useFxPreview(kind: "entrance" | "exit") {
+  const rafRef = React.useRef<number | null>(null);
+  const applyProgress = React.useCallback((el: HTMLElement, name: string, p: number) => {
+    const motion = kind === "entrance" ? entranceMotion(name as EntranceName, p) : exitMotion(name as ExitName, p);
+    // Only tx/ty/scale/rotate distances need shrinking for a small label —
+    // clipPath is already relative to the element's own box (scales itself),
+    // and blur needs its own (much smaller) scale-down or it just reads as
+    // a solid smear at button size.
+    const scaledBlur = motion.blur ? motion.blur * FX_PREVIEW_SCALE : motion.blur;
+    el.style.transform = `scale(${FX_PREVIEW_SCALE}) ${motionTransform(motion)}`;
+    el.style.filter = motionFilter({ ...motion, blur: scaledBlur }) ?? "none";
+    el.style.opacity = String(motion.opacity);
+    el.style.clipPath = motion.clipPath ?? "none";
+    el.style.boxShadow = shadowStyle(motion.shadow, motion.glow) ?? "none";
+  }, [kind]);
+  const reset = (el: HTMLElement) => {
+    el.style.transform = ""; el.style.filter = ""; el.style.opacity = ""; el.style.clipPath = ""; el.style.boxShadow = "";
+  };
+  const start = React.useCallback((el: HTMLElement, name: string) => {
+    if (name === "none") return;
+    const t0 = performance.now();
+    const loop = (t: number) => {
+      const ph = ((t - t0) % FX_PREVIEW_CYCLE_MS) / FX_PREVIEW_CYCLE_MS;
+      let p: number;
+      if (ph < 0.15) p = 0;
+      else if (ph < 0.5) p = (ph - 0.15) / 0.35;
+      else if (ph < 0.65) p = 1;
+      else p = 1 - (ph - 0.65) / 0.35;
+      applyProgress(el, name, Math.max(0, Math.min(1, p)));
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+  }, [applyProgress]);
+  const stop = React.useCallback((el: HTMLElement) => {
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    reset(el);
+  }, []);
+  // Stray rAF left running if the picker unmounts (e.g. switching layers)
+  // mid-hover — nothing left to write the style onto by then anyway.
+  React.useEffect(() => () => { if (rafRef.current != null) cancelAnimationFrame(rafRef.current); }, []);
+  return { start, stop };
+}
+
+const EffectPicker: React.FC<{
+  value: string;
+  onChange: (name: string) => void;
+  categories: { label: string; names: string[] }[];
+  kind: "entrance" | "exit";
+  disabled?: boolean;
+}> = ({ value, onChange, categories, kind, disabled }) => {
+  const [open, setOpen] = React.useState(false);
+  const { start, stop } = useFxPreview(kind);
+  const labelRef = (el: HTMLButtonElement | null) => el?.querySelector<HTMLElement>(".fxpicker-lbl") ?? null;
+  return (
+    <div className="fxpicker" style={{ flex: "1.3 1 0" }}>
+      <button type="button" className="fxpicker-trigger" disabled={disabled} onClick={() => setOpen((v) => !v)}>
+        <span>{value === "none" ? "None" : value}</span><span className="fxpicker-caret">▾</span>
+      </button>
+      {open && !disabled && (
+        <>
+          <div className="dropdown-catcher" onClick={() => setOpen(false)} />
+          <div className="fxpicker-pop">
+            <button type="button" className={"fxpicker-noneopt" + (value === "none" ? " on" : "")}
+              onClick={() => { onChange("none"); setOpen(false); }}>None</button>
+            <div className="fxpicker-scroll">
+              {categories.map((cat) => (
+                <div key={cat.label}>
+                  <div className="fxpicker-cathead">{cat.label}</div>
+                  <div className="fxpicker-grid">
+                    {cat.names.map((n) => (
+                      <button type="button" key={n}
+                        className={"fxpicker-cell" + (n === value ? " on" : "")}
+                        onMouseEnter={(e) => { const l = labelRef(e.currentTarget); if (l) start(l, n); }}
+                        onMouseLeave={(e) => { const l = labelRef(e.currentTarget); if (l) stop(l); }}
+                        onClick={() => { onChange(n); setOpen(false); }}>
+                        <span className="fxpicker-lbl">{n}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 // Up to 3 combined effects on one IN or OUT direction — FX1 is always shown,
 // a "+" reveals FX2 then FX3 (capped there), each removable with its own ✕
 // (removing one also clears anything after it, so there's never a gap).
@@ -2643,7 +2732,8 @@ const FxSlots: React.FC<{
   onAdd: () => void;
   onRemove: (index: 1 | 2) => void;
   disabled?: boolean;
-}> = ({ label, hint, categories, values, easings, onChangeSlot, onChangeEasing, onAdd, onRemove, disabled }) => {
+  kind: "entrance" | "exit";
+}> = ({ label, hint, categories, values, easings, onChangeSlot, onChangeEasing, onAdd, onRemove, disabled, kind }) => {
   const shown = values[2] !== undefined ? 3 : values[1] !== undefined ? 2 : 1;
   return (
     <div className="mini fx-slots">
@@ -2655,17 +2745,8 @@ const FxSlots: React.FC<{
             {/* `disabled` means "can't combine more effects yet" (e.g. OUT's
                 FX1 is still "none") — it must never lock FX1 itself, or
                 there'd be no way to ever set it away from "none" at all. */}
-            <select value={values[i]} disabled={i > 0 && disabled} style={{ flex: "1.3 1 0" }}
-              onChange={(e) => onChangeSlot(i, e.target.value)}>
-              {/* "none" sits outside every group — an escape hatch, not a
-                  motion family member — so it's the one bare <option>. */}
-              <option value="none">none</option>
-              {categories.map((cat) => (
-                <optgroup key={cat.label} label={cat.label}>
-                  {cat.names.map((o) => <option key={o} value={o}>{o}</option>)}
-                </optgroup>
-              ))}
-            </select>
+            <EffectPicker value={values[i]} disabled={i > 0 && disabled} kind={kind}
+              categories={categories} onChange={(v) => onChangeSlot(i, v)} />
             <select value={easings[i] ?? ""} disabled={disabled || values[i] === "none"} style={{ flex: "1 1 0" }}
               title="This slot's own easing — auto = a curve chosen to fit its effect"
               onChange={(e) => onChangeEasing(i, e.target.value === "" ? undefined : e.target.value)}>
@@ -3374,6 +3455,7 @@ const ElementMotion: React.FC<{
 
         <FxSlots
           label="In effect" hint="Combine up to 3 — each with its own easing"
+          kind="entrance"
           categories={inCategories}
           values={[layer.entrance, layer.entrance2, layer.entrance3]}
           easings={[layer.entranceEasing, layer.entranceEasing2, layer.entranceEasing3]}
@@ -3399,6 +3481,7 @@ const ElementMotion: React.FC<{
         />
         <FxSlots
           label="Out effect" hint="Combine up to 3 — each with its own easing"
+          kind="exit"
           categories={outCategories}
           values={[layer.exit ?? "none", layer.exit2, layer.exit3]}
           easings={[layer.exitEasing, layer.exitEasing2, layer.exitEasing3]}
