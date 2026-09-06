@@ -17,6 +17,16 @@ export type Handle = {
   // in this handle's own tooltip (used to sniff `id.startsWith("photo")`,
   // which silently dropped the hint — and the whole feature — for shapes).
   pannable?: boolean;
+  // Fired on mousedown, before any drag delta — "click to select" semantics,
+  // same as Figma/Photoshop (selection happens immediately; dragging is a
+  // bonus if you move afterward). Optional so BG/Logo/Title/Loader (whose
+  // editors live in the Assets dock, not a per-layer card) can skip it.
+  onSelect?: () => void;
+  // True while this handle's own layer is the one selected in the Layers
+  // dock — keeps its outline/label visible even when not hovered, so the
+  // canvas shows what you're about to edit without needing a separate
+  // floating toolbar.
+  selected?: boolean;
 };
 
 type Guide = { axis: "x" | "y"; pos: number }; // canvas-space position of an active alignment line
@@ -152,6 +162,7 @@ const DragBox: React.FC<{
     (e.target as Element).setPointerCapture(e.pointerId);
     dragRef.current = { startX: e.clientX, startY: e.clientY, box };
     setBusy("move");
+    handle.onSelect?.();
   };
 
   const onMoveMove = (e: React.PointerEvent) => {
@@ -218,7 +229,10 @@ const DragBox: React.FC<{
   // Outline, fill, AND label only show up on hover or while actively
   // dragging — at rest there's nothing drawn at all, so an inactive
   // text/logo/title box never sits on top of the actual reel content.
-  const active = dragging || hovering;
+  // Selected is the one exception: its outline+label stay up even at rest,
+  // so the canvas keeps showing what the Layers dock is currently focused
+  // on without needing a separate floating toolbar over the preview.
+  const active = dragging || hovering || !!handle.selected;
 
   return (
     <div

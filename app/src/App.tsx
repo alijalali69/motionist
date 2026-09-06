@@ -629,6 +629,17 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [textTool, setTextTool] = React.useState(false);
   const [newestLayerIndex, setNewestLayerIndex] = React.useState<number | null>(null);
 
+  // Which content layer (its stable l.index, same identity newestLayerIndex
+  // above already uses — survives a reorder, unlike the array position) is
+  // focused right now. Set by clicking its handle on the canvas; drives the
+  // Layers dock auto-opening, its card auto-expanding/scrolling into view
+  // (and every other card on the page collapsing), and this same handle's
+  // outline staying lit on the canvas — the "floating toolbar" idea's actual
+  // job, done by focusing the existing per-layer editor instead of a new
+  // overlay that would just duplicate its Content/Effects/Keyframes rail.
+  const [selectedLayerIndex, setSelectedLayerIndex] = React.useState<number | null>(null);
+  React.useEffect(() => { setSelectedLayerIndex(null); }, [sel]);
+
   // Undo/redo history. Kept as refs (not state) since they change on nearly
   // every edit and don't need to trigger a re-render themselves — forceTick
   // bumps a counter just so the Undo/Redo buttons' disabled state stays in
@@ -1336,6 +1347,11 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         // is held instead of fighting over one gesture.
         panPassthrough: isPannable && altHeld,
         pannable: isPannable,
+        selected: selectedLayerIndex === l.index,
+        onSelect: () => {
+          setSelectedLayerIndex(l.index);
+          setActiveRightDock("layers");
+        },
         onChange: (b) => update((p) => {
           const layer = p.pages[sel].layers[li];
           const dx = b.left - layer.left;
@@ -1356,7 +1372,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       });
     });
     return list;
-  }, [project, sel, altHeld]);
+  }, [project, sel, altHeld, selectedLayerIndex]);
 
   // Photo pan targets: every photo-role layer on the current page that has a
   // real uploaded asset (with known natural size, needed to compute correct
@@ -2028,6 +2044,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                 swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch}
                 motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
                 newestLayerIndex={newestLayerIndex}
+                selectedLayerIndex={selectedLayerIndex}
               />
             ) : <p className="sub">Select a page.</p>}
           </div>
@@ -2738,7 +2755,14 @@ const ElementMotion: React.FC<{
   // existing group names for the Group field's datalist and to count this
   // layer's own group siblings; not used for rendering.
   pageLayers?: LayerT[];
-}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, pageDuration, autoFocus, pageLayers }) => {
+  // The layer (by l.index) selected via a canvas click, whatever it is right
+  // now — not just whether THIS layer is it. Every ElementMotion watches the
+  // same value so a click on any one of them can expand itself AND collapse
+  // every sibling in the same pass; before the first canvas click this stays
+  // null, so manual expand/collapse from before this feature existed is
+  // left alone.
+  selectedLayerIndex?: number | null;
+}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, pageDuration, autoFocus, pageLayers, selectedLayerIndex }) => {
   const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
   const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
   const photoInput = React.useRef<HTMLInputElement>(null);
@@ -2772,6 +2796,19 @@ const ElementMotion: React.FC<{
   // think they vanished) — starts expanded, same as before this existed;
   // collapsing is something the user opts into per layer.
   const [expanded, setExpanded] = React.useState(true);
+  const cardRef = React.useRef<HTMLDivElement>(null);
+  // Clicking a layer's handle on the canvas focuses it here: this one opens
+  // (even if the user had collapsed it) and scrolls into view, every OTHER
+  // layer's card on the page collapses. Skipped entirely until the first
+  // real selection (selectedLayerIndex still null) so loading a page with
+  // everything expanded — today's existing default — isn't disturbed.
+  React.useEffect(() => {
+    if (selectedLayerIndex == null) return;
+    const isMe = layer.index === selectedLayerIndex;
+    setExpanded(isMe);
+    if (isMe) cardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLayerIndex]);
   // Which of Content/Effects/Keyframes this layer's own panel is showing —
   // used to be all three stacked and expanded together (a wall of fields per
   // layer); now one rail, one pane at a time, so a layer with a lot set
@@ -2821,7 +2858,7 @@ const ElementMotion: React.FC<{
   const currentFamilyVariants = currentEntry ? families.get(currentEntry.family) ?? [] : [];
 
   return (
-    <div className="card compact">
+    <div className="card compact" ref={cardRef}>
       <div className={"row between collapsible-header" + (expanded ? " expanded" : "")}
         onClick={() => setExpanded((e) => !e)}
         title={expanded ? "Click to collapse" : "Click to expand"}
@@ -3493,7 +3530,12 @@ const PageInspector: React.FC<{
   onSaveMotionPreset: (name: string, clip: MotionClip) => void;
   onDeleteMotionPreset: (id: string) => void;
   newestLayerIndex: number | null;
-}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex }) => {
+  // The layer (by its stable l.index) selected via a canvas click, if any —
+  // switches this inspector to the Elements tab and tells that one
+  // ElementMotion to expand (collapsing its siblings), same identity
+  // newestLayerIndex already uses.
+  selectedLayerIndex: number | null;
+}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex, selectedLayerIndex }) => {
   // Duration/bg/ambient/transition/subtitle vs. the layer list were one long
   // stacked scroll before — split so each is reachable without scrolling
   // past the other. Resets to "Page" on every page switch (this component
@@ -3501,6 +3543,11 @@ const PageInspector: React.FC<{
   // — you land on a newly-selected page's own settings, not wherever the
   // last page's tab happened to be.
   const [tab, setTab] = React.useState<"page" | "elements">("page");
+  // A canvas click always means "show me that element," even if this
+  // inspector is currently sitting on the Page tab.
+  React.useEffect(() => {
+    if (selectedLayerIndex != null) setTab("elements");
+  }, [selectedLayerIndex]);
   return (
     <div>
       <h1 title={page.id}>Page: {page.name ?? page.id}</h1>
@@ -3616,6 +3663,7 @@ const PageInspector: React.FC<{
               swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch}
               motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
               autoFocus={l.index === newestLayerIndex}
+              selectedLayerIndex={selectedLayerIndex}
               canvas={canvas}
               pageDuration={page.durationInFrames}
               pageLayers={page.layers}
