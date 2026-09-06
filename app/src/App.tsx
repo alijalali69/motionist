@@ -471,14 +471,19 @@ const FilmstripPageCard = React.memo<{
           fps={project.fps}
           style={{ width: "100%", height: "100%" }}
         />
+        {/* Overlaid on the thumbnail itself on hover, not a popup escaping
+            above the card — that used to poke outside .filmstrip-scroll's
+            own box, which (overflow-x:auto silently computes overflow-y to
+            auto too) could trigger a real vertical scroll/jump this bar was
+            never meant to have at all. */}
+        <div className="pagecard-actions" onClick={(e) => e.stopPropagation()}>
+          <button className="btn small" title="Save this page's layout as a reusable template" onClick={() => onSaveTemplate(index)}>
+            <TemplateIcon />
+          </button>
+          <button className="btn small" title="Delete page" onClick={() => onDelete(index)}>✕</button>
+        </div>
       </div>
       <span className="pagecard-n">{index + 1}</span>
-      <div className="pagecard-actions" onClick={(e) => e.stopPropagation()}>
-        <button className="btn small" title="Save this page's layout as a reusable template" onClick={() => onSaveTemplate(index)}>
-          <TemplateIcon />
-        </button>
-        <button className="btn small" title="Delete page" onClick={() => onDelete(index)}>✕</button>
-      </div>
     </div>
   );
 });

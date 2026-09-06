@@ -140,6 +140,12 @@ body {
   align-items: center;
   gap: 8px;
   overflow-x: auto;
+  /* Explicit, not left to default — setting only overflow-x computes
+     overflow-y to auto too (real CSS behavior), silently making this
+     horizontal-only strip vertically scrollable as well. This bar should
+     never scroll vertically at all; see .pagecard-actions below for what
+     that actually caused. */
+  overflow-y: hidden;
   padding: 2px;
 }
 .filmstrip-scroll.over { outline: 2px dashed var(--accent2); outline-offset: -2px; border-radius: 6px; }
@@ -172,26 +178,33 @@ body {
 .pagecard.drag-over .pagethumb { border-color: var(--good); box-shadow: 0 0 0 2px rgba(63,185,111,0.35); }
 .pagecard-n { font-family: var(--mono); font-size: 9px; color: var(--muted); }
 .pagecard.active .pagecard-n { color: var(--accent2); }
-/* Save-as-template / delete — revealed only on hover so a card at rest is
-   just a thumbnail. Reordering is drag now (see .pagecard's draggable), not
-   a button here. */
+/* Save-as-template / delete — revealed only on hover, overlaid directly on
+   the thumbnail (not a popup escaping above the card) so it never needs to
+   render outside .filmstrip-scroll's own box. That escape was the actual
+   bug behind "hovering the last page causes a scroll and up/down jump" —
+   overflow-x:auto on a container with no explicit overflow-y computes
+   overflow-y to auto too (a real CSS rule, not a mistake to work around
+   differently), so anything poking out vertically could trigger a phantom
+   vertical scroll the filmstrip was never meant to have at all. */
 .pagecard-actions {
   position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: 4px;
+  inset: 0;
   display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 2px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 3px;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
-  z-index: 5;
+  background: rgba(13, 15, 18, 0.75);
+  border-radius: 4px;
+  z-index: 2;
 }
 .pagecard:hover .pagecard-actions, .pagecard:focus-within .pagecard-actions { display: flex; }
-.pagecard-actions .btn.small { padding: 3px 5px; }
+/* Stacked in a 28px-wide thumbnail — side by side wouldn't fit both. */
+.pagecard-actions .btn.small {
+  padding: 0; width: 16px; height: 16px; font-size: 9px;
+  display: flex; align-items: center; justify-content: center;
+}
+.pagecard-actions .btn.small svg { width: 11px; height: 11px; }
 .addpage {
   flex: none;
   display: flex;
