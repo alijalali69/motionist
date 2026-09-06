@@ -21,19 +21,21 @@
 
 * { box-sizing: border-box; }
 
-/* Custom player control bar — lives BELOW the preview (never overlaid on top
-   of it), so the canvas stays clean at all times. */
+/* Transport row — now just a plain flex row, no border/background/padding of
+   its own; it lives inside .transport-card (see below) alongside the zoom/
+   safe-zone row instead of being its own separate box stacked on top of it. */
 .player-controls {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  max-width: 420px;
-  margin-top: 10px;
-  padding: 8px 10px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+}
+/* The merged card: transport row, then the zoom/safe-zone row below a thin
+   divider — one box under the canvas instead of two stacked ones. */
+.transport-card { display: flex; flex-direction: column; gap: 8px; }
+.transport-card .fn-row {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
 .player-controls .btn.small { flex: none; padding: 4px 10px; font-size: 14px; }
 .pc-time { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }

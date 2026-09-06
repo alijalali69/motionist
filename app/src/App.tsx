@@ -1831,37 +1831,9 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           </div>
         ) : <p className="sub">Loading…</p>}
         </div>
-        {project && (
-          <div className="row" style={{ gap: 8, alignItems: "center", flexShrink: 0 }}>
-            <PlayerControls playerRef={playerRef} durationInFrames={reelDuration(project)} fps={project.fps} />
-          </div>
-        )}
-        {/* Render result — done/error, shown right under the transport bar
-            (still "on the player," just not layered over the canvas once
-            there's nothing left actively progressing). Cleared by starting
-            a new render (onRender resets both) or dismissing here. */}
-        {!renderProgress && (renderUrl || renderPath || renderErr) && (
-          <div className="render-result">
-            {renderErr ? (
-              <span className="err" style={{ margin: 0, flex: 1 }}>{renderErr}</span>
-            ) : renderUrl ? (
-              <span className="hint" style={{ margin: 0, flex: 1 }}>Done → <a className="dl" href={renderUrl} target="_blank" rel="noreferrer">download reel</a></span>
-            ) : (
-              <span className="hint" style={{ margin: 0, flex: 1 }}>Done → saved to <span className="tabular" style={{ fontFamily: "var(--mono)" }}>{renderPath}</span></span>
-            )}
-            <button className="btn small" style={{ width: "auto" }} title="Dismiss"
-              onClick={() => { setRenderUrl(null); setRenderPath(null); setRenderErr(null); }}>✕</button>
-          </div>
-        )}
-        {/* Meta's published Reels/Stories safe margins only mean anything on
-            a portrait canvas — showing them over a landscape/square project
-            would just be wrong, not merely irrelevant. */}
-        {/* One grouped box instead of 2-3 loose paragraphs floating under the
-            player — same tips, just an actual section instead of stray text. */}
-        {/* Always rendered (not just for portrait/photo-pan projects) —
-            the zoom% readout on its right edge is the one place the user
-            can always see the artboard's current zoom, at any project
-            shape, at any zoom level including 100%. */}
+        {/* Transport (play/time/seek/fullscreen) and the zoom/safe-zone row
+            used to be two separate stacked cards — merged into one, the
+            transport row on top, the other below a thin divider. */}
         {project && (() => {
           // The function panel's own mute button controls whichever video is
           // actually on this page — a page carries at most one main visual
@@ -1874,8 +1846,16 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           );
           const videoLayer = videoLayerIndex >= 0 ? pageLayers[videoLayerIndex] : null;
           return (
-          <div className="card compact" style={{ maxWidth: 420, width: "100%", flexShrink: 0 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 4, alignItems: "center" }}>
+          <div className="card compact transport-card" style={{ maxWidth: 420, width: "100%", flexShrink: 0 }}>
+            <PlayerControls playerRef={playerRef} durationInFrames={reelDuration(project)} fps={project.fps} />
+            {/* Meta's published Reels/Stories safe margins only mean anything
+                on a portrait canvas — showing them over a landscape/square
+                project would just be wrong, not merely irrelevant. Always
+                rendered otherwise (not just for portrait/photo-pan projects)
+                — the zoom% readout on its right edge is the one place the
+                user can always see the artboard's current zoom, at any
+                project shape, at any zoom level including 100%. */}
+            <div className="fn-row" style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 4, alignItems: "center" }}>
               <div className="row" style={{ gap: 4, justifySelf: "start" }}>
                 {project.height > project.width && (
                   <>
@@ -1913,13 +1893,31 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               </button>
             </div>
             {photoPanTargets.length > 0 && (
-              <p className="hint" style={{ margin: "6px 0 0", textAlign: "center" }}>
+              <p className="hint" style={{ margin: 0, textAlign: "center" }}>
                 Hold <b>Alt</b> and drag a photo to reposition its crop inside its frame instead of moving the frame itself
               </p>
             )}
           </div>
           );
         })()}
+        {/* Render result — done/error, shown right under the merged
+            transport/zoom card (still "on the player," just not layered
+            over the canvas once there's nothing left actively progressing).
+            Cleared by starting a new render (onRender resets both) or
+            dismissing here. */}
+        {!renderProgress && (renderUrl || renderPath || renderErr) && (
+          <div className="render-result">
+            {renderErr ? (
+              <span className="err" style={{ margin: 0, flex: 1 }}>{renderErr}</span>
+            ) : renderUrl ? (
+              <span className="hint" style={{ margin: 0, flex: 1 }}>Done → <a className="dl" href={renderUrl} target="_blank" rel="noreferrer">download reel</a></span>
+            ) : (
+              <span className="hint" style={{ margin: 0, flex: 1 }}>Done → saved to <span className="tabular" style={{ fontFamily: "var(--mono)" }}>{renderPath}</span></span>
+            )}
+            <button className="btn small" style={{ width: "auto" }} title="Dismiss"
+              onClick={() => { setRenderUrl(null); setRenderPath(null); setRenderErr(null); }}>✕</button>
+          </div>
+        )}
       </div>
 
       {activeRightDock && (
