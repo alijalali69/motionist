@@ -1,5 +1,5 @@
 import React from "react";
-import { Player, type PlayerRef } from "@remotion/player";
+import { Player, Thumbnail, type PlayerRef } from "@remotion/player";
 import { Reel } from "../../src/Reel";
 import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
 import { TEXT_ENTRANCE_NAMES, TEXT_EXIT_NAMES, LATIN_TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS, BG_TEXTURE_NAMES, BG_COLOR_NAMES, BG_GRADE_NAMES, BG_MOTION_NAMES } from "../../src/presets";
@@ -13,7 +13,7 @@ import {
 } from "./api";
 import { BUILT_IN_PRESETS } from "./builtinPresets";
 import { Dashboard } from "./Dashboard";
-import { StoryboardStrip } from "./StoryboardStrip";
+import { PageThumb } from "../../src/PageThumb";
 import { CanvasHandles, type Handle } from "./CanvasHandles";
 import { PhotoPanHandles, type PhotoPanTarget } from "./PhotoPanHandles";
 import { SafeZoneOverlay } from "./SafeZoneOverlay";
@@ -412,6 +412,77 @@ const PlayerControls: React.FC<{
   );
 };
 
+// One filmstrip card — a real live-content thumbnail (frame 0 of that page,
+// via the same lightweight <Thumbnail> the old storyboard strip used) plus
+// drag-to-reorder. Memoized so a page edit elsewhere (or another card being
+// dragged over) doesn't re-mount every OTHER card's own Remotion thumbnail —
+// same reasoning the storyboard strip's own PageCard had, just without that
+// component's live-reflow-during-drag complexity: this filmstrip scrolls
+// natively (no JS-driven offset re-rendering every card on every tick), so
+// the only real re-render pressure left is a page edit or a drag tick, both
+// already infrequent enough not to need the FLIP-animation machinery.
+const FilmstripPageCard = React.memo<{
+  project: Project;
+  page: Project["pages"][number];
+  index: number;
+  selected: boolean;
+  isDragging: boolean;
+  isDragOver: boolean;
+  onSelect: (i: number) => void;
+  onDragStartCard: (i: number) => void;
+  onDragOverCard: (i: number) => void;
+  onDropCard: (fromIndex: number, toIndex: number) => void;
+  onDragEndCard: () => void;
+  onSaveTemplate: (i: number) => void;
+  onDelete: (i: number) => void;
+}>(({ project, page, index, selected, isDragging, isDragOver, onSelect, onDragStartCard, onDragOverCard, onDropCard, onDragEndCard, onSaveTemplate, onDelete }) => {
+  return (
+    <div
+      className={"pagecard" + (selected ? " active" : "") + (isDragOver ? " drag-over" : "")}
+      draggable
+      onClick={() => onSelect(index)}
+      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(index)); onDragStartCard(index); }}
+      onDragOver={(e) => { e.preventDefault(); onDragOverCard(index); }}
+      onDrop={(e) => {
+        e.preventDefault(); e.stopPropagation();
+        // Read the dragged-from index straight off dataTransfer (set at
+        // dragstart, guaranteed available here per the HTML5 DnD spec)
+        // rather than the draggingPageIndex state the card above tracks
+        // purely for the opacity/highlight visuals — state set by dragstart
+        // and read by this drop handler are two different React renders,
+        // and nothing forces the first to have flushed before the second
+        // reads it (real mouse drags always have time between them for it
+        // to happen anyway, but this way it isn't a timing assumption).
+        const from = Number(e.dataTransfer.getData("text/plain"));
+        if (!Number.isNaN(from)) onDropCard(from, index);
+      }}
+      onDragEnd={onDragEndCard}
+      title={page.name ?? page.id}
+      style={{ opacity: isDragging ? 0.4 : 1 }}
+    >
+      <div className="pagethumb">
+        <Thumbnail
+          component={PageThumb}
+          inputProps={{ project, page }}
+          frameToDisplay={0}
+          durationInFrames={Math.max(1, page.durationInFrames)}
+          compositionWidth={project.width}
+          compositionHeight={project.height}
+          fps={project.fps}
+          style={{ width: "100%", height: "100%" }}
+        />
+      </div>
+      <span className="pagecard-n">{index + 1}</span>
+      <div className="pagecard-actions" onClick={(e) => e.stopPropagation()}>
+        <button className="btn small" title="Save this page's layout as a reusable template" onClick={() => onSaveTemplate(index)}>
+          <TemplateIcon />
+        </button>
+        <button className="btn small" title="Delete page" onClick={() => onDelete(index)}>✕</button>
+      </div>
+    </div>
+  );
+});
+
 // --- Top-level app shell: switches between the project Dashboard and the Editor.
 export const App: React.FC = () => {
   const [activeId, setActiveId] = React.useState<string | null>(null);
@@ -430,6 +501,12 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [renderUrl, setRenderUrl] = React.useState<string | null>(null);
   const [renderProgress, setRenderProgress] = React.useState<{ percent: number; phase?: string; frame?: number; totalFrames?: number; status?: string } | null>(null);
   const [dragOver, setDragOver] = React.useState(false);
+  // Filmstrip drag-to-reorder — which page is currently being dragged, and
+  // which one it's hovering over right now (both null outside a drag). Kept
+  // as plain state (not refs) since there are only ever a handful of pages,
+  // nowhere near the storyboard strip's old per-frame-of-scroll concern.
+  const [draggingPageIndex, setDraggingPageIndex] = React.useState<number | null>(null);
+  const [dragOverPageIndex, setDragOverPageIndex] = React.useState<number | null>(null);
   const [motionClip, setMotionClip] = React.useState<MotionClip | null>(null);
   // Page-layout template library — a whole saved page (layers, boxes,
   // motion, its own bg style), reusable across any project. `null` =
@@ -576,6 +653,25 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const playerRef = React.useRef<PlayerRef>(null);
   const playerWrapRef = React.useRef<HTMLDivElement>(null);
   const centerRef = React.useRef<HTMLDivElement>(null);
+
+  // Filmstrip wheel-scroll — a plain vertical mouse wheel over a horizontally
+  // scrolling strip does nothing in most browsers without this; carried over
+  // from the old storyboard strip, which had the same real addEventListener
+  // (not React's onWheel, which is passive by default and can't
+  // preventDefault) for the same reason: without it, the page behind the
+  // filmstrip scrolls instead of the filmstrip itself.
+  const filmstripScrollRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const el = filmstripScrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth) return; // nothing to scroll — let the page handle it
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   // Same frameupdate/play/pause subscription PlayerControls keeps on this
   // same playerRef — a second independent listener, not a shared one, is
@@ -1263,18 +1359,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     finally { setBrowsingFolder(false); }
   };
 
-  const movePage = (i: number, dir: -1 | 1) => {
-    update((p) => {
-      const j = i + dir;
-      if (j < 0 || j >= p.pages.length) return;
-      [p.pages[i], p.pages[j]] = [p.pages[j], p.pages[i]];
-    });
-    setSel((s) => Math.min(Math.max(s + dir, 0), (project?.pages.length ?? 1) - 1));
-  };
-
-  // General move-to-any-position (the storyboard strip's drag-reorder) —
-  // movePage above only swaps adjacent neighbors, which is fine for the ↑/↓
-  // buttons but not for dropping a page directly at an arbitrary spot.
+  // Move-to-any-position — the filmstrip's drag-to-reorder.
   const reorderPages = (from: number, to: number) => {
     if (from === to) return;
     update((p) => {
@@ -1732,16 +1817,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
           gap: 12, width: "100%", flex: "1 1 auto", minHeight: 0, overflow: "auto",
         }}>
-        {/* A strip showing 1-2 thumbnails isn't a storyboard, it's noise —
-            only earns its space once there's an actual sequence to scan. */}
-        {project && project.pages.length > 2 && (
-          <StoryboardStrip
-            project={project}
-            selected={sel}
-            onSelect={selectPage}
-            onReorder={reorderPages}
-          />
-        )}
         {project ? (
           <div
             ref={playerWrapRef}
@@ -1967,8 +2042,9 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           more, this bar is just always here, same as the topbar above it. */}
       <div className="filmstrip">
         <div
+          ref={filmstripScrollRef}
           className={"filmstrip-scroll" + (dragOver ? " over" : "")}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragOver={(e) => { e.preventDefault(); if (e.dataTransfer.types.includes("Files")) setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={(e) => {
             e.preventDefault(); setDragOver(false);
@@ -1977,23 +2053,26 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         >
           {!project?.pages.length && <p className="hint" style={{ margin: "0 8px", flex: "none" }}>No pages yet — add one, or drag PSDs/SVGs here.</p>}
           {project?.pages.map((pg, i) => (
-            <div key={pg.id} className={"pagecard" + (i === sel ? " active" : "")}
-              onClick={() => selectPage(i)} title={pg.name ?? pg.id}>
-              <div className="pagethumb" style={pg.bgColor ? { background: pg.bgColor } : undefined} />
-              <span className="pagecard-n">{i + 1}</span>
-              {/* Per-card actions — same 4 the old Pages list row had
-                  (reorder/save-as-template/delete), just revealed on hover
-                  instead of permanently taking up row width. */}
-              <div className="pagecard-actions" onClick={(e) => e.stopPropagation()}>
-                <button className="btn small" title="Move earlier" disabled={i === 0} onClick={() => movePage(i, -1)}>←</button>
-                <button className="btn small" title="Move later" disabled={i === (project?.pages.length ?? 0) - 1} onClick={() => movePage(i, 1)}>→</button>
-                <button className="btn small" title="Save this page's layout as a reusable template"
-                  onClick={() => { setSavingTemplateFor(i); setTemplateName(pg.name ? `${pg.name} layout` : "My layout"); setTemplateErr(null); }}>
-                  <TemplateIcon />
-                </button>
-                <button className="btn small" title="Delete page" onClick={() => delPage(i)}>✕</button>
-              </div>
-            </div>
+            <FilmstripPageCard key={pg.id} project={project} page={pg} index={i}
+              selected={i === sel}
+              isDragging={draggingPageIndex === i}
+              isDragOver={dragOverPageIndex === i && draggingPageIndex !== i}
+              onSelect={selectPage}
+              onDragStartCard={setDraggingPageIndex}
+              onDragOverCard={setDragOverPageIndex}
+              onDropCard={(fromIndex, toIndex) => {
+                reorderPages(fromIndex, toIndex);
+                setDraggingPageIndex(null);
+                setDragOverPageIndex(null);
+              }}
+              onDragEndCard={() => { setDraggingPageIndex(null); setDragOverPageIndex(null); }}
+              onSaveTemplate={(idx) => {
+                setSavingTemplateFor(idx);
+                setTemplateName(pg.name ? `${pg.name} layout` : "My layout");
+                setTemplateErr(null);
+              }}
+              onDelete={delPage}
+            />
           ))}
         </div>
         <div className="addpage">

@@ -150,22 +150,31 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  cursor: pointer;
+  cursor: grab;
   position: relative;
 }
+.pagecard:active { cursor: grabbing; }
+/* Real per-page content, not a flat color box — the same lightweight
+   <Thumbnail> the old (now-retired) storyboard strip used, one static
+   frame-0 render per page. overflow:hidden clips its internal scaled
+   composition to this box's own rounded corners. */
 .pagethumb {
   width: 28px;
   aspect-ratio: 9 / 16;
   border-radius: 4px;
   border: 1.5px solid var(--line);
   background: var(--panel2);
+  overflow: hidden;
+  position: relative;
 }
 .pagecard.active .pagethumb { border-color: var(--accent2); box-shadow: 0 0 0 3px rgba(62,166,255,0.18); }
+/* Drop target while dragging another card over this one. */
+.pagecard.drag-over .pagethumb { border-color: var(--good); box-shadow: 0 0 0 2px rgba(63,185,111,0.35); }
 .pagecard-n { font-family: var(--mono); font-size: 9px; color: var(--muted); }
 .pagecard.active .pagecard-n { color: var(--accent2); }
-/* Reorder/template/delete — same 4 actions the old Pages list row always
-   showed, now revealed only on hover so a card at rest is just a thumbnail,
-   not a thumbnail wearing 4 buttons. */
+/* Save-as-template / delete — revealed only on hover so a card at rest is
+   just a thumbnail. Reordering is drag now (see .pagecard's draggable), not
+   a button here. */
 .pagecard-actions {
   position: absolute;
   bottom: 100%;
