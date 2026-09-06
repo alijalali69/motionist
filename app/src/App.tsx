@@ -1960,6 +1960,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         )}
       </aside>
       </div>
+      </div>
 
       {/* Bottom page filmstrip — same shape as Canva's own (vertical cards
           here, since a reel is 9:16, not landscape). Replaces the old
@@ -2077,7 +2078,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           </div>
         </div>
       )}
-      </div>
     </div>
   );
 };
