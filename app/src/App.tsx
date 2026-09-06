@@ -500,13 +500,26 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   });
   React.useEffect(() => { localStorage.setItem("motionist:leftW", String(leftW)); }, [leftW]);
   React.useEffect(() => { localStorage.setItem("motionist:rightW", String(rightW)); }, [rightW]);
-  // Collapsed state is separate from width — collapsing doesn't lose the
-  // panel's own resized width, it just hides it (0px) until expanded again,
-  // same as VSCode/Figma's own sidebar toggle.
-  const [leftCollapsed, setLeftCollapsed] = React.useState(() => localStorage.getItem("motionist:leftCollapsed") === "1");
-  const [rightCollapsed, setRightCollapsed] = React.useState(() => localStorage.getItem("motionist:rightCollapsed") === "1");
-  React.useEffect(() => { localStorage.setItem("motionist:leftCollapsed", leftCollapsed ? "1" : "0"); }, [leftCollapsed]);
-  React.useEffect(() => { localStorage.setItem("motionist:rightCollapsed", rightCollapsed ? "1" : "0"); }, [rightCollapsed]);
+  // Which on-demand dock is open on each side — replaces the old always-
+  // visible-with-a-collapse-toggle columns. null = that side's rail icon is
+  // un-pressed and no dock shows at all (the rail itself, ~52px, is the only
+  // permanent thing now). Clicking the already-active rail icon again closes
+  // its dock, same "click again to turn it off" convention as the Text tool.
+  const [activeLeftDock, setActiveLeftDock] = React.useState<"pages" | "assets" | null>(() => {
+    const v = localStorage.getItem("motionist:leftDock");
+    return v === "pages" || v === "assets" ? v : "pages";
+  });
+  const [activeRightDock, setActiveRightDock] = React.useState<"layers" | null>(() => {
+    // Only one right-dock option exists yet (Style/Effects/Position land in
+    // a later pass) — "" means explicitly closed, anything else defaults open.
+    return localStorage.getItem("motionist:rightDock") === "" ? null : "layers";
+  });
+  React.useEffect(() => { localStorage.setItem("motionist:leftDock", activeLeftDock ?? ""); }, [activeLeftDock]);
+  React.useEffect(() => { localStorage.setItem("motionist:rightDock", activeRightDock ?? ""); }, [activeRightDock]);
+  const toggleLeftDock = (which: "pages" | "assets") =>
+    setActiveLeftDock((cur) => (cur === which ? null : which));
+  const toggleRightDock = (which: "layers") =>
+    setActiveRightDock((cur) => (cur === which ? null : which));
   const startPanelDrag = (side: "left" | "right") => (e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
@@ -1475,29 +1488,52 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         </div>
       </header>
       <div className="workspace">
-      {/* LEFT: project + pages */}
-      <div className="col" style={{
-        width: leftCollapsed ? 0 : leftW, flex: `0 0 ${leftCollapsed ? 0 : leftW}px`,
-        padding: leftCollapsed ? 0 : undefined, overflowX: "hidden",
-      }}>
-        {/* General status — errors/busy from any panel action here (uploads,
-            ingest, presets…), not just rendering any more (that moved to
-            the header's Render menu + the canvas overlay). Was folded into
-            the old Export card; this is its only display site now, so it
-            needs its own home instead of disappearing with that card. */}
-        {busy && <p className="spin" style={{ marginTop: 8 }}>{busy}</p>}
-        {err && (
-          <p className="err row between" style={{ alignItems: "center", gap: 8, marginTop: 8 }}>
-            <span>{err}</span>
-            <button className="btn small" title="Dismiss" onClick={() => setErr(null)}>✕</button>
-          </p>
-        )}
+      <nav className="rail">
+        <button type="button" className={"rail-btn" + (activeLeftDock === "pages" ? " active" : "")}
+          title="Pages" onClick={() => toggleLeftDock("pages")}>
+          <PageIcon /><span>Pages</span>
+        </button>
+        <button type="button" className={"rail-btn" + (activeLeftDock === "assets" ? " active" : "")}
+          title="Global assets" onClick={() => toggleLeftDock("assets")}>
+          <BgTileIcon /><span>Assets</span>
+        </button>
+        <div className="rail-div" />
+        <button type="button" className={"rail-btn" + (activeRightDock === "layers" ? " active" : "")}
+          title="Layers" onClick={() => toggleRightDock("layers")}>
+          <RailLayersIcon /><span>Layers</span>
+        </button>
+      </nav>
+
+      {/* Hidden file inputs live outside either dock's own JSX, always
+          mounted regardless of which dock — or none — is open right now:
+          newPhotoInput in particular is triggered from the Layers dock's
+          own Photo tool, nothing to do with the Pages/Assets docks here. */}
+      <input ref={psdInput} className="hidden-file" type="file" accept=".psd,.svg,.png,.jpg,.jpeg,.webp,.gif" multiple
+        onChange={(e) => { if (e.target.files) onAddPages(e.target.files); e.target.value = ""; }} />
+      <input ref={newPhotoInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.webp,.svg,.gif,.webm,.mov,.mp4"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onAddPhotoLayerFromFile(sel, f); e.target.value = ""; }} />
+      <input ref={bgInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.svg,.webm,.mov,.mp4,.gif"
+        onChange={(e) => e.target.files?.[0] && onSlotUpload("bg", e.target.files[0])} />
+      <input ref={titleInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.svg,.webm,.mov,.mp4,.gif,.json"
+        onChange={(e) => e.target.files?.[0] && onSlotUpload("title", e.target.files[0])} />
+      <input ref={logoInput} className="hidden-file" type="file" accept=".json,.webm,.mov,.mp4,.gif,.png,.svg"
+        onChange={(e) => e.target.files?.[0] && onSlotUpload("logo", e.target.files[0])} />
+      <input ref={audioInput} className="hidden-file" type="file" accept=".mp3,.wav,.m4a,.ogg,.flac,.aac"
+        onChange={(e) => e.target.files?.[0] && onUploadAudio(e.target.files[0])} />
+
+      <div className="stagewrap">
+      {/* LEFT dock: Pages or Global assets, whichever rail icon is active —
+          never both, never neither's content lingering underneath. */}
+      <aside className={"dock dock-left" + (activeLeftDock ? " open" : "")}
+        style={{ width: activeLeftDock ? leftW : 0 }}>
+        {activeLeftDock === "pages" && (
+        <div className="dockbody">
         {/* Where the content comes from, not what it looks like when you're
             done: Sequence pulls in already-designed pages (PSD/SVG/photo,
             in filename order); Page starts one empty page you build here
             with the Text/Photo/Shape toolbar below. Equal weight now that
             neither is more "primary" than the other. */}
-        <div className="row" style={{ gap: 6, marginTop: 10 }}>
+        <div className="row" style={{ gap: 6 }}>
           <button className="btn" style={{ flex: 1 }} title="Add sequence — import PSD/SVG/photo files as pre-designed pages, in filename order"
             onClick={() => psdInput.current?.click()}>
             <SequenceIcon /><span>Sequence</span>
@@ -1511,13 +1547,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             <TemplateIcon /><span>Template</span>
           </button>
         </div>
-        <input ref={psdInput} className="hidden-file" type="file" accept=".psd,.svg,.png,.jpg,.jpeg,.webp,.gif" multiple
-          onChange={(e) => { if (e.target.files) onAddPages(e.target.files); e.target.value = ""; }} />
-        {/* The Photo toolbar icon (in the Elements tab, below) triggers this
-            same hidden input — one file input shared by every page, since
-            only one page's toolbar can be visible/armed at a time. */}
-        <input ref={newPhotoInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.webp,.svg,.gif,.webm,.mov,.mp4"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onAddPhotoLayerFromFile(sel, f); e.target.value = ""; }} />
 
         <h2>Pages</h2>
         <div
@@ -1611,10 +1640,12 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             </div>
           </div>
         )}
+        </div>
+        )}
 
-        {project && (
-          <>
-            <h2>Global assets (all pages)</h2>
+        {activeLeftDock === "assets" && project && (
+          <div className="dockbody">
+            <h2 style={{ marginTop: 0 }}>Global assets (all pages)</h2>
 
             {/* One tile grid triggers all 4 uploads — each slot's own detail
                 card (position/opacity/FX below, or Audio's waveform+volume/
@@ -1639,14 +1670,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                 <AudioTileIcon /><span className="lbl">Audio</span><span className="st">{project.audio?.file ? "uploaded" : "empty"}</span>
               </button>
             </div>
-            <input ref={bgInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.svg,.webm,.mov,.mp4,.gif"
-              onChange={(e) => e.target.files?.[0] && onSlotUpload("bg", e.target.files[0])} />
-            <input ref={titleInput} className="hidden-file" type="file" accept=".png,.jpg,.jpeg,.svg,.webm,.mov,.mp4,.gif,.json"
-              onChange={(e) => e.target.files?.[0] && onSlotUpload("title", e.target.files[0])} />
-            <input ref={logoInput} className="hidden-file" type="file" accept=".json,.webm,.mov,.mp4,.gif,.png,.svg"
-              onChange={(e) => e.target.files?.[0] && onSlotUpload("logo", e.target.files[0])} />
-            <input ref={audioInput} className="hidden-file" type="file" accept=".mp3,.wav,.m4a,.ogg,.flac,.aac"
-              onChange={(e) => e.target.files?.[0] && onUploadAudio(e.target.files[0])} />
 
             {/* BG */}
             <div className="card compact">
@@ -1745,23 +1768,27 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               onChangeBox={(fn) => update((p) => fn(p.loader))}
               onChangeStyle={(s) => update((p) => { p.loaderStyle = s; })}
               onChangeVisible={(v) => update((p) => { p.loaderVisible = v; })} />
-          </>
+          </div>
         )}
-
-      </div>
-
-      <div className={"panel-resizer" + (leftCollapsed ? " collapsed" : "")}
-        onMouseDown={leftCollapsed ? undefined : startPanelDrag("left")}
-        title={leftCollapsed ? undefined : "Drag to resize"}>
-        <button type="button" className="panel-toggle" title={leftCollapsed ? "Expand panel" : "Collapse panel"}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={() => setLeftCollapsed((v) => !v)}>
-          {leftCollapsed ? "›" : "‹"}
-        </button>
-      </div>
+      </aside>
+      {activeLeftDock && (
+        <div className="panel-resizer" onMouseDown={startPanelDrag("left")} title="Drag to resize" />
+      )}
 
       {/* CENTER: live preview */}
       <div ref={centerRef} className="center" style={{ flex: "1 1 auto", minWidth: 320 }}>
+        {/* General status — errors/busy from any panel action here (uploads,
+            ingest, presets…), not just rendering any more (that moved to
+            the header's Render menu + the canvas overlay). Lives here (not
+            inside a dock) so it stays visible no matter which dock — or
+            none — is open when the error happens. */}
+        {busy && <p className="spin" style={{ alignSelf: "flex-start" }}>{busy}</p>}
+        {err && (
+          <p className="err row between" style={{ alignItems: "center", gap: 8, alignSelf: "stretch" }}>
+            <span>{err}</span>
+            <button className="btn small" title="Dismiss" onClick={() => setErr(null)}>✕</button>
+          </p>
+        )}
         {/* Everything zoomable (storyboard + artboard) lives in its own
             scroll region, separate from PlayerControls/the safe-zone row
             below — those two must stay visually docked in place as zoom
@@ -1970,44 +1997,42 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         })()}
       </div>
 
-      <div className={"panel-resizer" + (rightCollapsed ? " collapsed" : "")}
-        onMouseDown={rightCollapsed ? undefined : startPanelDrag("right")}
-        title={rightCollapsed ? undefined : "Drag to resize"}>
-        <button type="button" className="panel-toggle" title={rightCollapsed ? "Expand panel" : "Collapse panel"}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={() => setRightCollapsed((v) => !v)}>
-          {rightCollapsed ? "‹" : "›"}
-        </button>
-      </div>
+      {activeRightDock && (
+        <div className="panel-resizer" onMouseDown={startPanelDrag("right")} title="Drag to resize" />
+      )}
 
-      {/* RIGHT: page inspector */}
-      <div className="col" style={{
-        width: rightCollapsed ? 0 : rightW, flex: `0 0 ${rightCollapsed ? 0 : rightW}px`,
-        padding: rightCollapsed ? 0 : undefined, overflowX: "hidden",
-      }}>
-        {project && project.pages[sel] ? (
-          <PageInspector
-            key={project.pages[sel].id}
-            page={project.pages[sel]}
-            canvas={[project.width, project.height]}
-            clip={motionClip}
-            onCopyClip={setMotionClip}
-            onChange={(fn) => update((p) => fn(p.pages[sel]))}
-            onUploadPhoto={(li, file) => onUploadPhoto(sel, li, file)}
-            onUploadShapePhoto={(li, file) => onUploadShapePhoto(sel, li, file)}
-            onRemoveShapePhoto={(li) => onRemoveShapePhoto(sel, li)}
-            onToggleTextTool={() => setTextTool((v) => !v)}
-            textToolArmed={textTool}
-            onAddPhoto={() => newPhotoInput.current?.click()}
-            onAddShape={() => onAddShapeLayer(sel)}
-            onDeleteLayer={(li) => onDeleteLayer(sel, li)}
-            fonts={fonts}
-            onSelectFont={(li, entry) => onSelectFont(sel, li, entry)}
-            swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch}
-            motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
-            newestLayerIndex={newestLayerIndex}
-          />
-        ) : <p className="sub">Select a page.</p>}
+      {/* RIGHT dock: the page/element inspector — unchanged internals,
+          just behind the Layers rail icon instead of always open. */}
+      <aside className={"dock dock-right" + (activeRightDock ? " open" : "")}
+        style={{ width: activeRightDock ? rightW : 0 }}>
+        {activeRightDock === "layers" && (
+          <div className="dockbody">
+            {project && project.pages[sel] ? (
+              <PageInspector
+                key={project.pages[sel].id}
+                page={project.pages[sel]}
+                canvas={[project.width, project.height]}
+                clip={motionClip}
+                onCopyClip={setMotionClip}
+                onChange={(fn) => update((p) => fn(p.pages[sel]))}
+                onUploadPhoto={(li, file) => onUploadPhoto(sel, li, file)}
+                onUploadShapePhoto={(li, file) => onUploadShapePhoto(sel, li, file)}
+                onRemoveShapePhoto={(li) => onRemoveShapePhoto(sel, li)}
+                onToggleTextTool={() => setTextTool((v) => !v)}
+                textToolArmed={textTool}
+                onAddPhoto={() => newPhotoInput.current?.click()}
+                onAddShape={() => onAddShapeLayer(sel)}
+                onDeleteLayer={(li) => onDeleteLayer(sel, li)}
+                fonts={fonts}
+                onSelectFont={(li, entry) => onSelectFont(sel, li, entry)}
+                swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch}
+                motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
+                newestLayerIndex={newestLayerIndex}
+              />
+            ) : <p className="sub">Select a page.</p>}
+          </div>
+        )}
+      </aside>
       </div>
       </div>
     </div>
@@ -2490,6 +2515,16 @@ const LoaderTileIcon: React.FC = () => (
   <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
     <rect x="1" y="6.5" width="13" height="2" rx="1" />
     <rect x="1" y="6.5" width="7" height="2" rx="1" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+// Rail icon for the Layers dock — three stacked planes, the standard
+// layers glyph (Figma/Photoshop), same 15x15/currentColor convention.
+const RailLayersIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round">
+    <path d="M7.5 1.5L13.5 4.7L7.5 7.9L1.5 4.7Z" />
+    <path d="M1.5 8.3L7.5 11.5L13.5 8.3" />
+    <path d="M1.5 11.6L7.5 14.5L13.5 11.6" />
   </svg>
 );
 
