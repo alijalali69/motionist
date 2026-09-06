@@ -54,6 +54,15 @@ export async function saveProject(project: Project): Promise<void> {
   });
 }
 
+// Renders frame 0 of the real "Reel" composition to a PNG the Dashboard's
+// project card then shows — fire-and-forget from the caller's side (the
+// editor calls this on its way back to the Dashboard; a failed/slow render
+// here just means the card keeps showing whatever it showed before, never
+// something the user needs to wait on or be told about).
+export async function generateThumbnail(id: string): Promise<void> {
+  await fetch(`/api/projects/${encodeURIComponent(id)}/thumbnail`, { method: "POST" });
+}
+
 export type IngestResult = {
   page: Project["pages"][number];
   fixed: Project["template"]["layers"];

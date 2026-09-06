@@ -595,8 +595,8 @@ a.dl { color: var(--accent2); }
 
 .project-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px;
 }
 
 .project-card {
@@ -906,6 +906,21 @@ input.topbar-proj-name::placeholder { color: var(--muted); font-weight: 600; }
    simple the layer. Now a narrow icon rail on the left, one pane on the
    right, same "walk through the steps" idea as .tabs/.segmented but for a
    single selected layer instead of the whole page. */
+/* Layer grouping — 5 fixed-color dots, always visible on the layer's
+   collapsed header (not buried behind expanding it). Lit dot = this layer's
+   current group; click a different one to switch, click the lit one again
+   to ungroup. See GROUP_COLORS/GroupChips in App.tsx. */
+.group-chips { display: flex; gap: 5px; }
+.group-chip {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.15);
+  cursor: pointer; padding: 0;
+  opacity: 0.45;
+  transition: opacity 0.12s ease, transform 0.12s ease, border-color 0.12s ease;
+}
+.group-chip:hover { opacity: 0.8; transform: scale(1.12); }
+.group-chip.active { opacity: 1; border-color: var(--text); box-shadow: 0 0 0 2px var(--panel2); }
+
 .el-body {
   display: flex;
   margin-top: 8px;

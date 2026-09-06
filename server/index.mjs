@@ -200,10 +200,28 @@ function emptyProject(id, name, w = 1080, h = 1920) {
 // whatever this scratch file last happened to hold. Removed — that
 // transitional need (pre-multi-project) is long past.
 
-// A small representative thumbnail for the dashboard: first content layer's
-// image on the first page, else the global bg, else null (dashboard shows a
-// placeholder card).
+// Real rendered thumbnails: frame 0 of the actual "Reel" composition (see the
+// /api/projects/:id/thumbnail route below), one PNG per project — genuinely
+// what the reel looks like (bg, text, logo, everything), not a guess. Written
+// under out/ so the existing "/out" static mount already serves it, no new
+// mount needed.
+const THUMBS_DIR = path.join(ROOT, "out", "thumbs");
+fs.mkdirSync(THUMBS_DIR, { recursive: true });
+function thumbPath(projectId) {
+  return path.join(THUMBS_DIR, `${projectId}.png`);
+}
+
+// A representative thumbnail for the dashboard. Prefers the real rendered
+// still if one's been generated yet; falls back to a naive heuristic (first
+// content layer's image on the first page, else the global bg, else null —
+// dashboard shows a placeholder card) for a project that hasn't been opened
+// since this feature shipped, or whose render failed.
 function thumbnailFor(project) {
+  if (fs.existsSync(thumbPath(project.projectId))) {
+    // Cache-bust on updatedAt so an edited project's card doesn't keep
+    // showing a browser-cached copy of the old still.
+    return `/out/thumbs/${project.projectId}.png?t=${encodeURIComponent(project.updatedAt || "")}`;
+  }
   // Root-relative path (no /public prefix) — matches how Vite's publicDir and
   // Remotion's staticFile() both serve public/* at the site root.
   const firstLayer = project.pages?.[0]?.layers?.[0];
@@ -566,6 +584,32 @@ app.post("/api/projects/:id", (req, res) => {
   project.projectId = req.params.id; // trust the URL, not the body
   writeProject(project);
   res.json({ ok: true });
+});
+
+// --- Dashboard thumbnail: frame 0 of the real "Reel" composition --------------
+// Called by the client on leaving the editor back to the Dashboard —
+// fire-and-forget, not awaited by navigation. Reuses buildRenderArgs' own
+// mirror-into-src/project.json + CLI-spawn pattern, just with `still` instead
+// of `render` and a low --scale (a dashboard card is tiny; full 1080x1920 is
+// wasted render time and disk space for what's shown at ~150px wide).
+app.post("/api/projects/:id/thumbnail", async (req, res) => {
+  try {
+    const project = readProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "project not found" });
+    if (!project.pages?.length) return res.json({ skipped: "no pages yet" });
+    fs.writeFileSync(LEGACY_PROJECT_JSON, JSON.stringify(project, null, 2), "utf-8");
+    const outArg = `out/thumbs/${project.projectId}.png`;
+    const args = ["remotion", "still", "Reel", outArg, "--props=src/project.json", "--scale=0.3"];
+    // Bounded timeout — this rides on the "leave editor" path, not a button
+    // with its own cancel affordance; a stuck render here shouldn't hang
+    // forever the way a user-initiated one (with Cancel) is allowed to.
+    await run("npx", args, { timeoutMs: 60000 });
+    res.json({ ok: true, thumbnail: thumbnailFor(project) });
+  } catch (e) {
+    // Non-fatal by design — thumbnailFor() just keeps returning whatever it
+    // returned before (naive heuristic or the last successful still).
+    res.status(500).json({ error: String(e.message || e) });
+  }
 });
 
 // --- Ingest one PSD/SVG as a page ---------------------------------------------

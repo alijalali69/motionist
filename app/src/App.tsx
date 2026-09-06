@@ -5,7 +5,7 @@ import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type
 import { TEXT_ENTRANCE_NAMES, TEXT_EXIT_NAMES, LATIN_TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS, BG_TEXTURE_NAMES, BG_COLOR_NAMES, BG_GRADE_NAMES, BG_MOTION_NAMES } from "../../src/presets";
 import type { BgStyle } from "../../src/types";
 import {
-  loadProject, saveProject, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
+  loadProject, saveProject, generateThumbnail, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
   browseFolder, type RenderQuality,
   listFonts, deleteProjectFiles, type IngestResult, type FontEntry,
   listMotionPresets, saveMotionPreset, deleteMotionPreset, type MotionPresetEntry,
@@ -1530,7 +1530,15 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           logo, same convention as Figma/Notion) rather than a separate text
           button, so Render/undo/redo/project-name/autosave all fit one row. */}
       <header className="topbar">
-        <button className="topbar-brand" onClick={onBack} title="Back to Dashboard">
+        <button className="topbar-brand"
+          onClick={() => {
+            // Fire-and-forget — the Dashboard card just keeps showing
+            // whatever it showed before until this lands; nothing here
+            // should hold up navigating back.
+            if (project) generateThumbnail(project.projectId).catch(() => {});
+            onBack();
+          }}
+          title="Back to Dashboard">
           <img src="/brand/motionist-icon.svg" alt="" className="topbar-icon" />
           <b>Motionist</b>
         </button>
@@ -2886,6 +2894,35 @@ const DurationPresetField: React.FC<{
   );
 };
 
+// Layer grouping — a small fixed palette of 5 colors, not arbitrary named
+// groups any more (see ContentLayer.groupId's own comment in types.ts). A
+// layer joins a group by clicking its dot; any two layers sharing a color's
+// id move together (position only) when either is dragged on the canvas —
+// that move-together logic already keyed off groupId equality before this,
+// so it's untouched, only the picker UI changed. One dot lit at a time per
+// layer: clicking the SAME lit dot again ungroups it, clicking a different
+// one switches groups outright (a layer belongs to at most one group).
+const GROUP_COLORS: { id: string; color: string; label: string }[] = [
+  { id: "g1", color: "#e0575b", label: "Red" },
+  { id: "g2", color: "#4a90d9", label: "Blue" },
+  { id: "g3", color: "#4caf7d", label: "Green" },
+  { id: "g4", color: "#e0a13a", label: "Orange" },
+  { id: "g5", color: "#9b6fd1", label: "Purple" },
+];
+
+const GroupChips: React.FC<{ value?: string; onChange: (id: string | undefined) => void }> = ({ value, onChange }) => (
+  <div className="group-chips" onClick={(e) => e.stopPropagation()}>
+    {GROUP_COLORS.map((g) => (
+      <button key={g.id} type="button"
+        className={"group-chip" + (value === g.id ? " active" : "")}
+        style={{ background: g.color }}
+        title={value === g.id ? `${g.label} group — click to remove this layer` : `Group with other layers on ${g.label}`}
+        onClick={() => onChange(value === g.id ? undefined : g.id)}
+      />
+    ))}
+  </div>
+);
+
 const ElementMotion: React.FC<{
   layer: LayerT;
   clip: MotionClip | null;
@@ -2914,10 +2951,6 @@ const ElementMotion: React.FC<{
   // textarea once, on mount, so placing text and typing is one continuous
   // motion instead of place-then-hunt-for-the-field.
   autoFocus?: boolean;
-  // Every layer on this page (this one included) — used only to list
-  // existing group names for the Group field's datalist and to count this
-  // layer's own group siblings; not used for rendering.
-  pageLayers?: LayerT[];
   // The layer (by l.index) selected via a canvas click, whatever it is right
   // now — not just whether THIS layer is it. Every ElementMotion watches the
   // same value so a click on any one of them can expand itself AND collapse
@@ -2925,7 +2958,7 @@ const ElementMotion: React.FC<{
   // null, so manual expand/collapse from before this feature existed is
   // left alone.
   selectedLayerIndex?: number | null;
-}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, pageDuration, autoFocus, pageLayers, selectedLayerIndex }) => {
+}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, pageDuration, autoFocus, selectedLayerIndex }) => {
   const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
   const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
   const photoInput = React.useRef<HTMLInputElement>(null);
@@ -2940,14 +2973,6 @@ const ElementMotion: React.FC<{
   }, []);
   const [savingPreset, setSavingPreset] = React.useState(false);
   const [presetName, setPresetName] = React.useState("");
-  // Group-name suggestions — a custom-rendered dropdown, not a native
-  // <input list="..."> datalist. Chromium's native datalist popup is an
-  // OS-compositor overlay whose position it computes itself, and in this
-  // app's window it was showing up detached from the field (mid-screen)
-  // instead of anchored under it — a known Chromium quirk, not something
-  // fixable from this side of the DOM. A plain absolutely-positioned list
-  // under our own CSS sidesteps it entirely.
-  const [showGroupSuggestions, setShowGroupSuggestions] = React.useState(false);
   const commitSavePreset = () => {
     const name = presetName.trim();
     if (!name || !onSaveMotionPreset) return;
@@ -3065,6 +3090,14 @@ const ElementMotion: React.FC<{
         </div>
       </div>
 
+      {/* Group dots — always visible (collapsed or expanded), not buried
+          behind expanding the layer, so grouping stays a one-click action.
+          See GroupChips/GROUP_COLORS above. */}
+      <div className="row" style={{ gap: 6, alignItems: "center", padding: "6px 12px", borderBottom: "1px solid var(--line)" }}>
+        <span className="hint" style={{ margin: 0, flexShrink: 0 }}>Group</span>
+        <GroupChips value={layer.groupId} onChange={(id) => onChange((l) => { l.groupId = id; })} />
+      </div>
+
       {!expanded && (
         <p className="hint" style={{ margin: "4px 0 0" }}>
           {layer.entrance !== "none" || (layer.exit && layer.exit !== "none")
@@ -3075,44 +3108,6 @@ const ElementMotion: React.FC<{
 
       {expanded && (
       <>
-      {/* Layer group — plain shared name, not a real nested transform. Any
-          two layers on this page sharing the same name move together
-          (position only) when either is dragged on the canvas. A custom
-          suggestion list (not a native <input list> datalist — see
-          showGroupSuggestions above) so typing an EXISTING name joins that
-          group and typing a new one starts a fresh one, in the same field. */}
-      <div className="row mini" style={{ gap: 6, alignItems: "center", padding: "8px 12px", borderBottom: "1px solid var(--line)", position: "relative" }}>
-        <label style={{ margin: 0, flexShrink: 0 }} title="Layers sharing the same group name move together when you drag any one of them on the canvas — position only, not size">Group</label>
-        <input type="text" value={layer.groupId ?? ""} placeholder="none (ungrouped)"
-          style={{ flex: 1 }}
-          onFocus={() => setShowGroupSuggestions(true)}
-          onBlur={() => setTimeout(() => setShowGroupSuggestions(false), 150)}
-          onChange={(e) => onChange((l) => { l.groupId = e.target.value.trim() || undefined; })} />
-        {layer.groupId && (
-          <button className="btn small" title="Remove from group" onClick={() => onChange((l) => { l.groupId = undefined; })}>✕</button>
-        )}
-        {showGroupSuggestions && (() => {
-          const names = Array.from(new Set((pageLayers ?? []).map((l) => l.groupId).filter((g): g is string => !!g)))
-            .filter((g) => g !== layer.groupId);
-          if (names.length === 0) return null;
-          return (
-            <div className="card compact" style={{
-              position: "absolute", left: 12, right: 12, top: "100%", marginTop: 2, zIndex: 5,
-              padding: 4, maxHeight: 140, overflowY: "auto",
-            }}>
-              {names.map((g) => (
-                // onMouseDown (not onClick) fires BEFORE the input's onBlur,
-                // so the click actually lands instead of the list vanishing
-                // out from under the pointer first.
-                <div key={g} className="btn small" style={{ width: "100%", textAlign: "left", marginBottom: 2 }}
-                  onMouseDown={(e) => { e.preventDefault(); onChange((l) => { l.groupId = g; }); setShowGroupSuggestions(false); }}>
-                  {g}
-                </div>
-              ))}
-            </div>
-          );
-        })()}
-      </div>
       <div className="el-body">
         <div className="el-rail">
           <button className={"el-rail-btn" + (panel === "content" ? " active" : "")}
@@ -3831,7 +3826,6 @@ const PageInspector: React.FC<{
               selectedLayerIndex={selectedLayerIndex}
               canvas={canvas}
               pageDuration={page.durationInFrames}
-              pageLayers={page.layers}
               onDelete={() => onDeleteLayer(li)} />
           )).reverse()}
         </>
