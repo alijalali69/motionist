@@ -439,6 +439,8 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   // dock's three-button row triggered, just tucked behind ▾ now that the
   // filmstrip is a permanent bar and can't spare a whole button row.
   const [showAddPageMenu, setShowAddPageMenu] = React.useState(false);
+  // Account menu — placeholder items only, see the topbar's acctwrap below.
+  const [showAcctMenu, setShowAcctMenu] = React.useState(false);
   const [showSafeZone, setShowSafeZone] = React.useState(false);
   const [showInstagramUI, setShowInstagramUI] = React.useState(false);
   // A photo layer's own frame is now freely draggable/resizable (plain drag)
@@ -1510,6 +1512,25 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               )}
             </div>
           )}
+          {/* Account slot — a visual placeholder for when login ships, not
+              wired to anything real yet. Reserving the spot now (top-right,
+              same place every app like this puts it) means it isn't a
+              bolt-on the day auth actually lands. */}
+          <div className="acctwrap">
+            <button type="button" className="acct-avatar" title="Account" onClick={() => setShowAcctMenu((v) => !v)}>
+              {(project?.name || "M").trim().slice(0, 1).toUpperCase()}
+            </button>
+            {showAcctMenu && (
+              <>
+                <div className="dropdown-catcher" onClick={() => setShowAcctMenu(false)} />
+                <div className="acct-menu card compact" onClick={(e) => e.stopPropagation()}>
+                  <a className="acct-menu-item" aria-disabled="true">Account</a>
+                  <a className="acct-menu-item" aria-disabled="true">Preferences</a>
+                  <a className="acct-menu-item danger" aria-disabled="true">Log out</a>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
       <div className="workspace">

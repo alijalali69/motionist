@@ -735,6 +735,26 @@ input.topbar-proj-name:focus { border-color: var(--accent); background: var(--pa
 input.topbar-proj-name::placeholder { color: var(--muted); font-weight: 600; }
 .topbar-spacer { flex: 1; }
 .topbar-acts { display: flex; align-items: center; gap: 8px; }
+
+/* Account slot — placeholder for when login ships (see the topbar JSX
+   comment). Initial-letter avatar, same idea as every app that shows a
+   circle with your first letter before it has a real photo to show. */
+.acctwrap { position: relative; }
+.acct-avatar {
+  width: 26px; height: 26px; border-radius: 50%; border: none; cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), #7a5cff);
+  color: #04121f; font-family: var(--mono); font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.acct-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; width: 170px; z-index: 41;
+  padding: 5px;
+}
+.acct-menu-item {
+  display: block; padding: 7px 9px; font-size: 12px; color: var(--text);
+  border-radius: 6px; cursor: default; opacity: 0.55;
+}
+.acct-menu-item.danger { color: var(--warn); }
 /* Autosave status — small and ambient (Google Docs/Figma style), not a
    banner: "Saved" is the calm/expected state, "Unsaved" is transient
    (the debounce window before the next autosave fires), never an error. */
