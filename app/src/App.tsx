@@ -3564,11 +3564,13 @@ const PageInspector: React.FC<{
 }> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex, selectedLayerIndex }) => {
   // Duration/bg/ambient/transition/subtitle vs. the layer list were one long
   // stacked scroll before — split so each is reachable without scrolling
-  // past the other. Resets to "Page" on every page switch (this component
-  // remounts per page.id at its call site), which is the more useful default
-  // — you land on a newly-selected page's own settings, not wherever the
-  // last page's tab happened to be.
-  const [tab, setTab] = React.useState<"page" | "elements">("page");
+  // past the other. Defaults to "Elements" — this whole inspector is only
+  // reachable through the rail's "Layers" icon now, so landing on "Page"
+  // first (duration/bg-color/ambient/transition, no layers in sight) read
+  // as "the layers panel doesn't show any layers." Resets to this default
+  // on every mount (page switch, or the dock itself closing and reopening,
+  // since this component unmounts along with it either way).
+  const [tab, setTab] = React.useState<"page" | "elements">("elements");
   // A canvas click always means "show me that element," even if this
   // inspector is currently sitting on the Page tab.
   React.useEffect(() => {
