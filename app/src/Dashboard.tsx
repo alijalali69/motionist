@@ -1,6 +1,7 @@
 import React from "react";
 import {
   listProjects, createProject, deleteProject, duplicateProject, type ProjectSummary,
+  loadProject, saveProject,
   listFonts, uploadFontToLibrary, deleteFont, type FontEntry,
   listSizePresets, saveSizePreset, deleteSizePreset, type SizePresetEntry,
 } from "./api";
@@ -195,6 +196,12 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
   const [err, setErr] = React.useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState<string | null>(null);
   const [duplicatingId, setDuplicatingId] = React.useState<string | null>(null);
+  // Rename — double-click a card's name (same convention as renaming a
+  // layer in the editor). Only one card renames at a time, same pattern
+  // confirmDelete/duplicatingId already use for "which card, right now."
+  const [renamingId, setRenamingId] = React.useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = React.useState("");
+  const [renameBusy, setRenameBusy] = React.useState(false);
   const [managingFonts, setManagingFonts] = React.useState(false);
   const [sizeIdx, setSizeIdx] = React.useState(0); // index into SIZE_PRESETS, or -1 for custom (customW/customH)
   const [customW, setCustomW] = React.useState(1080);
@@ -284,12 +291,43 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
 
   // Stays on the Dashboard (doesn't open the copy) — same "confirm what
   // happened, let the user pick when to dive in" spirit as delete not
-  // opening anything either. The new card just appears in the grid.
+  // opening anything either. The new card just appears in the grid, already
+  // in rename mode — the server can only name it "<original> copy", and
+  // that's not a name anyone actually wants to keep.
   const doDuplicate = async (id: string) => {
     setDuplicatingId(id);
-    try { await duplicateProject(id); refresh(); }
+    try {
+      const copy = await duplicateProject(id);
+      refresh();
+      setRenamingId(copy.projectId);
+      setRenameDraft(copy.name);
+    }
     catch (e: any) { setErr(String(e.message || e)); }
     finally { setDuplicatingId(null); }
+  };
+
+  // Dashboard only has the lightweight ProjectSummary list, no dedicated
+  // rename endpoint — reuses the same load-full-project -> edit -> save
+  // round trip the editor's own topbar name field triggers, just from here
+  // instead. Optimistic on the list (renames immediately in the grid; if
+  // the save fails, the next refresh() would show the real name again).
+  const doRename = async (id: string) => {
+    const name = renameDraft.trim();
+    setRenamingId(null);
+    if (!name) return;
+    const current = projects?.find((p) => p.id === id);
+    if (current && current.name === name) return;
+    setProjects((list) => list && list.map((p) => (p.id === id ? { ...p, name } : p)));
+    setRenameBusy(true);
+    try {
+      const project = await loadProject(id);
+      if (project) { project.name = name; await saveProject(project); }
+    } catch (e: any) {
+      setErr(String(e.message || e));
+      refresh(); // undo the optimistic rename if the save actually failed
+    } finally {
+      setRenameBusy(false);
+    }
   };
 
   return (
@@ -304,7 +342,6 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
         </div>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn" onClick={() => setManagingFonts(true)}>🔤 Fonts</button>
-          <button className="btn primary" onClick={() => startCreate(SIZE_PRESETS[0].w, SIZE_PRESETS[0].h, 0)}>+ New project</button>
         </div>
       </div>
 
@@ -369,8 +406,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
         <div className="dash-empty">
           <div className="dash-empty-icon">🎬</div>
           <h2>No projects yet</h2>
-          <p className="sub">Create your first project to start turning a PSD/SVG design into a reel.</p>
-          <button className="btn primary" onClick={() => startCreate(SIZE_PRESETS[0].w, SIZE_PRESETS[0].h, 0)}>+ New project</button>
+          <p className="sub">Pick a size above to create your first project — turn a PSD/SVG design into a reel.</p>
         </div>
       )}
 
@@ -411,7 +447,38 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
                 )}
               </div>
               <div className="project-meta">
-                <div className="project-name" title={p.name}>{p.name}</div>
+                {renamingId === p.id ? (
+                  <input
+                    className="project-name-input"
+                    autoFocus
+                    value={renameDraft}
+                    disabled={renameBusy}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setRenameDraft(e.target.value)}
+                    onBlur={() => doRename(p.id)}
+                    onKeyDown={(e) => {
+                      // Calls doRename directly (not just .blur() and letting
+                      // onBlur pick it up) — Enter should commit even in the
+                      // rare case blur doesn't fire for some reason; doRename
+                      // itself is safe to call twice (it clears renamingId
+                      // first thing, so a blur landing right after this is a
+                      // no-op the second time).
+                      if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); doRename(p.id); }
+                      if (e.key === "Escape") { setRenamingId(null); }
+                    }}
+                  />
+                ) : (
+                  <div className="project-name" title={`${p.name} — double-click to rename`}
+                    // A double-click is two click events — stopping
+                    // propagation only on dblclick stops the SECOND one;
+                    // the first would already have bubbled up to the card's
+                    // own onClick and opened the project before rename mode
+                    // ever got a chance to start. Both need it.
+                    onClick={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => { e.stopPropagation(); setRenameDraft(p.name); setRenamingId(p.id); }}>
+                    {p.name}
+                  </div>
+                )}
                 <div className="project-sub">
                   {p.pageCount} page{p.pageCount === 1 ? "" : "s"} · {p.width}×{p.height} · {timeAgo(p.updatedAt)}
                 </div>
