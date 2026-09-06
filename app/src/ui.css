@@ -21,21 +21,20 @@
 
 * { box-sizing: border-box; }
 
-/* Transport row — now just a plain flex row, no border/background/padding of
-   its own; it lives inside .transport-card (see below) alongside the zoom/
-   safe-zone row instead of being its own separate box stacked on top of it. */
+/* One long row under the preview — play/time/seek/fullscreen, then zoom%/
+   mute/safe-zone/Instagram-UI right after Fullscreen (passed in as
+   children), all in the same bar instead of stacked across two boxes. */
 .player-controls {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-}
-/* The merged card: transport row, then the zoom/safe-zone row below a thin
-   divider — one box under the canvas instead of two stacked ones. */
-.transport-card { display: flex; flex-direction: column; gap: 8px; }
-.transport-card .fn-row {
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
+  max-width: 560px;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 .player-controls .btn.small { flex: none; padding: 4px 10px; font-size: 14px; }
 .pc-time { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }

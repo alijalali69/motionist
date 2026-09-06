@@ -364,7 +364,11 @@ const PlayerControls: React.FC<{
   playerRef: React.RefObject<PlayerRef>;
   durationInFrames: number;
   fps: number;
-}> = ({ playerRef, durationInFrames, fps }) => {
+  // Zoom%/safe-zone/Instagram-UI toggles — rendered right after Fullscreen,
+  // in the same row. Passed in rather than built here since they're driven
+  // by state that lives in the Editor, not this component.
+  children?: React.ReactNode;
+}> = ({ playerRef, durationInFrames, fps, children }) => {
   const [frame, setFrame] = React.useState(0);
   const [playing, setPlaying] = React.useState(false);
   const [fullscreen, setFullscreen] = React.useState(false);
@@ -399,9 +403,11 @@ const PlayerControls: React.FC<{
         className="pc-seek"
         onChange={(e) => playerRef.current?.seekTo(parseInt(e.target.value, 10))}
       />
-      <button className="btn small" onClick={() => (fullscreen ? playerRef.current?.exitFullscreen() : playerRef.current?.requestFullscreen())} title="Fullscreen">
-        ⛶
+      <button className="btn small icon" onClick={() => (fullscreen ? playerRef.current?.exitFullscreen() : playerRef.current?.requestFullscreen())}
+        title={fullscreen ? "Exit fullscreen" : "Fullscreen"} aria-pressed={fullscreen}>
+        {fullscreen ? <FullscreenExitIcon /> : <FullscreenEnterIcon />}
       </button>
+      {children}
     </div>
   );
 };
@@ -1831,9 +1837,9 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           </div>
         ) : <p className="sub">Loading…</p>}
         </div>
-        {/* Transport (play/time/seek/fullscreen) and the zoom/safe-zone row
-            used to be two separate stacked cards — merged into one, the
-            transport row on top, the other below a thin divider. */}
+        {/* One long row now — was transport (play/time/seek/fullscreen) plus
+            a second stacked row for zoom/safe-zone/Instagram-UI/mute; those
+            now render as children right after Fullscreen, in the same bar. */}
         {project && (() => {
           // The function panel's own mute button controls whichever video is
           // actually on this page — a page carries at most one main visual
@@ -1846,58 +1852,53 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           );
           const videoLayer = videoLayerIndex >= 0 ? pageLayers[videoLayerIndex] : null;
           return (
-          <div className="card compact transport-card" style={{ maxWidth: 420, width: "100%", flexShrink: 0 }}>
-            <PlayerControls playerRef={playerRef} durationInFrames={reelDuration(project)} fps={project.fps} />
-            {/* Meta's published Reels/Stories safe margins only mean anything
-                on a portrait canvas — showing them over a landscape/square
-                project would just be wrong, not merely irrelevant. Always
-                rendered otherwise (not just for portrait/photo-pan projects)
-                — the zoom% readout on its right edge is the one place the
-                user can always see the artboard's current zoom, at any
-                project shape, at any zoom level including 100%. */}
-            <div className="fn-row" style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 4, alignItems: "center" }}>
-              <div className="row" style={{ gap: 4, justifySelf: "start" }}>
-                {project.height > project.width && (
-                  <>
-                    <button className={"btn small icon" + (showSafeZone ? " active" : "")}
-                      title={showSafeZone ? "Hide Instagram Reels safe zone (guide only — never rendered in export)" : "Show Instagram Reels safe zone (guide only — never rendered in export)"}
-                      aria-label="Toggle Instagram Reels safe zone guide" aria-pressed={showSafeZone}
-                      onClick={() => setShowSafeZone((v) => !v)}>
-                      <SafeZoneToggleIcon />
-                    </button>
-                    <button className={"btn small icon" + (showInstagramUI ? " active" : "")}
-                      title={showInstagramUI ? "Hide Instagram Reels UI preview (stylized mockup — never rendered in export)" : "Show Instagram Reels UI preview (stylized mockup — never rendered in export)"}
-                      aria-label="Toggle Instagram Reels UI preview" aria-pressed={showInstagramUI}
-                      onClick={() => setShowInstagramUI((v) => !v)}>
-                      <InstagramUiToggleIcon />
-                    </button>
-                  </>
-                )}
-              </div>
-              <div style={{ justifySelf: "center" }}>
-                {videoLayer && (
-                  <button className={"btn small icon" + (videoLayer.videoMuted ? "" : " active")}
-                    title={videoLayer.videoMuted ? "Muted — click to play with sound (in preview and export)" : "Playing with sound — click to mute (in preview and export)"}
-                    aria-label="Toggle this page's video sound" aria-pressed={!videoLayer.videoMuted}
-                    onClick={() => update((p) => {
-                      const l = p.pages[sel].layers[videoLayerIndex];
-                      l.videoMuted = !l.videoMuted;
-                    })}>
-                    {videoLayer.videoMuted ? <SoundOffIcon /> : <SoundOnIcon />}
-                  </button>
-                )}
-              </div>
+          <>
+            <PlayerControls playerRef={playerRef} durationInFrames={reelDuration(project)} fps={project.fps}>
+              {/* Zoom% right after Fullscreen — the one place the user can
+                  always see the artboard's current zoom, at any project
+                  shape, at any zoom level including 100%. */}
               <button className="btn small" title="Canvas zoom — Ctrl+wheel over the preview to adjust, click to reset to 100%"
-                onClick={() => setZoom(1)} style={{ fontVariantNumeric: "tabular-nums", justifySelf: "end" }}>
+                onClick={() => setZoom(1)} style={{ fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
                 {Math.round(zoom * 100)}%
               </button>
-            </div>
+              {videoLayer && (
+                <button className={"btn small icon" + (videoLayer.videoMuted ? "" : " active")}
+                  title={videoLayer.videoMuted ? "Muted — click to play with sound (in preview and export)" : "Playing with sound — click to mute (in preview and export)"}
+                  aria-label="Toggle this page's video sound" aria-pressed={!videoLayer.videoMuted}
+                  onClick={() => update((p) => {
+                    const l = p.pages[sel].layers[videoLayerIndex];
+                    l.videoMuted = !l.videoMuted;
+                  })}>
+                  {videoLayer.videoMuted ? <SoundOffIcon /> : <SoundOnIcon />}
+                </button>
+              )}
+              {/* Meta's published Reels/Stories safe margins only mean
+                  anything on a portrait canvas — showing them over a
+                  landscape/square project would just be wrong, not merely
+                  irrelevant. */}
+              {project.height > project.width && (
+                <>
+                  <button className={"btn small icon" + (showSafeZone ? " active" : "")}
+                    title={showSafeZone ? "Hide Instagram Reels safe zone (guide only — never rendered in export)" : "Show Instagram Reels safe zone (guide only — never rendered in export)"}
+                    aria-label="Toggle Instagram Reels safe zone guide" aria-pressed={showSafeZone}
+                    onClick={() => setShowSafeZone((v) => !v)}>
+                    <SafeZoneToggleIcon />
+                  </button>
+                  <button className={"btn small icon" + (showInstagramUI ? " active" : "")}
+                    title={showInstagramUI ? "Hide Instagram Reels UI preview (stylized mockup — never rendered in export)" : "Show Instagram Reels UI preview (stylized mockup — never rendered in export)"}
+                    aria-label="Toggle Instagram Reels UI preview" aria-pressed={showInstagramUI}
+                    onClick={() => setShowInstagramUI((v) => !v)}>
+                    <InstagramUiToggleIcon />
+                  </button>
+                </>
+              )}
+            </PlayerControls>
             {photoPanTargets.length > 0 && (
               <p className="hint" style={{ margin: 0, textAlign: "center" }}>
                 Hold <b>Alt</b> and drag a photo to reposition its crop inside its frame instead of moving the frame itself
               </p>
             )}
-          </div>
+          </>
           );
         })()}
         {/* Render result — done/error, shown right under the merged
@@ -2481,6 +2482,19 @@ const SafeZoneToggleIcon: React.FC = () => (
 const InstagramUiToggleIcon: React.FC = () => (
   <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
     <path d="M7.5 12.5c-.13 0-.27-.03-.38-.11C4.4 10.8 1.5 8.7 1.5 5.9 1.5 3.9 3 2.5 4.9 2.5c1 0 1.9.5 2.6 1.3.7-.8 1.6-1.3 2.6-1.3 1.9 0 3.4 1.4 3.4 3.4 0 2.8-2.9 4.9-5.62 6.49-.11.08-.25.11-.38.11z" />
+  </svg>
+);
+// Fullscreen toggle — corner brackets pointing outward (enter) vs. the same
+// brackets pulled in toward center (exit), same "state actually changes the
+// glyph" convention as SoundOnIcon/SoundOffIcon above, not just a color swap.
+const FullscreenEnterIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+    <path d="M1.5 4.5v-3h3M13.5 4.5v-3h-3M1.5 10.5v3h3M13.5 10.5v3h-3" />
+  </svg>
+);
+const FullscreenExitIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+    <path d="M4.5 1.5v3h-3M10.5 1.5v3h3M4.5 13.5v-3h-3M10.5 13.5v-3h3" />
   </svg>
 );
 // A video's own Sound toggle — same speaker glyph either way, sound-wave
