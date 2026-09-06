@@ -207,7 +207,11 @@ body {
 .addmenu {
   position: absolute;
   bottom: 38px;
-  right: 0;
+  /* left, not right — .addpage sits right after the last page card, which
+     with few pages is near the LEFT edge of the bar; right:0 pinned the
+     menu's right edge to the button and it opened leftward off-screen
+     (negative x, invisible) instead of into the empty space to the right. */
+  left: 0;
   width: 170px;
   background: var(--panel2);
   border: 1px solid var(--line);
