@@ -118,12 +118,12 @@ body {
    Canva's own landscape ones — matches this app's actual reel shape. */
 .filmstrip {
   flex: none;
-  height: 105px;
+  height: 85px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 14px;
+  padding: 6px 14px;
   background: var(--panel);
   border-top: 1px solid var(--line);
 }
@@ -145,18 +145,18 @@ body {
 .filmstrip-scroll.over { outline: 2px dashed var(--accent2); outline-offset: -2px; border-radius: 6px; }
 .pagecard {
   flex: none;
-  width: 38px;
+  width: 28px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   cursor: pointer;
   position: relative;
 }
 .pagethumb {
-  width: 38px;
+  width: 28px;
   aspect-ratio: 9 / 16;
-  border-radius: 5px;
+  border-radius: 4px;
   border: 1.5px solid var(--line);
   background: var(--panel2);
 }
