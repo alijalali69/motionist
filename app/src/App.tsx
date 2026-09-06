@@ -433,14 +433,19 @@ const FilmstripPageCard = React.memo<{
   onDragOverCard: (i: number) => void;
   onDropCard: (fromIndex: number, toIndex: number) => void;
   onDragEndCard: () => void;
-  onSaveTemplate: (i: number) => void;
-  onDelete: (i: number) => void;
-}>(({ project, page, index, selected, isDragging, isDragOver, onSelect, onDragStartCard, onDragOverCard, onDropCard, onDragEndCard, onSaveTemplate, onDelete }) => {
+  // The actions pill itself is a single shared element rendered at the
+  // .filmstrip level (see below) — this just reports "I'm hovered, here's
+  // my rect" up so that shared element knows whether to show and where.
+  onHoverCard: (index: number, rect: DOMRect) => void;
+  onUnhoverCard: () => void;
+}>(({ project, page, index, selected, isDragging, isDragOver, onSelect, onDragStartCard, onDragOverCard, onDropCard, onDragEndCard, onHoverCard, onUnhoverCard }) => {
   return (
     <div
       className={"pagecard" + (selected ? " active" : "") + (isDragOver ? " drag-over" : "")}
       draggable
       onClick={() => onSelect(index)}
+      onMouseEnter={(e) => onHoverCard(index, e.currentTarget.getBoundingClientRect())}
+      onMouseLeave={onUnhoverCard}
       onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(index)); onDragStartCard(index); }}
       onDragOver={(e) => { e.preventDefault(); onDragOverCard(index); }}
       onDrop={(e) => {
@@ -471,17 +476,6 @@ const FilmstripPageCard = React.memo<{
           fps={project.fps}
           style={{ width: "100%", height: "100%" }}
         />
-        {/* Overlaid on the thumbnail itself on hover, not a popup escaping
-            above the card — that used to poke outside .filmstrip-scroll's
-            own box, which (overflow-x:auto silently computes overflow-y to
-            auto too) could trigger a real vertical scroll/jump this bar was
-            never meant to have at all. */}
-        <div className="pagecard-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="btn small" title="Save this page's layout as a reusable template" onClick={() => onSaveTemplate(index)}>
-            <TemplateIcon />
-          </button>
-          <button className="btn small" title="Delete page" onClick={() => onDelete(index)}>✕</button>
-        </div>
       </div>
       <span className="pagecard-n">{index + 1}</span>
     </div>
@@ -512,6 +506,24 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   // nowhere near the storyboard strip's old per-frame-of-scroll concern.
   const [draggingPageIndex, setDraggingPageIndex] = React.useState<number | null>(null);
   const [dragOverPageIndex, setDragOverPageIndex] = React.useState<number | null>(null);
+  // Filmstrip's save-as-template/delete pill — one shared element (position:
+  // fixed, placed from the hovered card's own rect) instead of one per card,
+  // so it never has to live inside .filmstrip-scroll's clipping box at all
+  // (that's what caused the hover-scroll bug: the old per-card popup
+  // escaped that box, which is silently overflow-y:hidden/auto no matter
+  // what — see .pagecard-actions in ui.css). A short close delay (cleared
+  // if either the card or the pill itself gets re-entered) covers the
+  // small screen-space gap between the card and the pill sitting just
+  // above it, so moving the mouse from one to the other doesn't close it.
+  const [hoverPageCard, setHoverPageCard] = React.useState<{ index: number; rect: DOMRect } | null>(null);
+  const hoverCloseTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showHoverPageCard = (index: number, rect: DOMRect) => {
+    if (hoverCloseTimer.current) { clearTimeout(hoverCloseTimer.current); hoverCloseTimer.current = null; }
+    setHoverPageCard({ index, rect });
+  };
+  const scheduleHideHoverPageCard = () => {
+    hoverCloseTimer.current = setTimeout(() => setHoverPageCard(null), 150);
+  };
   const [motionClip, setMotionClip] = React.useState<MotionClip | null>(null);
   // Page-layout template library — a whole saved page (layers, boxes,
   // motion, its own bg style), reusable across any project. `null` =
@@ -2071,15 +2083,40 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                 setDragOverPageIndex(null);
               }}
               onDragEndCard={() => { setDraggingPageIndex(null); setDragOverPageIndex(null); }}
-              onSaveTemplate={(idx) => {
-                setSavingTemplateFor(idx);
-                setTemplateName(pg.name ? `${pg.name} layout` : "My layout");
-                setTemplateErr(null);
-              }}
-              onDelete={delPage}
+              onHoverCard={showHoverPageCard}
+              onUnhoverCard={scheduleHideHoverPageCard}
             />
           ))}
         </div>
+        {/* Save-as-template / delete — one shared pill for whichever card is
+            hovered, positioned from its real rect (see hoverPageCard state
+            above for why this isn't just a per-card CSS :hover reveal any
+            more). */}
+        {hoverPageCard && project?.pages[hoverPageCard.index] && (
+          <div className="pagecard-actions"
+            style={{
+              left: hoverPageCard.rect.left + hoverPageCard.rect.width / 2,
+              bottom: window.innerHeight - hoverPageCard.rect.top + 4,
+              transform: "translateX(-50%)",
+            }}
+            onMouseEnter={() => { if (hoverCloseTimer.current) { clearTimeout(hoverCloseTimer.current); hoverCloseTimer.current = null; } }}
+            onMouseLeave={scheduleHideHoverPageCard}
+          >
+            <button className="btn small" title="Save this page's layout as a reusable template"
+              onClick={() => {
+                const idx = hoverPageCard.index;
+                const pg = project.pages[idx];
+                setSavingTemplateFor(idx);
+                setTemplateName(pg.name ? `${pg.name} layout` : "My layout");
+                setTemplateErr(null);
+                setHoverPageCard(null);
+              }}>
+              <TemplateIcon />
+            </button>
+            <button className="btn small" title="Delete page"
+              onClick={() => { delPage(hoverPageCard.index); setHoverPageCard(null); }}>✕</button>
+          </div>
+        )}
         <div className="addpage">
           <button type="button" title="Add a blank page" onClick={onAddBlankPage}>+</button>
           <div className="addpagediv" />
