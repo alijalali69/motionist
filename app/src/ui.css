@@ -112,6 +112,104 @@ body {
 .dock-right.open { border-left-color: var(--line); }
 .dockbody { padding: 16px; }
 
+/* Bottom page filmstrip — a permanent bar (no rail icon, no dock) below
+   .workspace, same spot Canva puts theirs. Vertical 9:16 cards, not
+   Canva's own landscape ones — matches this app's actual reel shape. */
+.filmstrip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+.filmstrip-scroll {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px;
+}
+.filmstrip-scroll.over { outline: 2px dashed var(--accent2); outline-offset: -2px; border-radius: 6px; }
+.pagecard {
+  flex: none;
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  position: relative;
+}
+.pagethumb {
+  width: 40px;
+  aspect-ratio: 9 / 16;
+  border-radius: 5px;
+  border: 1.5px solid var(--line);
+  background: var(--panel2);
+}
+.pagecard.active .pagethumb { border-color: var(--accent2); box-shadow: 0 0 0 3px rgba(62,166,255,0.18); }
+.pagecard-n { font-family: var(--mono); font-size: 9px; color: var(--muted); }
+.pagecard.active .pagecard-n { color: var(--accent2); }
+/* Reorder/template/delete — same 4 actions the old Pages list row always
+   showed, now revealed only on hover so a card at rest is just a thumbnail,
+   not a thumbnail wearing 4 buttons. */
+.pagecard-actions {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 4px;
+  display: none;
+  gap: 2px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+  z-index: 5;
+}
+.pagecard:hover .pagecard-actions, .pagecard:focus-within .pagecard-actions { display: flex; }
+.pagecard-actions .btn.small { padding: 3px 5px; }
+.addpage {
+  flex: none;
+  display: flex;
+  align-items: center;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  position: relative;
+}
+.addpage button {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: 20px;
+}
+.addpage button:hover { background: var(--panel); }
+.addpagediv { width: 1px; height: 16px; background: var(--line); }
+.addmenu {
+  position: absolute;
+  bottom: 38px;
+  right: 0;
+  width: 170px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px;
+  box-shadow: 0 16px 34px rgba(0,0,0,0.5);
+  z-index: 41;
+}
+.addmenu a { display: block; padding: 7px 9px; font-size: 12px; color: var(--text); border-radius: 5px; cursor: pointer; }
+.addmenu a:hover { background: var(--panel); }
+
 /* Draggable divider between an open dock and the center preview — widths
    themselves are inline styles (React state, persisted to localStorage), this
    just needs to be grabbable and show it's grabbable. Only rendered while

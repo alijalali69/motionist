@@ -434,6 +434,11 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [templateName, setTemplateName] = React.useState("");
   const [templateBusy, setTemplateBusy] = React.useState(false);
   const [templateErr, setTemplateErr] = React.useState<string | null>(null);
+  // The bottom filmstrip's "+" dropdown — the three ways to add a page
+  // (blank / import sequence / from template), same actions the old Pages
+  // dock's three-button row triggered, just tucked behind ▾ now that the
+  // filmstrip is a permanent bar and can't spare a whole button row.
+  const [showAddPageMenu, setShowAddPageMenu] = React.useState(false);
   const [showSafeZone, setShowSafeZone] = React.useState(false);
   const [showInstagramUI, setShowInstagramUI] = React.useState(false);
   // A photo layer's own frame is now freely draggable/resizable (plain drag)
@@ -505,9 +510,13 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   // un-pressed and no dock shows at all (the rail itself, ~52px, is the only
   // permanent thing now). Clicking the already-active rail icon again closes
   // its dock, same "click again to turn it off" convention as the Text tool.
-  const [activeLeftDock, setActiveLeftDock] = React.useState<"pages" | "assets" | null>(() => {
-    const v = localStorage.getItem("motionist:leftDock");
-    return v === "pages" || v === "assets" ? v : "pages";
+  const [activeLeftDock, setActiveLeftDock] = React.useState<"assets" | null>(() => {
+    // Pages moved to the bottom filmstrip (always there — no rail icon or
+    // dock needed for it any more), so Assets is the only left-dock option;
+    // defaults closed, same "canvas gets the space until you ask for a
+    // panel" default the right dock's Layers option doesn't get (that one
+    // still defaults open — see below).
+    return localStorage.getItem("motionist:leftDock") === "assets" ? "assets" : null;
   });
   const [activeRightDock, setActiveRightDock] = React.useState<"layers" | null>(() => {
     // Only one right-dock option exists yet (Style/Effects/Position land in
@@ -516,7 +525,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   });
   React.useEffect(() => { localStorage.setItem("motionist:leftDock", activeLeftDock ?? ""); }, [activeLeftDock]);
   React.useEffect(() => { localStorage.setItem("motionist:rightDock", activeRightDock ?? ""); }, [activeRightDock]);
-  const toggleLeftDock = (which: "pages" | "assets") =>
+  const toggleLeftDock = (which: "assets") =>
     setActiveLeftDock((cur) => (cur === which ? null : which));
   const toggleRightDock = (which: "layers") =>
     setActiveRightDock((cur) => (cur === which ? null : which));
@@ -1505,10 +1514,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       </header>
       <div className="workspace">
       <nav className="rail">
-        <button type="button" className={"rail-btn" + (activeLeftDock === "pages" ? " active" : "")}
-          title="Pages" onClick={() => toggleLeftDock("pages")}>
-          <PageIcon /><span>Pages</span>
-        </button>
         <button type="button" className={"rail-btn" + (activeLeftDock === "assets" ? " active" : "")}
           title="Global assets" onClick={() => toggleLeftDock("assets")}>
           <BgTileIcon /><span>Assets</span>
@@ -1542,123 +1547,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           never both, never neither's content lingering underneath. */}
       <aside className={"dock dock-left" + (activeLeftDock ? " open" : "")}
         style={{ width: activeLeftDock ? leftW : 0 }}>
-        {activeLeftDock === "pages" && (
-        <div className="dockbody">
-        {/* Where the content comes from, not what it looks like when you're
-            done: Sequence pulls in already-designed pages (PSD/SVG/photo,
-            in filename order); Page starts one empty page you build here
-            with the Text/Photo/Shape toolbar below. Equal weight now that
-            neither is more "primary" than the other. */}
-        <div className="row" style={{ gap: 6 }}>
-          <button className="btn" style={{ flex: 1 }} title="Add sequence — import PSD/SVG/photo files as pre-designed pages, in filename order"
-            onClick={() => psdInput.current?.click()}>
-            <SequenceIcon /><span>Sequence</span>
-          </button>
-          <button className="btn" style={{ flex: 1 }} title="Add page — start blank, then add text, photo, or shapes yourself"
-            onClick={onAddBlankPage}>
-            <PageIcon /><span>Page</span>
-          </button>
-          <button className="btn" style={{ flex: 1 }} title="Insert a saved page layout — its own layers, boxes, and motion, reusable across any project"
-            onClick={() => { setShowTemplatePicker(true); if (pageTemplates === null) listPageTemplates().then(setPageTemplates).catch(() => setPageTemplates([])); }}>
-            <TemplateIcon /><span>Template</span>
-          </button>
-        </div>
-
-        <h2>Pages</h2>
-        <div
-          className={"dropzone" + (dragOver ? " over" : "")}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault(); setDragOver(false);
-            if (e.dataTransfer.files?.length) onAddPages(e.dataTransfer.files);
-          }}
-        >
-          {!project?.pages.length && <p className="hint">No pages yet. Add PSDs/SVGs, or drag them here.</p>}
-          {project?.pages.map((pg, i) => (
-          <div key={pg.id} className={"card page-item row between" + (i === sel ? " active" : "")}
-            onClick={() => selectPage(i)}>
-            <div className="row" style={{ gap: 8, minWidth: 0 }}>
-              <span className="thumbnum">{i + 1}</span>
-              <span style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                title={pg.name ?? pg.id}>{pg.name ?? pg.id}</span>
-            </div>
-            <div className="row" style={{ gap: 4 }}>
-              <button className="btn small" title="Save this page's layout as a reusable template"
-                onClick={(e) => { e.stopPropagation(); setSavingTemplateFor(i); setTemplateName(pg.name ? `${pg.name} layout` : "My layout"); setTemplateErr(null); }}>
-                <TemplateIcon />
-              </button>
-              <button className="btn small" onClick={(e) => { e.stopPropagation(); movePage(i, -1); }}>↑</button>
-              <button className="btn small" onClick={(e) => { e.stopPropagation(); movePage(i, 1); }}>↓</button>
-              <button className="btn small" onClick={(e) => { e.stopPropagation(); delPage(i); }}>✕</button>
-            </div>
-          </div>
-          ))}
-        </div>
-
-        {/* Save current page as a template — a small named-save form, same
-            "inline field, not window.prompt" spirit as motion presets'
-            "Save current as preset…" flow above. */}
-        {savingTemplateFor !== null && (
-          <div className="modal-backdrop" onClick={() => !templateBusy && setSavingTemplateFor(null)}>
-            <div className="modal" onClick={(e) => e.stopPropagation()}>
-              <h2 style={{ marginTop: 0 }}>Save page as template</h2>
-              <p className="sub" style={{ marginTop: -8 }}>
-                Reusable in this or any other project — its layers, boxes, motion, and background style, asset files included.
-              </p>
-              <label>Template name</label>
-              <input type="text" autoFocus value={templateName} placeholder="e.g. Title + subtitle, centered"
-                onChange={(e) => setTemplateName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") commitSaveTemplate(); if (e.key === "Escape") setSavingTemplateFor(null); }} />
-              {templateErr && <p className="err">{templateErr}</p>}
-              <div className="row" style={{ gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
-                <button className="btn" disabled={templateBusy} onClick={() => setSavingTemplateFor(null)}>Cancel</button>
-                <button className="btn primary" disabled={templateBusy || !templateName.trim()} onClick={commitSaveTemplate}>
-                  {templateBusy ? "…" : "Save"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Template picker — insert a saved layout as a brand-new page. */}
-        {showTemplatePicker && (
-          <div className="modal-backdrop" onClick={() => setShowTemplatePicker(false)}>
-            <div className="modal" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
-              <h2 style={{ marginTop: 0 }}>Page templates</h2>
-              {templateErr && <p className="err">{templateErr}</p>}
-              {pageTemplates === null && <p className="sub">Loading…</p>}
-              {pageTemplates && pageTemplates.length === 0 && (
-                <p className="sub">No templates saved yet — use the ▤ button on any page in the list to save its layout here.</p>
-              )}
-              <div style={{ maxHeight: 360, overflowY: "auto" }}>
-                {(pageTemplates ?? []).map((t) => (
-                  <div key={t.id} className="row between card compact" style={{ marginBottom: 8, alignItems: "center" }}>
-                    <div className="row" style={{ gap: 10, minWidth: 0 }}>
-                      {t.thumbnail ? (
-                        <img src={t.thumbnail} alt="" style={{ width: 32, height: 56, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
-                      ) : (
-                        <div style={{ width: 32, height: 56, borderRadius: 4, background: "var(--panel2)", flexShrink: 0 }} />
-                      )}
-                      <span style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.name}>{t.name}</span>
-                    </div>
-                    <div className="row" style={{ gap: 6, flexShrink: 0 }}>
-                      <button className="btn small primary" disabled={templateBusy} onClick={() => onInsertTemplate(t.id)}>Insert</button>
-                      <button className="btn small danger" disabled={templateBusy} title={`Delete "${t.name}"`}
-                        onClick={() => onDeleteTemplate(t.id)}>✕</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="row" style={{ gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
-                <button className="btn" onClick={() => setShowTemplatePicker(false)}>Close</button>
-              </div>
-            </div>
-          </div>
-        )}
-        </div>
-        )}
-
         {activeLeftDock === "assets" && project && (
           <div className="dockbody">
             <h2 style={{ marginTop: 0 }}>Global assets (all pages)</h2>
@@ -2051,6 +1939,123 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         )}
       </aside>
       </div>
+
+      {/* Bottom page filmstrip — same shape as Canva's own (vertical cards
+          here, since a reel is 9:16, not landscape). Replaces the old
+          always-open Pages column entirely: there's no rail icon for it any
+          more, this bar is just always here, same as the topbar above it. */}
+      <div className="filmstrip">
+        <div
+          className={"filmstrip-scroll" + (dragOver ? " over" : "")}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault(); setDragOver(false);
+            if (e.dataTransfer.files?.length) onAddPages(e.dataTransfer.files);
+          }}
+        >
+          {!project?.pages.length && <p className="hint" style={{ margin: "0 8px", flex: "none" }}>No pages yet — add one, or drag PSDs/SVGs here.</p>}
+          {project?.pages.map((pg, i) => (
+            <div key={pg.id} className={"pagecard" + (i === sel ? " active" : "")}
+              onClick={() => selectPage(i)} title={pg.name ?? pg.id}>
+              <div className="pagethumb" style={pg.bgColor ? { background: pg.bgColor } : undefined} />
+              <span className="pagecard-n">{i + 1}</span>
+              {/* Per-card actions — same 4 the old Pages list row had
+                  (reorder/save-as-template/delete), just revealed on hover
+                  instead of permanently taking up row width. */}
+              <div className="pagecard-actions" onClick={(e) => e.stopPropagation()}>
+                <button className="btn small" title="Move earlier" disabled={i === 0} onClick={() => movePage(i, -1)}>←</button>
+                <button className="btn small" title="Move later" disabled={i === (project?.pages.length ?? 0) - 1} onClick={() => movePage(i, 1)}>→</button>
+                <button className="btn small" title="Save this page's layout as a reusable template"
+                  onClick={() => { setSavingTemplateFor(i); setTemplateName(pg.name ? `${pg.name} layout` : "My layout"); setTemplateErr(null); }}>
+                  <TemplateIcon />
+                </button>
+                <button className="btn small" title="Delete page" onClick={() => delPage(i)}>✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="addpage">
+          <button type="button" title="Add a blank page" onClick={onAddBlankPage}>+</button>
+          <div className="addpagediv" />
+          <button type="button" title="More ways to add a page" onClick={() => setShowAddPageMenu((v) => !v)}>▾</button>
+          {showAddPageMenu && (
+            <>
+              <div className="dropdown-catcher" onClick={() => setShowAddPageMenu(false)} />
+              <div className="addmenu">
+                <a onClick={() => { onAddBlankPage(); setShowAddPageMenu(false); }}>Blank page</a>
+                <a onClick={() => { psdInput.current?.click(); setShowAddPageMenu(false); }}>Import sequence…</a>
+                <a onClick={() => {
+                  setShowTemplatePicker(true);
+                  if (pageTemplates === null) listPageTemplates().then(setPageTemplates).catch(() => setPageTemplates([]));
+                  setShowAddPageMenu(false);
+                }}>From template…</a>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Save current page as a template — a small named-save form, same
+          "inline field, not window.prompt" spirit as motion presets'
+          "Save current as preset…" flow above. */}
+      {savingTemplateFor !== null && (
+        <div className="modal-backdrop" onClick={() => !templateBusy && setSavingTemplateFor(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>Save page as template</h2>
+            <p className="sub" style={{ marginTop: -8 }}>
+              Reusable in this or any other project — its layers, boxes, motion, and background style, asset files included.
+            </p>
+            <label>Template name</label>
+            <input type="text" autoFocus value={templateName} placeholder="e.g. Title + subtitle, centered"
+              onChange={(e) => setTemplateName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") commitSaveTemplate(); if (e.key === "Escape") setSavingTemplateFor(null); }} />
+            {templateErr && <p className="err">{templateErr}</p>}
+            <div className="row" style={{ gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
+              <button className="btn" disabled={templateBusy} onClick={() => setSavingTemplateFor(null)}>Cancel</button>
+              <button className="btn primary" disabled={templateBusy || !templateName.trim()} onClick={commitSaveTemplate}>
+                {templateBusy ? "…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Template picker — insert a saved layout as a brand-new page. */}
+      {showTemplatePicker && (
+        <div className="modal-backdrop" onClick={() => setShowTemplatePicker(false)}>
+          <div className="modal" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>Page templates</h2>
+            {templateErr && <p className="err">{templateErr}</p>}
+            {pageTemplates === null && <p className="sub">Loading…</p>}
+            {pageTemplates && pageTemplates.length === 0 && (
+              <p className="sub">No templates saved yet — use the ▤ button on any page in the filmstrip to save its layout here.</p>
+            )}
+            <div style={{ maxHeight: 360, overflowY: "auto" }}>
+              {(pageTemplates ?? []).map((t) => (
+                <div key={t.id} className="row between card compact" style={{ marginBottom: 8, alignItems: "center" }}>
+                  <div className="row" style={{ gap: 10, minWidth: 0 }}>
+                    {t.thumbnail ? (
+                      <img src={t.thumbnail} alt="" style={{ width: 32, height: 56, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
+                    ) : (
+                      <div style={{ width: 32, height: 56, borderRadius: 4, background: "var(--panel2)", flexShrink: 0 }} />
+                    )}
+                    <span style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.name}>{t.name}</span>
+                  </div>
+                  <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+                    <button className="btn small primary" disabled={templateBusy} onClick={() => onInsertTemplate(t.id)}>Insert</button>
+                    <button className="btn small danger" disabled={templateBusy} title={`Delete "${t.name}"`}
+                      onClick={() => onDeleteTemplate(t.id)}>✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="row" style={{ gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setShowTemplatePicker(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
