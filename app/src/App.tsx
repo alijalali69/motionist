@@ -2605,17 +2605,21 @@ const InstagramUiToggleIcon: React.FC = () => (
     <path d="M7.5 12.5c-.13 0-.27-.03-.38-.11C4.4 10.8 1.5 8.7 1.5 5.9 1.5 3.9 3 2.5 4.9 2.5c1 0 1.9.5 2.6 1.3.7-.8 1.6-1.3 2.6-1.3 1.9 0 3.4 1.4 3.4 3.4 0 2.8-2.9 4.9-5.62 6.49-.11.08-.25.11-.38.11z" />
   </svg>
 );
-// Fullscreen toggle — corner brackets pointing outward (enter) vs. the same
-// brackets pulled in toward center (exit), same "state actually changes the
-// glyph" convention as SoundOnIcon/SoundOffIcon above, not just a color swap.
+// Fullscreen toggle — diagonal arrows pointing to opposite corners (enter)
+// vs. the same two arrows pointing back toward center (exit). Was corner
+// brackets, same "state changes the glyph" convention as SoundOnIcon/
+// SoundOffIcon below, but that path is IDENTICAL to SafeZoneToggleIcon's own
+// — the two buttons now sit right next to each other in the merged
+// transport row and read as the same icon. Arrows instead of brackets keeps
+// them visually distinct at a glance.
 const FullscreenEnterIcon: React.FC = () => (
-  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-    <path d="M1.5 4.5v-3h3M13.5 4.5v-3h-3M1.5 10.5v3h3M13.5 10.5v3h-3" />
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 7L12 3M9 3H12V6M7 8L3 12M3 9V12H6" />
   </svg>
 );
 const FullscreenExitIcon: React.FC = () => (
-  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-    <path d="M4.5 1.5v3h-3M10.5 1.5v3h3M4.5 13.5v-3h-3M10.5 13.5v-3h3" />
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3L8 7M11 7H8V4M3 12L7 8M4 8H7V11" />
   </svg>
 );
 // A video's own Sound toggle — same speaker glyph either way, sound-wave
