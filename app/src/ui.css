@@ -68,15 +68,28 @@ body {
 .panel-resizer {
   flex: 0 0 6px;
   cursor: col-resize;
-  background: var(--line);
   position: relative;
 }
-.panel-resizer:hover, .panel-resizer:active {
+/* The actual visible line is a thin 1px ::before, centered in the 6px hit
+   area (below) — was a solid 6px-wide fill, which read as a thick bar. Kept
+   subtle at rest (a dimmed --line), a touch bolder only on hover/drag so
+   it's still easy to find without sitting there staring at the panels. */
+.panel-resizer::before {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0; left: 50%; width: 1px;
+  transform: translateX(-50%);
+  background: var(--line);
+  opacity: 0.55;
+}
+.panel-resizer:hover::before, .panel-resizer:active::before {
   background: var(--accent2);
+  opacity: 1;
+  width: 2px;
 }
 .panel-resizer::after {
-  /* Widen the hit area past the visible 6px sliver without widening the
-     visible line itself — a 6px-only target is fiddly to grab. */
+  /* Widen the hit area past the 1px visible line without widening the line
+     itself — a 1px-only target is unusably fiddly to grab. */
   content: "";
   position: absolute;
   top: 0; bottom: 0; left: -4px; right: -4px;
