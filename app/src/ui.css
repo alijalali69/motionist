@@ -515,6 +515,18 @@ select, input[type="number"], input[type="text"], textarea {
   width: 100%; background: var(--panel2); color: var(--text);
   border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; font-size: 13px;
 }
+/* Same gap .btn had (fixed earlier) — none of these had a custom focus
+   style either, so every one fell back to the browser's raw default
+   outline (a thick gold/orange ring). Noticed it for real on the new
+   .dash-search field, but it was already latent on every plain input in
+   the app. Same fix: suppressed on a mouse click, drawn on real keyboard
+   focus (:focus-visible) instead — fields with their OWN custom focus look
+   (.topbar-proj-name, etc.) are unaffected, this only fills the gap where
+   nothing was set before. */
+select:focus, input[type="number"]:focus, input[type="text"]:focus, textarea:focus { outline: none; }
+select:focus-visible, input[type="number"]:focus-visible, input[type="text"]:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
 /* The OPEN dropdown list is OS/browser chrome, not something CSS fully
    reaches — border-radius, padding, and the highlighted-row color stay
    native no matter what. But Chromium DOES honor background-color/color on
@@ -637,6 +649,14 @@ a.dl { color: var(--accent2); }
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--muted); font-weight: 700; margin: 0 0 14px;
 }
+/* Sits next to .section-label in a .row.between — base input[type=text] is
+   width:100%, which here would mean "fill every pixel .row.between isn't
+   spending on the label," ballooning to most of the dashboard's width (hit
+   this for real — a plain .dash-search class LOSES that specificity fight
+   against the element+attribute base selector; needs the element in the
+   selector too, and to still win the tie by source order, which being
+   further down the file already gives it). */
+input.dash-search { width: 220px; flex: none; }
 
 /* "Start a new project" — device-preset cards, XD welcome-screen style: a
    shape in the preset's own aspect ratio, name, dimensions. Picking one

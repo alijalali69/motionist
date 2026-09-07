@@ -268,6 +268,16 @@ function timeAgo(iso?: string): string {
 
 export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }) => {
   const [projects, setProjects] = React.useState<ProjectSummary[] | null>(null);
+  // Search — a flat grid is fine at a handful of projects, not once there
+  // are 15-20 of them. Plain client-side name filter; the full list is
+  // already loaded (listProjects), nothing server-side to add for this.
+  const [search, setSearch] = React.useState("");
+  const filteredProjects = React.useMemo(() => {
+    if (!projects) return projects;
+    const q = search.trim().toLowerCase();
+    if (!q) return projects;
+    return projects.filter((p) => (p.name || "").toLowerCase().includes(q));
+  }, [projects, search]);
   const [creating, setCreating] = React.useState(false);
   const [newName, setNewName] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -493,9 +503,17 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
 
       {projects && projects.length > 0 && (
         <>
-        <div className="section-label" style={{ marginTop: 32 }}>Your projects</div>
+        <div className="row between" style={{ marginTop: 32, alignItems: "center" }}>
+          <div className="section-label" style={{ margin: 0 }}>Your projects</div>
+          <input type="text" value={search} placeholder="Search projects…"
+            className="dash-search"
+            onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        {filteredProjects && filteredProjects.length === 0 ? (
+          <p className="sub" style={{ padding: "16px 0" }}>No projects match "{search.trim()}".</p>
+        ) : (
         <div className="project-grid">
-          {projects.map((p) => (
+          {(filteredProjects ?? []).map((p) => (
             <div key={p.id} className="project-card" onClick={() => confirmDelete !== p.id && onOpen(p.id)}>
               <div className="project-thumb">
                 {p.thumbnail ? (
@@ -567,6 +585,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
             </div>
           ))}
         </div>
+        )}
         </>
       )}
 
