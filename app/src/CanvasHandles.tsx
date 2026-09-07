@@ -30,6 +30,12 @@ export type Handle = {
   // canvas shows what you're about to edit without needing a separate
   // floating toolbar.
   selected?: boolean;
+  // False for a text layer, whose box is always kept exactly the size of
+  // its own rendered text (see the measure-and-resize effect in
+  // ElementMotion) — manually resizing it would just get overwritten on
+  // the next edit, so the grip is hidden rather than offering a drag that
+  // doesn't stick. Unset/true = resizable, the default for everything else.
+  resizable?: boolean;
 };
 
 type Guide = { axis: "x" | "y"; pos: number }; // canvas-space position of an active alignment line
@@ -324,8 +330,9 @@ const DragBox: React.FC<{
         {handle.label} · {Math.round(box.left)},{Math.round(box.top)}
       </span>
       {/* Resize grip — bottom-right corner, only worth showing once you're
-          already interacting with this handle (hover/drag) */}
-      {active && <div
+          already interacting with this handle (hover/drag), and only when
+          this handle is actually resizable (see Handle.resizable above). */}
+      {active && handle.resizable !== false && <div
         onPointerDown={onResizeDown}
         onPointerMove={onResizeMove}
         onPointerUp={onResizeUp}

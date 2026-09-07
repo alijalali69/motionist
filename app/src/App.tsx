@@ -40,6 +40,55 @@ function clone<T>(x: T): T {
   return structuredClone(x);
 }
 
+// Measures a text layer's REAL rendered size — the same font-family/size/
+// line-height/letter-spacing/uppercase/direction CSS PageScene.tsx's own
+// TextLayerView actually draws with (see its `textStyle`), just off-screen
+// and with white-space:pre instead of pre-wrap, so the result is the
+// text's NATURAL size rather than whatever a currently-saved box width
+// happens to wrap it into. Explicit newlines the user actually typed are
+// still respected — only automatic wrapping is skipped, which is exactly
+// what "the box is always exactly text-sized" needs: once the box always
+// matches this, the real renderer's own pre-wrap never actually needs to
+// wrap anything either, so there's no behavioral gap between this
+// measurement and the real render.
+//
+// One shared hidden element, reused across calls — cheap to create once,
+// and every call fully finishes (set styles, force layout via
+// getBoundingClientRect, read it back) before the next one touches it, so
+// reentrancy across multiple layers/effects in the same tick is safe.
+let measureEl: HTMLDivElement | null = null;
+function measureTextBox(opts: {
+  text?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  lineHeight?: number;
+  letterSpacing?: number;
+  uppercase?: boolean;
+  direction?: "rtl" | "ltr";
+}): { width: number; height: number } {
+  if (!measureEl) {
+    measureEl = document.createElement("div");
+    Object.assign(measureEl.style, {
+      position: "fixed", top: "-9999px", left: "-9999px",
+      visibility: "hidden", whiteSpace: "pre", display: "inline-block", pointerEvents: "none",
+    });
+    document.body.appendChild(measureEl);
+  }
+  const el = measureEl;
+  el.style.fontFamily = opts.fontFamily || "Tahoma, Arial, sans-serif";
+  el.style.fontSize = `${opts.fontSize ?? 48}px`;
+  el.style.lineHeight = String(opts.lineHeight ?? 1.5);
+  el.style.letterSpacing = opts.letterSpacing ? `${opts.letterSpacing}px` : "normal";
+  el.style.textTransform = opts.uppercase ? "uppercase" : "none";
+  el.style.direction = opts.direction ?? "rtl";
+  // Empty text still needs to measure as ONE line's worth of height (an
+  // empty box would otherwise collapse to zero and effectively disappear
+  // the instant you clear a text layer's content).
+  el.textContent = opts.text || " ";
+  const rect = el.getBoundingClientRect();
+  return { width: Math.max(1, Math.ceil(rect.width)), height: Math.max(1, Math.ceil(rect.height)) };
+}
+
 // A color swatch (native picker, for dragging around a color wheel) plus a
 // hex text field (for pasting/typing an exact value) — the native <input
 // type="color"> alone has no visible hex entry in most browsers. Local text
@@ -1644,6 +1693,12 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         // is held instead of fighting over one gesture.
         panPassthrough: isPannable && altHeld,
         pannable: isPannable,
+        // A text layer's box is always kept exactly the size of its own
+        // rendered text (see the measure-and-resize effect in
+        // ElementMotion) — the resize grip would just offer a drag that
+        // gets silently overwritten the moment anything about the text
+        // changes, so it's hidden instead of dangling there unresizable.
+        resizable: l.assetKind !== "text",
         selected: selectedLayerIndex === l.index || selectedLayerIndices.has(l.index),
         onSelect: (mods) => {
           const toggle = mods.shiftKey || mods.ctrlKey || mods.metaKey;
@@ -3378,6 +3433,41 @@ const ElementMotion: React.FC<{
   const isPhotoSlot = layer.role === "photo";
   const isTextLayer = layer.assetKind === "text";
   const isShapeLayer = layer.assetKind === "shape";
+  // A text layer's box is ALWAYS exactly the size of its own rendered
+  // text — no manual resize (the canvas resize grip is hidden for text,
+  // see canvasHandles' `resizable` flag in the Editor). Re-measures
+  // whenever anything that actually affects the text's rendered SIZE
+  // changes; text-align/box-align/color/etc. don't change size so aren't
+  // in the dependency list.
+  React.useEffect(() => {
+    if (!isTextLayer) return;
+    let cancelled = false;
+    (async () => {
+      // A just-picked custom font may still be loading — measuring
+      // against its fallback would size the box wrong for a moment and
+      // never self-correct once the real font actually finishes (nothing
+      // else re-triggers this effect on its own). document.fonts is one
+      // browser-wide registry, already shared with whatever the live
+      // Player preview loaded via its own useLayerFont — no separate
+      // font-loading logic needed here, just wait on the same registry.
+      try { await document.fonts.ready; } catch { /* best-effort */ }
+      if (cancelled) return;
+      const { width, height } = measureTextBox({
+        text: layer.text,
+        fontFamily: layer.fontFamily,
+        fontSize: layer.fontSize,
+        lineHeight: layer.lineHeight,
+        letterSpacing: layer.letterSpacing,
+        uppercase: layer.uppercase,
+        direction: layer.direction,
+      });
+      if (width !== layer.width || height !== layer.height) {
+        onChange((l) => { l.width = width; l.height = height; });
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTextLayer, layer.text, layer.fontFamily, layer.fontSize, layer.lineHeight, layer.letterSpacing, layer.uppercase, layer.direction, layer.fontFile]);
   // Simple (4 number fields) vs Keyframes (one draggable row per FX) — a
   // pure display choice, not stored data; always starts on Simple, same as
   // this whole component remounting (key={l.index}) on every layer switch.
