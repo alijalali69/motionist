@@ -1871,6 +1871,61 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           gap: 12, width: "100%", flex: "1 1 auto", minHeight: 0, overflow: "auto",
         }}>
         {project ? (
+          <>
+          {/* Overlay-guide toolbar — ruler guides + safe-zone + Instagram UI
+              mockup, split out from PlayerControls below into its OWN row
+              above the artboard. Was children of the bottom transport bar;
+              once guides' own +V/+H/Clear guides trio joined safe-zone/IG-UI
+              there, that single row either overflowed its box or wrapped to
+              a second line — a second row of buttons under the seek bar,
+              not what a "one clean transport row" was supposed to look
+              like. These three all share one real trait the bottom bar's
+              other controls (play/zoom/mute) don't: every one of them is a
+              non-rendered EDITOR OVERLAY toggle, never part of the actual
+              export — grouping them together above the canvas reads as
+              "view options for what you're looking at," while the bottom
+              bar stays pure playback controls. */}
+          <div className="canvas-toolbar">
+            <button className={"btn small icon" + (showGuides ? " active" : "")}
+              title={showGuides ? "Hide ruler guides (guide only — never rendered in export)" : "Show ruler guides (guide only — never rendered in export)"}
+              aria-label="Toggle ruler guides" aria-pressed={showGuides}
+              onClick={() => setShowGuides((v) => !v)}>
+              <GuidesToggleIcon />
+            </button>
+            {showGuides && (
+              <>
+                <button className="btn small" title="Add a vertical guide (center of the canvas — drag to position)"
+                  onClick={() => addGuide("x")}>+ V</button>
+                <button className="btn small" title="Add a horizontal guide (center of the canvas — drag to position)"
+                  onClick={() => addGuide("y")}>+ H</button>
+                {(project.guides ?? []).length > 0 && (
+                  <button className="btn small" title="Remove every guide on this project"
+                    onClick={clearGuides}>Clear guides</button>
+                )}
+              </>
+            )}
+            {/* Meta's published Reels/Stories safe margins only mean
+                anything on a portrait canvas — showing them over a
+                landscape/square project would just be wrong, not merely
+                irrelevant. */}
+            {project.height > project.width && (
+              <>
+                <span className="canvas-toolbar-divider" />
+                <button className={"btn small icon" + (showSafeZone ? " active" : "")}
+                  title={showSafeZone ? "Hide Instagram Reels safe zone (guide only — never rendered in export)" : "Show Instagram Reels safe zone (guide only — never rendered in export)"}
+                  aria-label="Toggle Instagram Reels safe zone guide" aria-pressed={showSafeZone}
+                  onClick={() => setShowSafeZone((v) => !v)}>
+                  <SafeZoneToggleIcon />
+                </button>
+                <button className={"btn small icon" + (showInstagramUI ? " active" : "")}
+                  title={showInstagramUI ? "Hide Instagram Reels UI preview (stylized mockup — never rendered in export)" : "Show Instagram Reels UI preview (stylized mockup — never rendered in export)"}
+                  aria-label="Toggle Instagram Reels UI preview" aria-pressed={showInstagramUI}
+                  onClick={() => setShowInstagramUI((v) => !v)}>
+                  <InstagramUiToggleIcon />
+                </button>
+              </>
+            )}
+          </div>
           <div
             ref={playerWrapRef}
             style={{
@@ -1973,11 +2028,17 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               </div>
             )}
           </div>
+          </>
         ) : <p className="sub">Loading…</p>}
         </div>
-        {/* One long row now — was transport (play/time/seek/fullscreen) plus
-            a second stacked row for zoom/safe-zone/Instagram-UI/mute; those
-            now render as children right after Fullscreen, in the same bar. */}
+        {/* Bottom transport row — play/time/seek/fullscreen, then zoom% and
+            (when this page has one) the video mute toggle, passed in as
+            children right after Fullscreen. Guides/safe-zone/Instagram-UI
+            used to live here too, but they're editor-overlay VIEW toggles,
+            not playback controls — moved to their own .canvas-toolbar row
+            above the artboard (see the "project ? (" branch above) once
+            their own +V/+H/Clear guides trio started overflowing this row
+            or forcing it to wrap onto a second line. */}
         {project && (() => {
           // The function panel's own mute button controls whichever video is
           // actually on this page — a page carries at most one main visual
@@ -1999,29 +2060,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                 onClick={() => setZoom(1)} style={{ fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
                 {Math.round(zoom * 100)}%
               </button>
-              {/* Ruler guides — persistent, user-placed alignment lines
-                  (Project.guides), distinct from the automatic smart-guides
-                  CanvasHandles already shows while dragging. +H/+V/Clear
-                  only show once guides are actually visible — no point
-                  adding one you can't see. */}
-              <button className={"btn small icon" + (showGuides ? " active" : "")}
-                title={showGuides ? "Hide ruler guides (guide only — never rendered in export)" : "Show ruler guides (guide only — never rendered in export)"}
-                aria-label="Toggle ruler guides" aria-pressed={showGuides}
-                onClick={() => setShowGuides((v) => !v)}>
-                <GuidesToggleIcon />
-              </button>
-              {showGuides && (
-                <>
-                  <button className="btn small" title="Add a vertical guide (center of the canvas — drag to position)"
-                    onClick={() => addGuide("x")}>+ V</button>
-                  <button className="btn small" title="Add a horizontal guide (center of the canvas — drag to position)"
-                    onClick={() => addGuide("y")}>+ H</button>
-                  {(project.guides ?? []).length > 0 && (
-                    <button className="btn small" title="Remove every guide on this project"
-                      onClick={clearGuides}>Clear guides</button>
-                  )}
-                </>
-              )}
               {videoLayer && (
                 <button className={"btn small icon" + (videoLayer.videoMuted ? "" : " active")}
                   title={videoLayer.videoMuted ? "Muted — click to play with sound (in preview and export)" : "Playing with sound — click to mute (in preview and export)"}
@@ -2032,26 +2070,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                   })}>
                   {videoLayer.videoMuted ? <SoundOffIcon /> : <SoundOnIcon />}
                 </button>
-              )}
-              {/* Meta's published Reels/Stories safe margins only mean
-                  anything on a portrait canvas — showing them over a
-                  landscape/square project would just be wrong, not merely
-                  irrelevant. */}
-              {project.height > project.width && (
-                <>
-                  <button className={"btn small icon" + (showSafeZone ? " active" : "")}
-                    title={showSafeZone ? "Hide Instagram Reels safe zone (guide only — never rendered in export)" : "Show Instagram Reels safe zone (guide only — never rendered in export)"}
-                    aria-label="Toggle Instagram Reels safe zone guide" aria-pressed={showSafeZone}
-                    onClick={() => setShowSafeZone((v) => !v)}>
-                    <SafeZoneToggleIcon />
-                  </button>
-                  <button className={"btn small icon" + (showInstagramUI ? " active" : "")}
-                    title={showInstagramUI ? "Hide Instagram Reels UI preview (stylized mockup — never rendered in export)" : "Show Instagram Reels UI preview (stylized mockup — never rendered in export)"}
-                    aria-label="Toggle Instagram Reels UI preview" aria-pressed={showInstagramUI}
-                    onClick={() => setShowInstagramUI((v) => !v)}>
-                    <InstagramUiToggleIcon />
-                  </button>
-                </>
               )}
             </PlayerControls>
             {photoPanTargets.length > 0 && (
