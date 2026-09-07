@@ -45,6 +45,19 @@
     (the actual "very wide" complaint — a bar full of small buttons and one
     long empty-looking scrubber). */
   flex-shrink: 0;
+  /* Sticks to the BOTTOM of .center's own scroll region, same reasoning
+     and same fix as .canvas-toolbar's own sticky (top) below — the parent
+     column is `justify-content:center`, so once zoom grows the artboard
+     tall enough to overflow, a plain (non-sticky) flex child on either end
+     of that column can drift past the scroll region's own edge instead of
+     staying reachable. This bar hadn't actually been reported drifting
+     (canvas-toolbar had — see its own comment, confirmed via a real
+     off-screen getBoundingClientRect), but the exact same layout applies
+     to both ends of the same centered column, so it's the same fix
+     applied proactively rather than waiting for a second bug report. */
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
   padding: 5px 8px;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -89,6 +102,19 @@
   flex-wrap: wrap;
   gap: 6px;
   flex-shrink: 0;
+  /* .center's own scroll region (the flex-column wrapper this and the
+     artboard both sit in) is `justify-content:center` — fine at rest, but
+     once zoom grows the artboard tall enough to overflow that region, the
+     centered block just overflows equally off BOTH ends, and this bar
+     (sitting above the artboard) scrolled fully off-screen above the fold
+     — confirmed for real: getBoundingClientRect().top went to -92px after
+     zooming in, not just visually "smaller," genuinely unreachable without
+     scrolling up first. `position:sticky` clamps it to the top of the
+     scroll region instead, so it stays visible at any zoom — same fix
+     mirrored on .player-controls (`bottom:0`) below the artboard. */
+  position: sticky;
+  top: 0;
+  z-index: 4;
   padding: 5px 8px;
   background: var(--panel);
   border: 1px solid var(--line);
