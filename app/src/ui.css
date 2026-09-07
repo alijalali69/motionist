@@ -932,11 +932,11 @@ input.topbar-proj-name::placeholder { color: var(--muted); font-weight: 600; }
 /* Nested one level inside the layer card (also .card.compact) — a slightly
    lighter surface than the parent keeps the boxes visually distinct instead
    of two same-color borders blending together. */
-.card.compact.group { margin-top: 8px; background: var(--panel2); }
+.card.compact.group { margin-top: 6px; background: var(--panel2); }
 .subhead {
   font-family: var(--mono);
   font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--accent); font-weight: 700; margin: 0 0 8px;
+  color: var(--accent); font-weight: 700; margin: 0 0 6px;
 }
 
 /* --- Element panel rail (Content / Effects / Keyframes) ----------------- */
@@ -968,13 +968,13 @@ input.topbar-proj-name::placeholder { color: var(--muted); font-weight: 600; }
   overflow: hidden;
 }
 .el-rail {
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 6px; flex: none;
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 5px; flex: none;
   background: var(--bg); border-right: 1px solid var(--line);
 }
 .el-rail-btn {
-  width: 44px; display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 7px 2px 6px; border-radius: 7px; border: none; cursor: pointer;
+  width: 38px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 5px 2px 4px; border-radius: 6px; border: none; cursor: pointer;
   background: none; color: var(--muted);
 }
 .el-rail-btn svg { display: block; }
@@ -984,28 +984,32 @@ input.topbar-proj-name::placeholder { color: var(--muted); font-weight: 600; }
 .el-rail-btn:hover { color: var(--text); background: var(--panel2); }
 .el-rail-btn.active { background: none; color: var(--accent); }
 .el-rail-btn.active:hover { background: var(--panel2); color: var(--accent2); }
-.el-pane { flex: 1; min-width: 0; padding: 10px 12px; background: var(--panel2); }
+.el-pane { flex: 1; min-width: 0; padding: 8px 9px; background: var(--panel2); }
 .el-pane .card.compact.group:first-child { margin-top: 0; }
 
-/* Roomier field sizing inside the rail's panes specifically — the rest of
-   the app (Page tab, etc.) keeps the denser .card.compact sizing on
-   purpose. Specificity here (.card.compact .el-body ...) is deliberately
+/* Field sizing inside the rail's panes — was noticeably roomier than the
+   rest of the app's .card.compact baseline (9px/10px padding, 13px font,
+   10px grid gaps vs. 5px/6px, 12px, 6px everywhere else), which is what
+   made Content/Effects/Keyframes feel oversized. Tightened back down close
+   to that baseline — a hair roomier still (6px/7px vs. base 5px/6px) since
+   this is the primary hands-on editing surface, but nowhere near as loose
+   as before. Specificity here (.card.compact .el-body ...) is deliberately
    higher than the base .card.compact select/input rule so this wins
    regardless of source order. */
 .card.compact .el-body select,
 .card.compact .el-body input[type="text"],
 .card.compact .el-body input[type="number"],
 .card.compact .el-body textarea {
-  padding: 9px 10px;
-  font-size: 13px;
+  padding: 6px 7px;
+  font-size: 12px;
 }
 .el-body .mini label,
 .el-body label {
-  font-size: 12px;
-  margin: 0 0 6px;
+  font-size: 11px;
+  margin: 0 0 3px;
 }
-.el-body .grid2, .el-body .grid3 { gap: 10px; }
-.el-body .segmented { gap: 4px; padding: 4px; }
+.el-body .grid2, .el-body .grid3 { gap: 6px; }
+.el-body .segmented { gap: 4px; padding: 3px; }
 .el-body .fx-slots select { min-width: 116px; }
 
 /* --- Motion preset list -------------------------------------------------- */
