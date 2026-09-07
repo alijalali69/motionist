@@ -18,6 +18,7 @@ import { CanvasHandles, type Handle } from "./CanvasHandles";
 import { PhotoPanHandles, type PhotoPanTarget } from "./PhotoPanHandles";
 import { SafeZoneOverlay } from "./SafeZoneOverlay";
 import { InstagramUIOverlay } from "./InstagramUIOverlay";
+import { GuidesOverlay } from "./GuidesOverlay";
 import { TextPlacementOverlay } from "./TextPlacementOverlay";
 import { NumField } from "./NumField";
 import { Waveform } from "./Waveform";
@@ -543,6 +544,13 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [showAcctMenu, setShowAcctMenu] = React.useState(false);
   const [showSafeZone, setShowSafeZone] = React.useState(false);
   const [showInstagramUI, setShowInstagramUI] = React.useState(false);
+  // Visibility toggle only — like showSafeZone/showInstagramUI above, this
+  // is ephemeral (resets on reload), separate from the actual guide
+  // POSITIONS, which are real project data (project.guides, persisted).
+  // Hidden guides also stop snapping (see the userGuides prop passed to
+  // CanvasHandles below) — a snap you can't see would be more confusing
+  // than not snapping at all.
+  const [showGuides, setShowGuides] = React.useState(false);
   // A photo layer's own frame is now freely draggable/resizable (plain drag)
   // same as text/shapes — but it ALSO has a pan-within-frame interaction
   // (drag the photo to choose its crop) that used to own the whole body-drag
@@ -921,6 +929,26 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const removeSwatch = (hex: string) => update((p) => {
     p.swatches = (p.swatches ?? []).filter((s) => s.toLowerCase() !== hex.toLowerCase());
   });
+
+  // Ruler guides (Project.guides) — same shared-across-pages, whole-project
+  // list pattern as swatches above. New ones drop at canvas center, already
+  // draggable into place via GuidesOverlay.tsx; moveGuide fires on every
+  // pointermove of that drag (same "let update() coalesce it" trick every
+  // other drag in this app already relies on for one-undo-per-drag, not
+  // one-undo-per-pixel).
+  const addGuide = (axis: "x" | "y") => update((p) => {
+    const id = "g" + Date.now().toString(36) + Math.round(Math.random() * 1e4).toString(36);
+    const pos = Math.round((axis === "x" ? p.width : p.height) / 2);
+    p.guides = [...(p.guides ?? []), { id, axis, pos }];
+  });
+  const moveGuide = (id: string, pos: number) => update((p) => {
+    const g = (p.guides ?? []).find((g) => g.id === id);
+    if (g) g.pos = pos;
+  });
+  const deleteGuide = (id: string) => update((p) => {
+    p.guides = (p.guides ?? []).filter((g) => g.id !== id);
+  });
+  const clearGuides = () => update((p) => { p.guides = []; });
 
   // Accepts one or many files (batch upload). Server ingests one PSD/SVG at a
   // time, so files are processed sequentially, in filename order, and each
@@ -1893,6 +1921,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               wrapperRef={playerWrapRef}
               canvas={[project.width, project.height]}
               handles={canvasHandles}
+              userGuides={showGuides ? project.guides : undefined}
             />
             <PhotoPanHandles
               wrapperRef={playerWrapRef}
@@ -1910,6 +1939,15 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             )}
             {showSafeZone && project.height > project.width && <SafeZoneOverlay canvas={[project.width, project.height]} />}
             {showInstagramUI && project.height > project.width && <InstagramUIOverlay canvas={[project.width, project.height]} />}
+            {showGuides && (
+              <GuidesOverlay
+                wrapperRef={playerWrapRef}
+                canvas={[project.width, project.height]}
+                guides={project.guides ?? []}
+                onChange={moveGuide}
+                onDelete={deleteGuide}
+              />
+            )}
             {/* Render progress — ON the canvas itself (not a side panel), so
                 it's visible no matter which inspector tab is open. */}
             {renderProgress && (
@@ -1961,6 +1999,29 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                 onClick={() => setZoom(1)} style={{ fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
                 {Math.round(zoom * 100)}%
               </button>
+              {/* Ruler guides — persistent, user-placed alignment lines
+                  (Project.guides), distinct from the automatic smart-guides
+                  CanvasHandles already shows while dragging. +H/+V/Clear
+                  only show once guides are actually visible — no point
+                  adding one you can't see. */}
+              <button className={"btn small icon" + (showGuides ? " active" : "")}
+                title={showGuides ? "Hide ruler guides (guide only — never rendered in export)" : "Show ruler guides (guide only — never rendered in export)"}
+                aria-label="Toggle ruler guides" aria-pressed={showGuides}
+                onClick={() => setShowGuides((v) => !v)}>
+                <GuidesToggleIcon />
+              </button>
+              {showGuides && (
+                <>
+                  <button className="btn small" title="Add a vertical guide (center of the canvas — drag to position)"
+                    onClick={() => addGuide("x")}>+ V</button>
+                  <button className="btn small" title="Add a horizontal guide (center of the canvas — drag to position)"
+                    onClick={() => addGuide("y")}>+ H</button>
+                  {(project.guides ?? []).length > 0 && (
+                    <button className="btn small" title="Remove every guide on this project"
+                      onClick={clearGuides}>Clear guides</button>
+                  )}
+                </>
+              )}
               {videoLayer && (
                 <button className={"btn small icon" + (videoLayer.videoMuted ? "" : " active")}
                   title={videoLayer.videoMuted ? "Muted — click to play with sound (in preview and export)" : "Playing with sound — click to mute (in preview and export)"}
@@ -2611,6 +2672,15 @@ const SafeZoneToggleIcon: React.FC = () => (
 const InstagramUiToggleIcon: React.FC = () => (
   <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
     <path d="M7.5 12.5c-.13 0-.27-.03-.38-.11C4.4 10.8 1.5 8.7 1.5 5.9 1.5 3.9 3 2.5 4.9 2.5c1 0 1.9.5 2.6 1.3.7-.8 1.6-1.3 2.6-1.3 1.9 0 3.4 1.4 3.4 3.4 0 2.8-2.9 4.9-5.62 6.49-.11.08-.25.11-.38.11z" />
+  </svg>
+);
+// Ruler guides toggle — a dashed crosshair, echoing the guide LINES
+// themselves (also on-canvas), distinct at a glance from SafeZone's solid
+// corner brackets and Instagram's filled heart.
+const GuidesToggleIcon: React.FC = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+    <path d="M7.5 1v13" strokeDasharray="2 2" />
+    <path d="M1 7.5h13" strokeDasharray="2 2" />
   </svg>
 );
 // Fullscreen toggle — diagonal arrows pointing to opposite corners (enter)

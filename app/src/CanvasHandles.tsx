@@ -1,5 +1,5 @@
 import React from "react";
-import type { Box } from "../../src/types";
+import type { Box, Guide as ProjectGuide } from "../../src/types";
 
 export type Handle = {
   id: string;
@@ -45,7 +45,12 @@ export const CanvasHandles: React.FC<{
   wrapperRef: React.RefObject<HTMLDivElement>;
   canvas: [number, number];
   handles: Handle[];
-}> = ({ wrapperRef, canvas, handles }) => {
+  // User-placed ruler guides (GuidesOverlay.tsx) — when given, a dragged
+  // handle also snaps to these, on top of the canvas edges/center/other-
+  // element candidates below. Omitted (or empty) when guides are toggled
+  // off, so a hidden guide never silently keeps snapping.
+  userGuides?: ProjectGuide[];
+}> = ({ wrapperRef, canvas, handles, userGuides }) => {
   const [cw, ch] = canvas;
   const [scale, setScale] = React.useState(0);
   const [guides, setGuides] = React.useState<Guide[]>([]);
@@ -75,6 +80,7 @@ export const CanvasHandles: React.FC<{
           scale={scale}
           canvas={canvas}
           otherBoxes={handles.filter((o) => o.id !== h.id).map((o) => o.box)}
+          userGuides={userGuides}
           onGuides={setGuides}
         />
       ))}
@@ -97,8 +103,9 @@ const DragBox: React.FC<{
   scale: number;
   canvas: [number, number];
   otherBoxes: Box[];
+  userGuides?: ProjectGuide[];
   onGuides: (g: Guide[]) => void;
-}> = ({ handle, scale, canvas, otherBoxes, onGuides }) => {
+}> = ({ handle, scale, canvas, otherBoxes, userGuides, onGuides }) => {
   const { box, onChange } = handle;
   const [cw, ch] = canvas;
   const dragRef = React.useRef<{ startX: number; startY: number; box: Box } | null>(null);
@@ -107,18 +114,22 @@ const DragBox: React.FC<{
   const boxRef = React.useRef(box);
   boxRef.current = box;
 
-  // Candidate alignment lines: canvas center/edges + every other fixed
-  // element's left/center/right (x) and top/center/bottom (y).
+  // Candidate alignment lines: canvas center/edges, every other fixed
+  // element's left/center/right (x) / top/center/bottom (y), AND any
+  // user-placed ruler guides on that axis (see GuidesOverlay.tsx) — a
+  // dragged handle snaps to all three the same way, no different code path.
   const candidatesX = React.useMemo(() => {
     const xs = [0, cw / 2, cw];
     otherBoxes.forEach((b) => xs.push(b.left, b.left + b.width / 2, b.left + b.width));
+    userGuides?.forEach((g) => { if (g.axis === "x") xs.push(g.pos); });
     return xs;
-  }, [cw, otherBoxes]);
+  }, [cw, otherBoxes, userGuides]);
   const candidatesY = React.useMemo(() => {
     const ys = [0, ch / 2, ch];
     otherBoxes.forEach((b) => ys.push(b.top, b.top + b.height / 2, b.top + b.height));
+    userGuides?.forEach((g) => { if (g.axis === "y") ys.push(g.pos); });
     return ys;
-  }, [ch, otherBoxes]);
+  }, [ch, otherBoxes, userGuides]);
 
   // Snap a proposed box position: check its left/center/right against every
   // X candidate (and top/center/bottom against Y candidates); if the closest

@@ -231,6 +231,16 @@ export type AudioTrack = {
   muted: boolean; // a toggle, not just deleting the track — matches ContentLayer.videoMuted's own convention
 };
 
+// User-placed ruler guide (Illustrator-style) — a persistent alignment line
+// the user drags into place, distinct from CanvasHandles.tsx's own ephemeral
+// smart-guide highlights (which appear only while dragging a layer, from
+// canvas edges/other-element edges, and are never saved). Shared across
+// every page in the project, not per-page: all pages of one project already
+// share the same canvas size, so "guides for this composition" is the
+// natural scope — matches how Illustrator's ruler guides are per-document,
+// not per-artboard-with-identical-dimensions.
+export type Guide = { id: string; axis: "x" | "y"; pos: number };
+
 export type LoaderStyle = "bar" | "segmented" | "dots" | "folio";
 
 export type SubtitleStyle = {
@@ -255,6 +265,7 @@ export type Project = {
   bgColor?: string;          // solid backdrop color, shows wherever bg/pages don't fully cover (default "#e8e4dd")
   bgStyle?: BgStyle;         // global backdrop treatment — see BgStyle; a page's own bgStyle overrides this entirely
   swatches?: string[];       // user-saved hex colors for this project, offered next to every color picker
+  guides?: Guide[];          // user-placed ruler guides — editor-only, never rendered in export (see Guide above)
   title?: LogoConfig | null; // global title, rendered as a locked overlay
   loader: Box;
   loaderStyle?: LoaderStyle; // default "bar"
