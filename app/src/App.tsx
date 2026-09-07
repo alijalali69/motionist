@@ -3046,7 +3046,14 @@ const ElementMotion: React.FC<{
   // null, so manual expand/collapse from before this feature existed is
   // left alone.
   selectedLayerIndex?: number | null;
-}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, pageDuration, autoFocus, selectedLayerIndex }) => {
+  // "Expand all"/"Collapse all" (PageInspector's header button) — bumping
+  // bulkExpandToken is the actual signal (see the effect below, which skips
+  // its own first run so this never fights a freshly-placed layer's
+  // autoFocus by force-collapsing it the instant it mounts); bulkExpanded
+  // is just which direction that bump means.
+  bulkExpanded?: boolean;
+  bulkExpandToken?: number;
+}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, pageDuration, autoFocus, selectedLayerIndex, bulkExpanded, bulkExpandToken }) => {
   const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
   const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
   const photoInput = React.useRef<HTMLInputElement>(null);
@@ -3085,6 +3092,29 @@ const ElementMotion: React.FC<{
     if (isMe) cardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLayerIndex]);
+  // "Expand all"/"Collapse all" — ignores whatever bulkExpandToken already
+  // was AT MOUNT (captured once, below), only acting once it changes to
+  // something NEWER than that. Otherwise a freshly-placed layer (autoFocus)
+  // would mount already-collapsed whenever the dock's last bulk click
+  // happened to be "Collapse all," hiding the very textarea autoFocus is
+  // about to focus.
+  //
+  // This has to be a VALUE comparison, not a "ran once" ref flag — tried
+  // that first, and it broke under React.StrictMode: mount effects run
+  // twice in dev (setup → cleanup → setup) specifically to catch
+  // non-idempotent effects, and a boolean flag flipped inside the effect
+  // body with no cleanup to undo it is exactly that — the first (throwaway)
+  // pass silently consumed the "skip," so the second (real) pass no longer
+  // skipped and force-collapsed the brand-new card for real. Comparing
+  // against a captured baseline is naturally idempotent instead: running
+  // the same check twice with the same inputs is a no-op both times.
+  const expandTokenAtMount = React.useRef(bulkExpandToken);
+  React.useEffect(() => {
+    if (bulkExpandToken === expandTokenAtMount.current) return;
+    expandTokenAtMount.current = bulkExpandToken;
+    if (bulkExpandToken !== undefined) setExpanded(!!bulkExpanded);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bulkExpandToken]);
   // Which of Content/Effects/Keyframes this layer's own panel is showing —
   // used to be all three stacked and expanded together (a wall of fields per
   // layer); now one rail, one pane at a time, so a layer with a lot set
@@ -3796,6 +3826,21 @@ const PageInspector: React.FC<{
   React.useEffect(() => {
     if (selectedLayerIndex != null) setTab("elements");
   }, [selectedLayerIndex]);
+
+  // Expand/collapse ALL layer cards at once — each card's own `expanded` is
+  // local state (see ElementMotion), so this doesn't own the true per-card
+  // state, just broadcasts "everyone snap to this" via a token that bumps
+  // on every click (so clicking the same direction twice in a row — e.g.
+  // "Collapse all" again after manually reopening one card — still forces
+  // it, not just a value that happened not to change). `bulkExpanded` here
+  // only tracks what the LAST bulk click asked for, for the button's own
+  // label/icon — not real aggregate state, good enough for a single toggle.
+  const [bulkExpanded, setBulkExpanded] = React.useState(true);
+  const [bulkExpandToken, setBulkExpandToken] = React.useState(0);
+  const toggleAllLayers = () => {
+    setBulkExpanded((v) => !v);
+    setBulkExpandToken((t) => t + 1);
+  };
   return (
     <div>
       <h1 title={page.id}>Page: {page.name ?? page.id}</h1>
@@ -3866,11 +3911,18 @@ const PageInspector: React.FC<{
         <>
           <div className="row between" style={{ alignItems: "center" }}>
             <h2 style={{ margin: 0, border: "none", padding: 0 }}>Element motion (in / out)</h2>
-            <button className="btn small" disabled={!clip}
-              title="Paste the copied motion + style onto every element on this page (text untouched)"
-              onClick={() => onChange((pg) => { pg.layers.forEach((l) => applyClip(l, clip!)); })}>
-              Paste to all
-            </button>
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn small" disabled={page.layers.length === 0}
+                title={bulkExpanded ? "Collapse every layer card" : "Expand every layer card"}
+                onClick={toggleAllLayers}>
+                {bulkExpanded ? "⌃ Collapse all" : "⌄ Expand all"}
+              </button>
+              <button className="btn small" disabled={!clip}
+                title="Paste the copied motion + style onto every element on this page (text untouched)"
+                onClick={() => onChange((pg) => { pg.layers.forEach((l) => applyClip(l, clip!)); })}>
+                Paste to all
+              </button>
+            </div>
           </div>
           {/* Text is a real tool, not an instant action — arming it and
               cancelling (Esc, or clicking it again) both toggle textToolArmed,
@@ -3912,6 +3964,8 @@ const PageInspector: React.FC<{
               motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
               autoFocus={l.index === newestLayerIndex}
               selectedLayerIndex={selectedLayerIndex}
+              bulkExpanded={bulkExpanded}
+              bulkExpandToken={bulkExpandToken}
               canvas={canvas}
               pageDuration={page.durationInFrames}
               onDelete={() => onDeleteLayer(li)} />
