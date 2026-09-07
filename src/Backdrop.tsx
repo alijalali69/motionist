@@ -129,8 +129,12 @@ const TextureLayer: React.FC<{ name: BgTextureName; intensity: number; colorA?: 
       );
     }
     case "paperGrain": {
-      // Static — real paper doesn't animate, so z is a fixed constant, not
-      // frame-driven (computed once per mount, unlike filmGrain above).
+      // A slow drift, not a boil — real paper doesn't animate, but a paper
+      // texture ON CAMERA reads as slightly alive (light catching the
+      // fibers unevenly over time). Recomputed only every 6 frames (a fifth
+      // of filmGrain's cadence) and by a tiny z step each time, so it reads
+      // as "shifting light," never a flicker.
+      const driftStep = Math.floor(frame / 6);
       const { w, h } = noiseCanvasSize(compW, compH, 3, 140, 420);
       return (
         <>
@@ -138,7 +142,7 @@ const TextureLayer: React.FC<{ name: BgTextureName; intensity: number; colorA?: 
             {/* Fixed warm paper tone, not colorA — colorA is this backdrop's
                 accent color (used by halftone/riso's ink dots), a different
                 knob than "what shade is the paper itself." */}
-            <NoiseCanvas seed={41.7} z={0} resW={w} resH={h} kind="paperFiber" />
+            <NoiseCanvas seed={41.7} z={driftStep * 0.025} resW={w} resH={h} kind="paperFiber" />
           </div>
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: intensity,
             background: "radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(90,70,30,0.25) 100%)" }} />
