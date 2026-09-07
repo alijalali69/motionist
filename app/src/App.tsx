@@ -777,6 +777,16 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   // overlay that would just duplicate its Content/Effects/Keyframes rail.
   const [selectedLayerIndex, setSelectedLayerIndex] = React.useState<number | null>(null);
   React.useEffect(() => { setSelectedLayerIndex(null); }, [sel]);
+  // Multi-select — canvas-only for now (not the Layers dock list). Always a
+  // superset containing selectedLayerIndex once anything's selected (a
+  // plain click resets it to just that one layer; shift/ctrl/cmd+click
+  // toggles membership instead — see the onSelect wiring in canvasHandles
+  // below). Kept as a SEPARATE set rather than replacing selectedLayerIndex
+  // outright so the existing single-focus behaviors (Layers dock
+  // auto-expand/collapse-siblings) stay exactly as they were for the
+  // common single-click case.
+  const [selectedLayerIndices, setSelectedLayerIndices] = React.useState<Set<number>>(new Set());
+  React.useEffect(() => { setSelectedLayerIndices(new Set()); }, [sel]);
 
   // Undo/redo history. Kept as refs (not state) since they change on nearly
   // every edit and don't need to trigger a re-render themselves — forceTick
@@ -891,15 +901,31 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
       if (e.code === "Space") {
         e.preventDefault();
         playerRef.current?.toggle();
+        return;
+      }
+      // Multi-select (canvas-only — see canvasHandles' onSelect wiring).
+      // Escape clears it; Delete/Backspace removes every selected layer.
+      // Guarded by the same `typing` check above, so Backspace still edits
+      // text normally in a focused field instead of deleting layers.
+      if (e.key === "Escape" && selectedLayerIndices.size > 0) {
+        e.preventDefault();
+        setSelectedLayerIndices(new Set());
+        setSelectedLayerIndex(null);
+        return;
+      }
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedLayerIndices.size > 0) {
+        e.preventDefault();
+        deleteSelectedLayers();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-    // Re-attached whenever `project` changes so undo/redo always act on the
-    // current project, not whatever was current when the listener was first
-    // attached (playerRef itself is a stable ref, so the spacebar branch
-    // doesn't actually need this — but the undo/redo branches do).
-  }, [project]);
+    // Re-attached whenever `project`/`sel`/the selection changes so every
+    // branch here always acts on current state, not whatever was current
+    // when the listener was first attached (playerRef itself is a stable
+    // ref, so the spacebar branch doesn't actually need this — but undo/
+    // redo and the multi-select branches do).
+  }, [project, sel, selectedLayerIndices]);
 
   const update = (fn: (p: Project) => void) => {
     if (project) {
@@ -1324,6 +1350,53 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     if (file) deleteProjectFiles(projectId, [file]);
   };
 
+  // Delete every layer in the current multi-selection (Delete/Backspace —
+  // see the keydown effect below). Filters by the layer's own stable
+  // `.index`, not array position, same identity selectedLayerIndices
+  // already keys on everywhere else.
+  const deleteSelectedLayers = () => {
+    if (!project || selectedLayerIndices.size === 0) return;
+    const page = project.pages[sel];
+    if (!page) return;
+    const files = page.layers.filter((l) => selectedLayerIndices.has(l.index)).map((l) => l.file).filter(Boolean);
+    update((p) => {
+      p.pages[sel].layers = p.pages[sel].layers.filter((l) => !selectedLayerIndices.has(l.index));
+    });
+    if (files.length) deleteProjectFiles(projectId, files);
+    setSelectedLayerIndices(new Set());
+    setSelectedLayerIndex(null);
+  };
+
+  // Align every selected layer against the SELECTION's own bounding box
+  // (not the canvas — that's what Box align in the Content tab already
+  // does, per-layer, one at a time). Same "left"/"center"/"right" and
+  // "top"/"middle"/"bottom" naming as AlignBoxIcon/AlignBoxIconV below, so
+  // the multi-select toolbar can reuse those same icons directly.
+  const alignSelection = (kind: "left" | "center" | "right" | "top" | "middle" | "bottom") => {
+    if (!project || selectedLayerIndices.size < 2) return;
+    const page = project.pages[sel];
+    if (!page) return;
+    const members = page.layers.filter((l) => selectedLayerIndices.has(l.index));
+    if (members.length < 2) return;
+    const bbox = {
+      left: Math.min(...members.map((l) => l.left)),
+      top: Math.min(...members.map((l) => l.top)),
+      right: Math.max(...members.map((l) => l.left + l.width)),
+      bottom: Math.max(...members.map((l) => l.top + l.height)),
+    };
+    update((p) => {
+      p.pages[sel].layers.forEach((l) => {
+        if (!selectedLayerIndices.has(l.index)) return;
+        if (kind === "left") l.left = bbox.left;
+        else if (kind === "center") l.left = Math.round(bbox.left + (bbox.right - bbox.left - l.width) / 2);
+        else if (kind === "right") l.left = bbox.right - l.width;
+        else if (kind === "top") l.top = bbox.top;
+        else if (kind === "middle") l.top = Math.round(bbox.top + (bbox.bottom - bbox.top - l.height) / 2);
+        else if (kind === "bottom") l.top = bbox.bottom - l.height;
+      });
+    });
+  };
+
   // Assigns an already-uploaded library font (or clears back to the system
   // default when entry is null) to one text layer.
   const onSelectFont = (pageIndex: number, layerIndex: number, entry: FontEntry | null) => {
@@ -1516,8 +1589,21 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         // is held instead of fighting over one gesture.
         panPassthrough: isPannable && altHeld,
         pannable: isPannable,
-        selected: selectedLayerIndex === l.index,
-        onSelect: () => {
+        selected: selectedLayerIndex === l.index || selectedLayerIndices.has(l.index),
+        onSelect: (mods) => {
+          const toggle = mods.shiftKey || mods.ctrlKey || mods.metaKey;
+          setSelectedLayerIndices((prev) => {
+            if (!toggle) return new Set([l.index]);
+            const next = new Set(prev);
+            // A bare toggle-click with nothing selected yet still needs to
+            // START from the layer that was already the single-focus
+            // selection (if any) — otherwise shift-clicking a second layer
+            // right after a plain click on the first would "add" to an
+            // empty set and end up selecting only the second one.
+            if (next.size === 0 && selectedLayerIndex != null) next.add(selectedLayerIndex);
+            if (next.has(l.index)) next.delete(l.index); else next.add(l.index);
+            return next;
+          });
           setSelectedLayerIndex(l.index);
           setActiveRightDock("layers");
         },
@@ -1527,21 +1613,29 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           const dy = b.top - layer.top;
           const isPureMove = b.width === layer.width && b.height === layer.height;
           layer.left = b.left; layer.top = b.top; layer.width = b.width; layer.height = b.height;
-          // Grouped layers move together — position only, not size (see
-          // ContentLayer.groupId in types.ts). Covers both pointer drag and
-          // the arrow-key nudge, which both call this same onChange.
-          if (isPureMove && layer.groupId && (dx !== 0 || dy !== 0)) {
+          // Two independent reasons a sibling should move along: a saved
+          // color group (ContentLayer.groupId), or both layers being part
+          // of the CURRENT multi-selection (selectedLayerIndices) — a
+          // temporary, session-only selection, not saved data. Either one
+          // is enough; a layer can be in a saved group AND get dragged as
+          // part of an unrelated multi-select at the same time. Position
+          // only, not size, same as the group-only behavior before this.
+          // Covers both pointer drag and the arrow-key nudge, which both
+          // call this same onChange.
+          if (isPureMove && (dx !== 0 || dy !== 0)) {
+            const inSelection = selectedLayerIndices.size > 1 && selectedLayerIndices.has(layer.index);
             p.pages[sel].layers.forEach((sib, si) => {
-              if (si !== li && sib.groupId === layer.groupId) {
-                sib.left += dx; sib.top += dy;
-              }
+              if (si === li) return;
+              const groupMatch = !!layer.groupId && sib.groupId === layer.groupId;
+              const selectionMatch = inSelection && selectedLayerIndices.has(sib.index);
+              if (groupMatch || selectionMatch) { sib.left += dx; sib.top += dy; }
             });
           }
         }),
       });
     });
     return list;
-  }, [project, sel, altHeld, selectedLayerIndex]);
+  }, [project, sel, altHeld, selectedLayerIndex, selectedLayerIndices]);
 
   // Photo pan targets: every photo-role layer on the current page that has a
   // real uploaded asset (with known natural size, needed to compute correct
@@ -1947,6 +2041,28 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                 </button>
               </>
             )}
+            {/* Multi-select align — appears once 2+ layers are selected on
+                the canvas (shift/ctrl/cmd+click to add to the selection).
+                Aligns against the SELECTION's own bounding box, reusing the
+                exact icons the per-layer "Box align" control already uses
+                for the same idea against the canvas instead. */}
+            {selectedLayerIndices.size >= 2 && (
+              <>
+                <span className="canvas-toolbar-divider" />
+                {(["left", "center", "right"] as const).map((a) => (
+                  <button key={a} className="btn small icon" title={`Align selection to the ${a}`}
+                    aria-label={`Align selection to the ${a}`} onClick={() => alignSelection(a)}>
+                    <AlignBoxIcon align={a} />
+                  </button>
+                ))}
+                {(["top", "middle", "bottom"] as const).map((a) => (
+                  <button key={a} className="btn small icon" title={`Align selection to the ${a}`}
+                    aria-label={`Align selection to the ${a}`} onClick={() => alignSelection(a)}>
+                    <AlignBoxIconV align={a} />
+                  </button>
+                ))}
+              </>
+            )}
           </div>
           <div
             ref={playerWrapRef}
@@ -1976,6 +2092,12 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               // overflow:auto is what actually absorbs the extra height.
               flexShrink: 0,
             }}
+            // Clicking empty canvas (not a handle — those stop this via
+            // their own onClick) clears the multi-selection, same
+            // "click away to deselect" convention as Figma/Illustrator.
+            // Handles' onClick stopPropagation means this only ever fires
+            // when the click genuinely landed on the background.
+            onClick={() => { setSelectedLayerIndex(null); setSelectedLayerIndices(new Set()); }}
           >
             <Player
               ref={playerRef}

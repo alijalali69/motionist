@@ -21,7 +21,10 @@ export type Handle = {
   // same as Figma/Photoshop (selection happens immediately; dragging is a
   // bonus if you move afterward). Optional so BG/Logo/Title/Loader (whose
   // editors live in the Assets dock, not a per-layer card) can skip it.
-  onSelect?: () => void;
+  // Carries the modifier keys held at click time so the caller can tell a
+  // plain click (replace selection) from a shift/ctrl/cmd one (toggle this
+  // handle in/out of a multi-selection) — see canvasHandles in App.tsx.
+  onSelect?: (mods: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) => void;
   // True while this handle's own layer is the one selected in the Layers
   // dock — keeps its outline/label visible even when not hovered, so the
   // canvas shows what you're about to edit without needing a separate
@@ -166,6 +169,18 @@ const DragBox: React.FC<{
     };
   }
 
+  // A plain mousedown (no shift/ctrl/cmd) on a handle that's ALREADY part
+  // of a multi-selection must NOT collapse that selection down to just
+  // this one handle before a drag even starts — that would silently break
+  // "drag any member to move the whole group," the entire point of a
+  // multi-select. Deferred here instead: onMoveDown only calls onSelect
+  // immediately when a modifier is held (toggle membership right away,
+  // standard) or this handle wasn't already selected (starting a fresh
+  // selection, nothing to preserve). Otherwise the reselect-to-just-this-
+  // one decision waits for onMoveUp, and only fires there if it turns out
+  // to have been a genuine click — no real movement — never mid-drag.
+  const pendingReselectRef = React.useRef<{ shiftKey: boolean; ctrlKey: boolean; metaKey: boolean } | null>(null);
+
   const onMoveDown = (e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -173,11 +188,19 @@ const DragBox: React.FC<{
     (e.target as Element).setPointerCapture(e.pointerId);
     dragRef.current = { startX: e.clientX, startY: e.clientY, box };
     setBusy("move");
-    handle.onSelect?.();
+    const mods = { shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey };
+    if (mods.shiftKey || mods.ctrlKey || mods.metaKey || !handle.selected) {
+      handle.onSelect?.(mods);
+    } else {
+      pendingReselectRef.current = mods;
+    }
   };
 
   const onMoveMove = (e: React.PointerEvent) => {
     if (!dragRef.current) return;
+    // Real movement happened — a deferred plain reselect (see onMoveDown)
+    // would collapse the very group this drag is trying to move; drop it.
+    pendingReselectRef.current = null;
     const dx = (e.clientX - dragRef.current.startX) / scale;
     const dy = (e.clientY - dragRef.current.startY) / scale;
     const raw = dragRef.current.box;
@@ -193,6 +216,10 @@ const DragBox: React.FC<{
     setBusy(null);
     onGuides([]);
     (e.target as Element).releasePointerCapture(e.pointerId);
+    if (pendingReselectRef.current) {
+      handle.onSelect?.(pendingReselectRef.current);
+      pendingReselectRef.current = null;
+    }
   };
 
   const onResizeDown = (e: React.PointerEvent) => {
@@ -252,6 +279,12 @@ const DragBox: React.FC<{
       onPointerDown={onMoveDown}
       onPointerMove={onMoveMove}
       onPointerUp={onMoveUp}
+      // click is its own event, separate from pointerdown/up — stopping
+      // THOSE (in onMoveDown) doesn't stop a click from also bubbling up to
+      // the canvas background's own "click empty space clears selection"
+      // handler. Without this, selecting a handle would select it AND
+      // immediately clear the selection again on the same click.
+      onClick={(e) => e.stopPropagation()}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
       onKeyDown={onKeyDown}
