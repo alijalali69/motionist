@@ -375,6 +375,16 @@ h2 {
 .btn.primary { background: var(--accent); border-color: var(--accent); }
 .btn.primary:hover { background: var(--accent2); color: var(--text); }
 .btn:disabled { opacity: 0.5; cursor: default; }
+/* No .btn anywhere in the app had its own focus style before — every
+   button fell back to the browser's raw default outline, which showed up
+   as a thick gold/orange ring (most visible on a repeatedly-clicked
+   toggle, like the guides button, which is what surfaced this). Suppress
+   it on plain :focus (so a mouse click never shows a ring) and draw an
+   on-brand one only for :focus-visible (real keyboard nav still gets a
+   visible ring — this isn't removing focus indication, just fixing its
+   color/only-when-it-matters trigger). */
+.btn:focus { outline: none; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .btn.small { width: auto; padding: 4px 8px; font-size: 12px; }
 /* Icon-only buttons (alignment/direction toggles) — square-ish padding, no
    text baseline to account for, so the svg centers cleanly. Small and

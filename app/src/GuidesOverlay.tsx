@@ -61,6 +61,7 @@ const GuideLine: React.FC<{
   // onMove, so onUp always sees the position it just actually dragged to.
   const livePosRef = React.useRef(guide.pos);
   const [dragging, setDragging] = React.useState(false);
+  const [hovering, setHovering] = React.useState(false);
 
   const onDown = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -100,17 +101,22 @@ const GuideLine: React.FC<{
 
   return (
     <div style={{ ...lineStyle, pointerEvents: "auto" }}>
-      {/* Wider invisible hit-strip (the 1px line itself is a tiny target) */}
+      {/* Wider invisible hit-strip (the 1px line itself is a tiny target) —
+          wide enough to also fully contain the delete button below (16px,
+          centered on the line), so moving the mouse from the strip onto the
+          button never crosses a hover gap that would hide it first. */}
       <div
         style={{
           position: "absolute",
-          inset: guide.axis === "x" ? "0 -4px" : "-4px 0",
+          inset: guide.axis === "x" ? "0 -8px" : "-8px 0",
           cursor: guide.axis === "x" ? "ew-resize" : "ns-resize",
         }}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
-        title={`${guide.axis === "x" ? "Vertical" : "Horizontal"} guide at ${guide.pos}px — drag to move, drag off-canvas to delete`}
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
+        title={`${guide.axis === "x" ? "Vertical" : "Horizontal"} guide at ${guide.pos}px — drag to move, drag off-canvas or click × to delete`}
       />
       <div style={{
         position: "absolute", inset: 0,
@@ -118,6 +124,31 @@ const GuideLine: React.FC<{
         opacity: dragging ? 1 : 0.85,
         boxShadow: dragging ? `0 0 4px ${GUIDE_COLOR}` : "none",
       }} />
+      {/* Hover-revealed delete button — dragging off-canvas works too (see
+          the tooltip above) but isn't discoverable on its own; this is the
+          same "hover reveals the delete action" convention as the filmstrip
+          page cards and the dashboard's project cards elsewhere in the app.
+          Pinned to one end of the line rather than following the cursor, so
+          it's always in the same predictable spot. */}
+      {(hovering || dragging) && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(guide.id); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseEnter={() => setHovering(true)}
+          onMouseLeave={() => setHovering(false)}
+          title="Delete this guide"
+          aria-label="Delete this guide"
+          style={{
+            position: "absolute",
+            ...(guide.axis === "x" ? { top: 4, left: 0, transform: "translateX(-50%)" } : { left: 4, top: 0, transform: "translateY(-50%)" }),
+            width: 16, height: 16, borderRadius: "50%",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: GUIDE_COLOR, color: "#0e1013",
+            border: "1px solid rgba(0,0,0,0.35)", cursor: "pointer",
+            fontSize: 10, lineHeight: 1, padding: 0,
+          }}
+        >✕</button>
+      )}
     </div>
   );
 };
