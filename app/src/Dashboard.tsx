@@ -3,6 +3,7 @@ import {
   listProjects, createProject, deleteProject, duplicateProject, type ProjectSummary,
   loadProject, saveProject,
   listFonts, uploadFontToLibrary, deleteFont, type FontEntry,
+  listBrandColors, addBrandColor, deleteBrandColor, type BrandColorEntry,
   listSizePresets, saveSizePreset, deleteSizePreset, type SizePresetEntry,
 } from "./api";
 import { NumField } from "./NumField";
@@ -175,6 +176,83 @@ const FontManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   );
 };
 
+// Same idea as FontManager above, saved once and reusable by every
+// project — closes the one gap fonts didn't already cover: colors
+// (Project.swatches) were still stuck per-project. No file to upload, so
+// this is the simpler of the two: pick/type a hex (+ optional label),
+// list what's saved, delete what you don't want any more.
+const BrandColorManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const [colors, setColors] = React.useState<BrandColorEntry[] | null>(null);
+  const [hex, setHex] = React.useState("#3ea6ff");
+  const [name, setName] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  const refresh = React.useCallback(() => {
+    listBrandColors().then(setColors).catch(() => setColors([]));
+  }, []);
+  React.useEffect(() => { refresh(); }, [refresh]);
+
+  const onAdd = async () => {
+    setBusy(true); setErr(null);
+    try {
+      await addBrandColor(hex, name.trim() || undefined);
+      setName("");
+      refresh();
+    } catch (e: any) {
+      setErr(String(e.message || e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ marginTop: 0 }}>Brand colors</h2>
+        <p className="sub" style={{ marginTop: -8 }}>
+          Save once here — every project's color pickers offer these too, next to that project's own saved colors.
+        </p>
+
+        <div className="row" style={{ gap: 8, alignItems: "flex-end" }}>
+          <input type="color" value={hex} onChange={(e) => setHex(e.target.value)}
+            style={{ width: 40, height: 36, padding: 2, flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <label>Label (optional)</label>
+            <input type="text" value={name} placeholder="e.g. Primary blue"
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") onAdd(); }} />
+          </div>
+          <button className="btn primary" disabled={busy} onClick={onAdd}>
+            {busy ? "…" : "+ Add"}
+          </button>
+        </div>
+        {err && <p className="err">{err}</p>}
+
+        <div style={{ marginTop: 16, maxHeight: 280, overflowY: "auto" }}>
+          {colors && colors.length === 0 && <p className="sub">No brand colors saved yet.</p>}
+          {(colors ?? []).map((c) => (
+            <div key={c.id} className="row between" style={{ marginTop: 8, alignItems: "center" }}>
+              <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                <span style={{ width: 22, height: 22, borderRadius: 5, background: c.hex, border: "1px solid var(--line)", flexShrink: 0 }} />
+                <span style={{ fontSize: 13 }}>{c.name || c.hex}</span>
+                {c.name && <span className="hint" style={{ margin: 0 }}>{c.hex}</span>}
+              </div>
+              <button className="btn small danger" onClick={async () => { await deleteBrandColor(c.id); refresh(); }}>
+                Delete
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="row" style={{ gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 function timeAgo(iso?: string): string {
   if (!iso) return "";
   const ms = Date.now() - new Date(iso).getTime();
@@ -203,6 +281,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
   const [renameDraft, setRenameDraft] = React.useState("");
   const [renameBusy, setRenameBusy] = React.useState(false);
   const [managingFonts, setManagingFonts] = React.useState(false);
+  const [managingBrandColors, setManagingBrandColors] = React.useState(false);
   const [sizeIdx, setSizeIdx] = React.useState(0); // index into SIZE_PRESETS, or -1 for custom (customW/customH)
   const [customW, setCustomW] = React.useState(1080);
   const [customH, setCustomH] = React.useState(1920);
@@ -342,10 +421,12 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
         </div>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn" onClick={() => setManagingFonts(true)}>🔤 Fonts</button>
+          <button className="btn" onClick={() => setManagingBrandColors(true)}>🎨 Colors</button>
         </div>
       </div>
 
       {managingFonts && <FontManager onClose={() => setManagingFonts(false)} />}
+      {managingBrandColors && <BrandColorManager onClose={() => setManagingBrandColors(false)} />}
 
       <div className="section-label">Start a new project</div>
       <div className="size-preset-row">

@@ -8,6 +8,7 @@ import {
   loadProject, saveProject, generateThumbnail, duplicatePage, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
   browseFolder, type RenderQuality,
   listFonts, deleteProjectFiles, type IngestResult, type FontEntry,
+  listBrandColors,
   listMotionPresets, saveMotionPreset, deleteMotionPreset, type MotionPresetEntry,
   listPageTemplates, loadPageTemplate, savePageTemplate, deletePageTemplate, type PageTemplateSummary,
 } from "./api";
@@ -55,7 +56,13 @@ const ColorField: React.FC<{
   swatches?: string[];
   onAddSwatch?: (hex: string) => void;
   onRemoveSwatch?: (hex: string) => void;
-}> = ({ value, onChange, swatchStyle, swatches, onAddSwatch, onRemoveSwatch }) => {
+  // Brand kit — saved once from the Dashboard's "🎨 Colors" manager,
+  // shared by every project (same idea as the font library). Read-only
+  // here on purpose: adding/removing brand colors happens in that one
+  // manager, not scattered across every color field in the app — clicking
+  // a brand swatch just applies it, same as clicking a project one does.
+  brandSwatches?: string[];
+}> = ({ value, onChange, swatchStyle, swatches, onAddSwatch, onRemoveSwatch, brandSwatches }) => {
   const [text, setText] = React.useState(value);
   React.useEffect(() => { setText(value); }, [value]);
 
@@ -103,6 +110,24 @@ const ColorField: React.FC<{
           ))}
         </div>
       )}
+      {/* Brand kit row — same chip look as the project's own swatches
+          above, minus the ✕ (nothing to remove from here — see
+          BrandColorManager on the Dashboard for that). A small label
+          separates the two rows since they're both just rows of colored
+          squares otherwise, easy to read as one longer list. */}
+      {brandSwatches && brandSwatches.length > 0 && (
+        <>
+          <div className="hint" style={{ margin: "4px 0 2px" }}>Brand kit</div>
+          <div className="swatch-row">
+            {brandSwatches.map((hex) => (
+              <div key={hex} className={"swatch-chip" + (hex.toLowerCase() === value.toLowerCase() ? " selected" : "")}
+                style={{ background: hex }}>
+                <button className="swatch-pick" title={hex} aria-label={`Use ${hex}`} onClick={() => onChange(hex)} />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -123,7 +148,8 @@ const BgStyleEditor: React.FC<{
   swatches: string[];
   onAddSwatch: (hex: string) => void;
   onRemoveSwatch: (hex: string) => void;
-}> = ({ value, onChange, swatches, onAddSwatch, onRemoveSwatch }) => {
+  brandSwatches?: string[];
+}> = ({ value, onChange, swatches, onAddSwatch, onRemoveSwatch, brandSwatches }) => {
   // Collapsed by default — clicking a tile opens ONLY that category's own
   // controls below the tile row; clicking it again (or another tile)
   // closes/switches. Independent of whether a category is "filled" (has a
@@ -187,11 +213,11 @@ const BgStyleEditor: React.FC<{
             <>
               <div className="row" style={{ marginTop: 4, gap: 4 }} title="Colors this style uses — meaning depends on which one is picked above">
                 <ColorField value={value.colorA ?? "#ffffff"} onChange={(hex) => onChange((s) => { s.colorA = hex; })}
-                  swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+                  swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} brandSwatches={brandSwatches} />
                 <ColorField value={value.colorB ?? "#000000"} onChange={(hex) => onChange((s) => { s.colorB = hex; })}
-                  swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+                  swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} brandSwatches={brandSwatches} />
                 <ColorField value={value.colorC ?? "#888888"} onChange={(hex) => onChange((s) => { s.colorC = hex; })}
-                  swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+                  swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} brandSwatches={brandSwatches} />
               </div>
               <div className="row between mini" style={{ marginTop: 4, alignItems: "center" }}>
                 <span style={{ color: "var(--muted)" }}>Intensity</span>
@@ -658,6 +684,14 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [fonts, setFonts] = React.useState<FontEntry[]>([]);
   const refreshFonts = React.useCallback(() => { listFonts().then(setFonts).catch(() => {}); }, []);
   React.useEffect(() => { refreshFonts(); }, [refreshFonts]);
+  // Brand kit — colors saved once (Dashboard's "🎨 Colors" manager),
+  // reusable across every project, same idea as `fonts` above. Just the
+  // hex strings here: ColorField only needs to show/apply them, never
+  // add/remove (that's Dashboard-only, mirrors fonts' own split).
+  const [brandColors, setBrandColors] = React.useState<string[]>([]);
+  React.useEffect(() => {
+    listBrandColors().then((list) => setBrandColors(list.map((c) => c.hex))).catch(() => {});
+  }, []);
   const [motionPresets, setMotionPresets] = React.useState<MotionPresetEntry[]>([]);
   const refreshMotionPresets = React.useCallback(() => { listMotionPresets().then(setMotionPresets).catch(() => {}); }, []);
   React.useEffect(() => { refreshMotionPresets(); }, [refreshMotionPresets]);
@@ -1866,13 +1900,13 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               <div style={{ marginTop: 8 }}>
                 <ColorField value={project.bgColor ?? "#e8e4dd"}
                   onChange={(hex) => update((p) => { p.bgColor = hex; })}
-                  swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch} />
+                  swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch} brandSwatches={brandColors} />
               </div>
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
                 <div className="subhead">Background style</div>
                 <BgStyleEditor value={project.bgStyle ?? {}}
                   onChange={(fn) => update((p) => { if (!p.bgStyle) p.bgStyle = {}; fn(p.bgStyle); })}
-                  swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch} />
+                  swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch} brandSwatches={brandColors} />
               </div>
             </div>
 
@@ -2273,6 +2307,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                 fonts={fonts}
                 onSelectFont={(li, entry) => onSelectFont(sel, li, entry)}
                 swatches={project.swatches ?? []} onAddSwatch={addSwatch} onRemoveSwatch={removeSwatch}
+                brandColors={brandColors}
                 motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
                 newestLayerIndex={newestLayerIndex}
                 selectedLayerIndex={selectedLayerIndex}
@@ -3174,6 +3209,7 @@ const ElementMotion: React.FC<{
   swatches?: string[];
   onAddSwatch?: (hex: string) => void;
   onRemoveSwatch?: (hex: string) => void;
+  brandColors?: string[];
   motionPresets?: MotionPresetEntry[];
   onSaveMotionPreset?: (name: string, clip: MotionClip) => void;
   onDeleteMotionPreset?: (id: string) => void;
@@ -3199,7 +3235,7 @@ const ElementMotion: React.FC<{
   // is just which direction that bump means.
   bulkExpanded?: boolean;
   bulkExpandToken?: number;
-}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, pageDuration, autoFocus, selectedLayerIndex, bulkExpanded, bulkExpandToken }) => {
+}> = ({ layer, clip, onCopy, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, fonts, onSelectFont, onDelete, onMove, canMoveUp, canMoveDown, swatches, onAddSwatch, onRemoveSwatch, brandColors, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, canvas, pageDuration, autoFocus, selectedLayerIndex, bulkExpanded, bulkExpandToken }) => {
   const sec = (frames?: number, dflt = 0) => +(((frames ?? dflt) / 30)).toFixed(2);
   const toFr = (s: string) => Math.max(0, Math.round(parseFloat(s || "0") * 30));
   const photoInput = React.useRef<HTMLInputElement>(null);
@@ -3493,7 +3529,7 @@ const ElementMotion: React.FC<{
             <div><label title={layer.shapePhotoFile ? "Not shown while a photo mask is set below — remove it to use this again" : undefined}>Fill</label>
               <ColorField value={layer.shapeFill ?? "#000000"}
                 onChange={(hex) => onChange((l) => { l.shapeFill = hex; })}
-                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} /></div>
+                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} brandSwatches={brandColors} /></div>
             <div><label title="How see-through the fill/stroke is — 100% is fully solid, the color you pick exactly">Opacity</label>
               <NumField min={0} max={100} value={Math.round((layer.opacity ?? 1) * 100)}
                 onChange={(e) => onChange((l) => { l.opacity = Math.min(100, Math.max(0, Math.round(parseFloat(e.target.value || "100")))) / 100; })} /></div>
@@ -3549,7 +3585,7 @@ const ElementMotion: React.FC<{
             <div><label>Stroke color</label>
               <ColorField value={layer.shapeStrokeColor ?? "#000000"}
                 onChange={(hex) => onChange((l) => { l.shapeStrokeColor = hex; })}
-                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} /></div>
+                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} brandSwatches={brandColors} /></div>
           </div>
           <div className="mini" style={{ marginTop: 4 }}>
             <label title="A continuous loop for as long as this layer is visible — independent of its In/Out effect above">Motion (while visible)</label>
@@ -3606,7 +3642,7 @@ const ElementMotion: React.FC<{
             <div style={{ gridColumn: "span 2" }}><label>Color</label>
               <ColorField value={layer.textColor ?? "#1a1a1a"}
                 onChange={(hex) => onChange((l) => { l.textColor = hex; })}
-                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} /></div>
+                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} brandSwatches={brandColors} /></div>
           </div>
           <div className="grid3 mini" style={{ marginTop: 4 }}>
             <div><label title="Extra space between letters, in pixels">Letter spacing</label>
@@ -3948,6 +3984,7 @@ const PageInspector: React.FC<{
   swatches: string[];
   onAddSwatch: (hex: string) => void;
   onRemoveSwatch: (hex: string) => void;
+  brandColors?: string[];
   motionPresets: MotionPresetEntry[];
   onSaveMotionPreset: (name: string, clip: MotionClip) => void;
   onDeleteMotionPreset: (id: string) => void;
@@ -3957,7 +3994,7 @@ const PageInspector: React.FC<{
   // ElementMotion to expand (collapsing its siblings), same identity
   // newestLayerIndex already uses.
   selectedLayerIndex: number | null;
-}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, swatches, onAddSwatch, onRemoveSwatch, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex, selectedLayerIndex }) => {
+}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, swatches, onAddSwatch, onRemoveSwatch, brandColors, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex, selectedLayerIndex }) => {
   // Duration/bg/ambient/transition/subtitle vs. the layer list were one long
   // stacked scroll before — split so each is reachable without scrolling
   // past the other. Defaults to "Elements" — this whole inspector is only
@@ -4020,7 +4057,7 @@ const PageInspector: React.FC<{
             <div className="row" style={{ gap: 4, alignItems: "flex-start" }}>
               <ColorField value={page.bgColor ?? "#e8e4dd"}
                 onChange={(hex) => onChange((pg) => { pg.bgColor = hex; })}
-                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+                swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} brandSwatches={brandColors} />
               {page.bgColor && (
                 <button className="btn small color-field-clear" title="Clear — follow the project's backdrop color instead"
                   onClick={() => onChange((pg) => { pg.bgColor = undefined; })}>✕</button>
@@ -4038,7 +4075,7 @@ const PageInspector: React.FC<{
             </div>
             <BgStyleEditor value={page.bgStyle ?? {}}
               onChange={(fn) => onChange((pg) => { if (!pg.bgStyle) pg.bgStyle = {}; fn(pg.bgStyle); })}
-              swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} />
+              swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch} brandSwatches={brandColors} />
           </div>
 
           <label>Ambient motion</label>
@@ -4107,6 +4144,7 @@ const PageInspector: React.FC<{
               fonts={fonts}
               onSelectFont={(entry) => onSelectFont(li, entry)}
               swatches={swatches} onAddSwatch={onAddSwatch} onRemoveSwatch={onRemoveSwatch}
+              brandColors={brandColors}
               motionPresets={motionPresets} onSaveMotionPreset={onSaveMotionPreset} onDeleteMotionPreset={onDeleteMotionPreset}
               autoFocus={l.index === newestLayerIndex}
               selectedLayerIndex={selectedLayerIndex}

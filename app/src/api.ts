@@ -193,6 +193,33 @@ export async function deleteMotionPreset(id: string): Promise<void> {
   await fetch(`/api/motion-presets/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+// --- Global brand-color library: a saved hex, reusable across every
+// project (fonts already work this way — Project.swatches was the one
+// color-related thing still stuck per-project). Managed from the
+// Dashboard (see BrandColorManager); the editor's own ColorField just
+// reads the list and offers each one as an extra swatch, same as it
+// already does for the current project's own saved swatches.
+export type BrandColorEntry = { id: string; hex: string; name?: string; createdAt: string };
+
+export async function listBrandColors(): Promise<BrandColorEntry[]> {
+  const r = await fetch("/api/brand-colors");
+  return r.json();
+}
+
+export async function addBrandColor(hex: string, name?: string): Promise<BrandColorEntry> {
+  const r = await fetch("/api/brand-colors", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hex, name }),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || "saving color failed");
+  return r.json();
+}
+
+export async function deleteBrandColor(id: string): Promise<void> {
+  await fetch(`/api/brand-colors/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 // --- Page-layout template library: a whole saved PAGE (layers, boxes,
 // motion, its own background style), reusable across any project — unlike
 // a motion preset, this also carries real asset files, physically copied

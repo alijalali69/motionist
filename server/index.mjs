@@ -350,6 +350,50 @@ app.delete("/api/motion-presets/:id", (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Global brand-color library: a saved hex, reusable across every
+// project — same mirrors-the-font-library idea as motion presets above,
+// plain JSON, nothing to store on disk beyond the hex itself. Fonts are
+// already global (FontManager, uploaded once from the Dashboard);
+// Project.swatches was the one color-related thing still stuck per-
+// project — this is that gap closed the same way.
+const BRAND_COLORS_JSON = path.join(ROOT, "data", "brand-colors.json");
+
+function readBrandColors() {
+  if (!fs.existsSync(BRAND_COLORS_JSON)) return [];
+  try { return JSON.parse(fs.readFileSync(BRAND_COLORS_JSON, "utf-8")); } catch { return []; }
+}
+function writeBrandColors(list) {
+  fs.writeFileSync(BRAND_COLORS_JSON, JSON.stringify(list, null, 2), "utf-8");
+}
+
+app.get("/api/brand-colors", (_req, res) => res.json(readBrandColors()));
+
+app.post("/api/brand-colors", (req, res) => {
+  try {
+    const hex = (req.body?.hex || "").trim();
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return res.status(400).json({ error: "hex must be #rrggbb" });
+    const name = (req.body?.name || "").trim() || undefined;
+    const list = readBrandColors();
+    if (list.some((c) => c.hex.toLowerCase() === hex.toLowerCase())) {
+      return res.status(400).json({ error: "that color is already saved" });
+    }
+    const entry = {
+      id: "color_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      hex, name, createdAt: new Date().toISOString(),
+    };
+    list.push(entry);
+    writeBrandColors(list);
+    res.json(entry);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.delete("/api/brand-colors/:id", (req, res) => {
+  writeBrandColors(readBrandColors().filter((c) => c.id !== req.params.id));
+  res.json({ ok: true });
+});
+
 // --- Page-layout template library: a whole SAVED PAGE (its layers, box
 // positions, motion, background style — everything but the source
 // project's own id), reusable across any project. Unlike a motion preset
