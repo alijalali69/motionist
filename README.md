@@ -1,35 +1,157 @@
 # Motionist
 
-Turns a layered PSD/SVG poster design (or a plain photo, or nothing at all) into an
-animated vertical (1080×1920) Instagram Reel / YouTube Short — a local dashboard
-app for building multiple reel projects, built on Remotion.
+Turn a layered design — a Photoshop poster, an Illustrator SVG, a plain
+photo, or just a blank page — into an animated vertical (1080×1920) Instagram
+Reel / YouTube Short. Runs entirely on your own machine, built on
+[Remotion](https://www.remotion.dev/).
 
-## Setting it up on a new machine
+## What it is
 
-Send that person just **`bootstrap.bat`** (nothing else — it clones the rest
-itself). Double-click it: it installs Node.js, Git, Python, ffmpeg (via
-`winget`), the required Python packages, clones this repo, runs
-`npm install`, and starts the app. Needs a GitHub account already invited as
-a collaborator on this repo — it'll prompt a login if not already signed in.
-Safe to re-run any time (e.g. to update: it'll `git pull` instead of
-re-cloning).
+Motionist is a local dashboard app for a studio or freelancer who already
+designs in Photoshop/Illustrator and wants those designs turned into short
+animated videos without hand-keyframing every layer in After Effects, and
+without uploading a client's unreleased artwork to somebody else's cloud
+template tool.
 
-## Running it
+You bring the design. Motionist splits it into layers, animates each one
+with a motion preset (fade/slide/glitch/liquid/burst and 60+ others, in and
+out), strings pages into a reel with transitions between them, and renders
+straight to MP4 — previewed live the whole time so nothing is a guess.
 
-Double-click **`start.bat`** — starts the server (port 3001) and the app
-(port 5173), then open `http://localhost:5173`.
+It's built around real production needs from day one: multi-project
+dashboard, brand kit (colors/fonts shared across projects), saved motion
+presets, keyboard shortcuts, and native **RTL/Farsi text** (this started
+life as a tool for Farsi music-artist posters, so right-to-left shaping,
+reveal-by-word, and direction-per-layer aren't an afterthought).
 
-To have it start automatically every time you log into Windows, run
-**`setup_autostart.bat`** once (creates a Startup-folder shortcut, silent/no
-window). **`stop.bat`** kills both if a port ever gets stuck.
+## How it works
 
-To use it inside DaVinci Resolve Studio instead of a browser tab, run
-**`install_resolve_plugin.bat`** once — see `resolve-plugin/README.md`.
+1. **Bring a design.** A layered PSD, an Illustrator-exported SVG, a plain
+   photo/video (instant full-frame page, no PSD needed), or a blank
+   color+text page.
+2. **Name a few layers.** Photoshop/Illustrator layers get auto-routed by a
+   simple naming convention — put `fixed` in a layer/group name for chrome
+   that repeats on every page (logo, artist lockup), `loader` for the
+   progress-bar box, `subtitle` for the caption safe zone, and leave
+   everything else alone — it's content automatically. Full spec:
+   [docs/PSD_SPEC.md](docs/PSD_SPEC.md).
+3. **One PSD/SVG = one page.** Import as many as you need, reorder them
+   freely, string them into one reel.
+4. **Edit live.** Per-layer entrance/exit/ambient motion, page transitions,
+   fonts, colors, drag-and-snap canvas handles with Illustrator-style
+   guides, real per-property keyframes when a preset isn't enough — all in
+   an embedded Remotion player, so every change previews instantly instead
+   of waiting on a render.
+5. **Render.** Straight to MP4 locally, or a transparent ProRes/WebM overlay
+   for compositing elsewhere. No upload, no render queue, no watermark.
 
-Requires: Node.js, Python 3 (with `psd-tools`, `svgelements`, `aggdraw`), and
-ffmpeg/ffprobe on PATH.
+## Quick start
 
-## Layout
+### Windows — one file, nothing pre-installed
+
+Download **[bootstrap.bat](https://raw.githubusercontent.com/alijalali69/motionist/main/bootstrap.bat)**
+(right-click the link → *Save link as…*) and double-click it. It installs
+Node.js, Git, Python, and ffmpeg (via `winget`), installs the Python
+packages Motionist needs, clones this repo to `%USERPROFILE%\motionist`,
+runs `npm install`, and starts the app at `http://localhost:5173`. Safe to
+re-run any time — it'll update instead of re-cloning.
+
+### Already have Node.js, Python, Git, and ffmpeg
+
+```bash
+git clone https://github.com/alijalali69/motionist.git
+cd motionist
+npm install
+npm run app
+```
+
+Then open `http://localhost:5173`.
+
+### macOS / Linux
+
+There's no one-click installer yet — `bootstrap.bat`, the autostart
+scripts, and the in-app render-cancel button are all Windows-only right
+now (see **What's not here yet** below). Install manually, then follow the
+step above:
+
+```bash
+# macOS
+brew install node python ffmpeg
+python3 -m pip install psd-tools svgelements aggdraw
+
+# Debian/Ubuntu
+sudo apt install nodejs npm python3 python3-pip ffmpeg
+python3 -m pip install psd-tools svgelements aggdraw
+```
+
+**Requires either way:** Node.js 18+, Python 3 (with `psd-tools`,
+`svgelements`, `aggdraw`), and `ffmpeg`/`ffprobe` on `PATH`.
+
+## Running it day to day
+
+- **`start.bat`** — starts the server (port 3001) and the app (port 5173)
+  in one window; closing the window stops both.
+- **`stop.bat`** — kills whatever's on ports 3001/5173, if one ever gets
+  stuck.
+- **`setup_autostart.bat`** (run once) — starts Motionist automatically
+  every time you log into Windows, silently, no window.
+
+## Inside DaVinci Resolve
+
+Run **`install_resolve_plugin.bat`** once (needs **Resolve Studio** — the
+free version doesn't support Workflow Integration Plugins) to add two
+panels under *Workspace → Workflow Integrations*:
+
+- **Motionist** — the full app, loaded inside a Resolve window. Every
+  render lands straight in a "Motionist" Media Pool bin, ready to drag onto
+  a timeline.
+- **Motionist Timeline Text** — pick a clip on your current timeline
+  (reads existing text straight out of a Fusion Text+/Text3D node if it has
+  one), animate it with a Motionist preset, and the rendered transparent
+  overlay is dropped back onto the timeline at the exact same frame — no
+  export/import round trip.
+
+Details: [resolve-plugin/README.md](resolve-plugin/README.md).
+
+## Motionist vs. the usual options
+
+| | **Motionist** | Canva / CapCut / Kapwing / VEED | After Effects |
+|---|---|---|---|
+| Animates | **your own** PSD/SVG layers | a template you drop content into | your own layers |
+| Where it runs | your machine | their cloud | your machine |
+| Your design leaves your PC? | never | uploaded to their servers | never |
+| Cost | free, self-hosted | subscription | subscription |
+| RTL / Farsi text | native (shaping-safe reveals, per-layer direction) | usually broken or unsupported | manual, no built-in convention |
+| Goes straight into an NLE | ✅ DaVinci Resolve panel + Media Pool | ❌ | export/import by hand |
+| Auto layer routing (logo/loader/subtitle) | ✅ naming convention | n/a (template-based) | ❌ manual every time |
+| Learning curve | pick presets, no keyframing required (real keyframes optional) | lowest | steep |
+
+The honest trade-off: a template tool is faster for a single generic post,
+and After Effects goes further if you're willing to hand-keyframe. Motionist
+sits in between — real animation of your *own* design files, at
+template-tool speed, without sending anything to a server.
+
+## What's not here yet
+
+Being upfront about the gaps, since this just went public:
+
+- **No LICENSE file.** That legally defaults to "all rights reserved" —
+  you can read and fork the code on GitHub, but there's no license granting
+  the right to reuse or redistribute it. Ask if you want to use this
+  commercially.
+- **Windows-first.** The one-click installer, autostart, and clean
+  render-cancel (it shells out to `taskkill`) are Windows-only. macOS/Linux
+  work with manual setup (above) but haven't been tested as thoroughly.
+- **No audio track editing, captions, or auto-transcription from audio** —
+  a subtitle *zone* is reserved per page, but nothing generates the text
+  for you yet.
+- **No automated tests or CI.** Changes are verified by hand against a
+  running instance before each release.
+- **Single machine, no cloud sync.** Moving a project to another computer
+  is a manual step — export it from the Dashboard (bundles the project +
+  every asset into one file) and import it on the other machine.
+
+## Project layout
 
 ```
 app/            The dashboard + editor (Vite + React). This is the UI.
@@ -60,8 +182,9 @@ out/            Rendered MP4 output — not in git, safe to clear anytime.
 `data/` and `public/projects/` (your actual projects — media, layers, text)
 are gitignored on purpose: they're this machine's real work, not app code.
 Only `public/brand/` inside `public/` is tracked. If you need to move a
-project between machines, that's a manual copy of its `data/projects/<id>.json`
-plus `public/projects/<id>/`, not something `git pull` will ever carry.
+project between machines, use the Dashboard's own **Export**/**Import**
+buttons (one file, project + assets bundled) — not something `git pull`
+will ever carry.
 
 ## Updating
 
@@ -69,4 +192,9 @@ plus `public/projects/<id>/`, not something `git pull` will ever carry.
 git pull
 npm install   # only if package.json changed
 ```
-Then relaunch via `start.bat` (or it already restarted itself if it auto-starts).
+Then relaunch via `start.bat` (or it already restarted itself if it
+auto-starts).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for what shipped in each tagged version.

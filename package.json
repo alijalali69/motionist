@@ -1,7 +1,17 @@
 {
   "name": "motionist",
-  "version": "1.0.0",
-  "description": "Animate layered PSD posters as vertical reels (Remotion).",
+  "version": "3.0.0",
+  "description": "Turn a layered PSD/SVG design into an animated vertical reel, locally (Remotion).",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alijalali69/motionist.git"
+  },
+  "homepage": "https://github.com/alijalali69/motionist#readme",
+  "bugs": "https://github.com/alijalali69/motionist/issues",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "app": "concurrently -n server,app -c cyan,magenta \"node server/index.mjs\" \"vite\"",
     "server": "node server/index.mjs",

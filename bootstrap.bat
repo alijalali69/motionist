@@ -1,4 +1,8 @@
 @echo off
+rem Standalone installer - safe to download and run on its own, before you
+rem have git or even Node.js. Clones the repo into %USERPROFILE%\motionist
+rem itself, so this copy (wherever you downloaded it) can be thrown away
+rem afterward.
 setlocal enabledelayedexpansion
 title Motionist setup
 
@@ -63,16 +67,10 @@ if exist "%DEST%\.git" (
   cd /d "%DEST%"
   git pull
 ) else (
-  echo.
-  echo A browser window may open asking you to log into GitHub -
-  echo use the account that was invited to the motionist repo.
-  echo.
   git clone https://github.com/alijalali69/motionist.git "%DEST%"
   if errorlevel 1 (
     echo.
-    echo Clone failed - most likely this GitHub account hasn't been
-    echo added to the repo yet. Ask for an invite, accept it, then
-    echo double-click this file again.
+    echo Clone failed - check your internet connection and try again.
     pause
     exit /b 1
   )

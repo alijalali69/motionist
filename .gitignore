@@ -16,3 +16,7 @@ Motionist_for_assistant.zip
 
 # Python bytecode cache — regenerated locally by any tools/*.py run, not real content
 __pycache__/
+
+# Scratch spot for dropping a real client source file (InDesign/PSD/etc.) next
+# to Templates/ for reference — never belongs in git, this repo is public.
+Templates/indesing/

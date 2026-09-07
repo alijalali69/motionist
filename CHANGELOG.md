@@ -139,4 +139,68 @@ First tagged version. Everything up to here, in one place:
 
 ---
 
+## v1.4.0 – v2.4.0 — 2026-08-30 to 2026-09-07
+
+This changelog fell behind for eleven tagged versions — the work still
+happened and is fully in `git log`/each tag, just not written up here
+one-by-one. The major pieces, at a glance:
+
+- **Shape layers** — rectangle/ellipse/line, with photo/video masking
+  (upload media clipped to the shape's outline).
+- **60+ motion effects** across three "FX tiers" — glitch, data-mosh,
+  liquid, scramble, cube-flip, morph, burst, stroke-draw, letter-pop, and
+  more, each with matching in/out pairs.
+- **Real per-property keyframes** (the Keyframes tab) alongside the preset
+  system, for when a canned effect isn't enough.
+- **Background style system** — 24 treatments (gradients, textures, grain),
+  adjustable per-project or per-page.
+- **Layer groups** (color-coded, move together on canvas), a **page-layout
+  template library**, and **project duplicate** (full independent copy).
+- **Background music/sound-bed** track for the whole reel.
+- **DaVinci Resolve Studio integration arrived**: two Workflow Integration
+  plugins (the full app inside a Resolve panel, and a focused
+  "Timeline Text" panel that animates an existing timeline clip in place) —
+  see [resolve-plugin/README.md](resolve-plugin/README.md).
+- **Editor redesign** ("Precision Console") — icon rail, safe-zone +
+  Instagram-UI preview overlays, custom size-preset cards, resizable
+  panels, and a large batch of smaller interaction/visual fixes.
+
+## v3.0.0 — 2026-09-07
+
+**First public release.** Repo went public on GitHub — this version is
+mostly about making that safe and usable by someone who isn't sitting next
+to the machine it was built on:
+
+- Rewrote `README.md` for a public audience: what Motionist is, how the
+  PSD/SVG → animated-reel pipeline actually works, a quick-start (including
+  the one-file `bootstrap.bat` installer), and an honest Motionist-vs-
+  Canva/CapCut/After Effects comparison.
+- `bootstrap.bat` no longer assumes a private repo — dropped the
+  "ask for a collaborator invite" messaging now that anyone can clone it.
+- Scrubbed two directories of real client design files
+  (`Templates/SVG`, `Templates/Final Templates`) out of the git history
+  entirely, not just off the tip — they'd been tracked since v1.0.0 and the
+  repo only just went public. Rewrote history with `git-filter-repo`,
+  which also shrank `.git` from ~960 MB to ~7 MB as a side effect.
+- No LICENSE yet — noted explicitly in the README (defaults to all rights
+  reserved) rather than silently leaving it ambiguous.
+
+**Feature backlog, shipped this version** (see individual commits for
+detail — `3596a3e`, `d583cfd`, `feee445`, `21e81cb`, `b335914`, `38b0e24`):
+- Duplicate page (filmstrip hover pill).
+- Multi-select layers on the canvas — shift/ctrl/cmd+click, group move,
+  bulk delete, align-to-selection.
+- Cross-project brand kit — saved colors available in every color field.
+- Keyboard shortcuts cheatsheet ("?" in the topbar).
+- Dashboard search/filter, centered in the header.
+- Project export/import — one file, for backup or moving machines.
+
+**Fixes**
+- A text layer's drag box is now always locked to its own rendered text
+  size — previously it could end up much bigger than the text inside it
+  (left over from a resize, or pasted from another layer) with no way to
+  shrink it back except dragging by eye.
+
+---
+
 <!-- Add new entries above this line as versions ship. -->
