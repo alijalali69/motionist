@@ -1,7 +1,7 @@
 import React from "react";
 import {
   listProjects, createProject, deleteProject, duplicateProject, type ProjectSummary,
-  loadProject, saveProject,
+  loadProject, saveProject, exportProjectUrl, importProject,
   listFonts, uploadFontToLibrary, deleteFont, type FontEntry,
   listBrandColors, addBrandColor, deleteBrandColor, type BrandColorEntry,
   listSizePresets, saveSizePreset, deleteSizePreset, type SizePresetEntry,
@@ -395,6 +395,25 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
     finally { setDuplicatingId(null); }
   };
 
+  // Import — the other half of Export (see exportProjectUrl on each card's
+  // hover pill): reads the picked .motionist.json back off disk client-
+  // side, the server does the real work (physically writing its assets
+  // into a brand-new project id). Same "stays on the Dashboard, doesn't
+  // open it" spirit as duplicate above.
+  const [importing, setImporting] = React.useState(false);
+  const importFileRef = React.useRef<HTMLInputElement>(null);
+  const onImportFile = async (file: File) => {
+    setImporting(true); setErr(null);
+    try {
+      await importProject(file);
+      refresh();
+    } catch (e: any) {
+      setErr(String(e.message || e));
+    } finally {
+      setImporting(false);
+    }
+  };
+
   // Dashboard only has the lightweight ProjectSummary list, no dedicated
   // rename endpoint — reuses the same load-full-project -> edit -> save
   // round trip the editor's own topbar name field triggers, just from here
@@ -430,10 +449,18 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
           <p className="dash-sub">Motion with freedom &middot; your reel projects</p>
         </div>
         <div className="row" style={{ gap: 8 }}>
+          <input ref={importFileRef} className="hidden-file" type="file" accept=".json,.motionist.json"
+            onChange={(e) => e.target.files?.[0] && onImportFile(e.target.files[0])} />
+          <button className="btn" disabled={importing} onClick={() => importFileRef.current?.click()}
+            title="Import a project exported from this or another Motionist install">
+            {importing ? "Importing…" : "📥 Import"}
+          </button>
           <button className="btn" onClick={() => setManagingFonts(true)}>🔤 Fonts</button>
           <button className="btn" onClick={() => setManagingBrandColors(true)}>🎨 Colors</button>
         </div>
       </div>
+
+      {err && <p className="err" style={{ marginTop: -4 }}>{err}</p>}
 
       {managingFonts && <FontManager onClose={() => setManagingFonts(false)} />}
       {managingBrandColors && <BrandColorManager onClose={() => setManagingBrandColors(false)} />}
@@ -529,6 +556,11 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
                       disabled={duplicatingId === p.id}
                       onClick={(e) => { e.stopPropagation(); doDuplicate(p.id); }}
                     >{duplicatingId === p.id ? "…" : "⧉"}</button>
+                    <button
+                      className="thumb-export"
+                      title="Export project as a file — for backup, or moving to another machine"
+                      onClick={(e) => { e.stopPropagation(); window.location.href = exportProjectUrl(p.id); }}
+                    >⬇</button>
                     <button
                       className="thumb-del"
                       title="Delete project"

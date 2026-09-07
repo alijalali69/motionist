@@ -768,6 +768,18 @@ input.dash-search { width: 220px; flex: none; }
 .thumb-dup:hover { background: var(--accent); border-color: var(--accent); }
 .thumb-dup[disabled] { opacity: 0.5; cursor: default; }
 
+/* Bottom-right — duplicate/delete already own the top two corners. */
+.thumb-export {
+  position: absolute; bottom: 8px; right: 8px;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(14, 16, 19, 0.75); color: var(--text);
+  border: 1px solid rgba(255,255,255,0.12);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; cursor: pointer; opacity: 0; transition: opacity 0.12s;
+}
+.project-card:hover .thumb-export { opacity: 1; }
+.thumb-export:hover { background: var(--good); border-color: var(--good); }
+
 .thumb-confirm {
   position: absolute; inset: 0;
   background: rgba(10, 11, 13, 0.88);

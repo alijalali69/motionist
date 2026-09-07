@@ -616,6 +616,78 @@ app.post("/api/projects/:id/duplicate", (req, res) => {
   }
 });
 
+// --- Export/import a project as one portable file — backup, or moving to
+// another machine. No zip library is installed here, so instead of a real
+// .zip this is a single JSON file: the project data plus every one of its
+// own asset files, base64-encoded inline. Simpler to build and re-import
+// with zero new dependencies, and since import only ever reads what THIS
+// same export route produced, there's no need to match any external
+// archive format — it's a private bundle shape, not a public one.
+app.get("/api/projects/:id/export", (req, res) => {
+  try {
+    const project = readProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "project not found" });
+
+    const dir = path.join(PUBLIC, "projects", req.params.id);
+    const files = {};
+    if (fs.existsSync(dir)) {
+      const walk = (d) => {
+        for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+          const full = path.join(d, entry.name);
+          if (entry.isDirectory()) walk(full);
+          else {
+            const rel = path.relative(PUBLIC, full).split(path.sep).join("/");
+            files[rel] = fs.readFileSync(full).toString("base64");
+          }
+        }
+      };
+      walk(dir);
+    }
+    const bundle = { motionistExport: 1, project, files };
+    const safeName = (project.name || project.projectId).replace(/[^a-z0-9]/gi, "_");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}.motionist.json"`);
+    res.setHeader("Content-Type", "application/json");
+    res.send(JSON.stringify(bundle));
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.post("/api/projects/import", (req, res) => {
+  try {
+    const bundle = req.body;
+    if (!bundle || bundle.motionistExport !== 1 || !bundle.project) {
+      return res.status(400).json({ error: "not a valid Motionist export file" });
+    }
+    const oldId = bundle.project.projectId;
+    const newId = newProjectId();
+    const oldPrefix = `projects/${oldId}/`;
+    const newPrefix = `projects/${newId}/`;
+    // Write every asset file into the NEW project's own folder — never
+    // oldId's, which might (on this machine, or a totally different one
+    // than the export came from) already point at a real, unrelated
+    // project's files.
+    for (const [relPath, b64] of Object.entries(bundle.files || {})) {
+      const rewritten = relPath.startsWith(oldPrefix) ? newPrefix + relPath.slice(oldPrefix.length) : relPath;
+      const dest = path.join(PUBLIC, rewritten);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, Buffer.from(b64, "base64"));
+    }
+
+    const project = structuredClone(bundle.project);
+    project.projectId = newId;
+    const now = new Date().toISOString();
+    project.createdAt = now;
+    project.updatedAt = now;
+    rewritePathPrefix(project, oldPrefix, newPrefix);
+
+    writeProject(project);
+    res.json(project);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
 // --- Duplicate ONE page within a project: same idea, scoped to that page's
 // own asset folder (projects/<projectId>/<pageId>/) instead of the whole
 // project's. Has to physically copy the files and mint a new page id

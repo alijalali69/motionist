@@ -53,6 +53,30 @@ export async function duplicatePage(projectId: string, pageId: string): Promise<
   return r.json();
 }
 
+// Export/import — a project as one portable file (backup, or moving to
+// another machine). Export is just a URL: the route itself sets
+// Content-Disposition so navigating to it (or setting window.location)
+// downloads the file directly, no client-side blob assembly needed. Import
+// reads whatever the user picked back off disk client-side and posts its
+// JSON straight through — the server does all the real work (physically
+// copying assets into a fresh project id).
+export function exportProjectUrl(id: string): string {
+  return `/api/projects/${encodeURIComponent(id)}/export`;
+}
+
+export async function importProject(file: File): Promise<Project> {
+  const text = await file.text();
+  let bundle: unknown;
+  try { bundle = JSON.parse(text); } catch { throw new Error("that file isn't valid JSON"); }
+  const r = await fetch("/api/projects/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(bundle),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || "import failed");
+  return r.json();
+}
+
 export async function loadProject(id: string): Promise<Project | null> {
   const r = await fetch(`/api/projects/${encodeURIComponent(id)}`);
   if (!r.ok) return null;
