@@ -27,9 +27,15 @@
 .player-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap; /* extra buttons (guides' +V/+H/Clear, safe-zone, IG UI,
+    mute…) wrap onto a second line INSIDE the card once they don't fit,
+    instead of spilling out past its border — was a hard no-wrap row, which
+    is exactly what let the guides buttons visibly poke out of the box. */
+  gap: 10px 8px;
   width: 100%;
-  max-width: 560px;
+  max-width: 640px; /* was 560px — just past where the guides toggle's own
+    +V/+H/Clear guides trio started tipping the row into overflow at the
+    common case (portrait project, guides on, nothing else conditional) */
   flex-shrink: 0;
   padding: 8px 10px;
   background: var(--panel);
