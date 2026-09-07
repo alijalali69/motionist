@@ -37,9 +37,13 @@
     is exactly what let the guides buttons visibly poke out of the box. */
   gap: 8px 6px;
   width: 100%;
-  max-width: 640px; /* was 560px — just past where the guides toggle's own
-    +V/+H/Clear guides trio started tipping the row into overflow at the
-    common case (portrait project, guides on, nothing else conditional) */
+  max-width: 420px; /* was 640px, from when guides/safe-zone/IG-UI still
+    rendered here too (see the comment at the top of this rule) — now that
+    they're their own row above the artboard, this bar is back to just
+    play/time/seek/fullscreen/zoom%/mute, and the flex:1 seek bar was
+    stretching that short content across a much wider track than it needed
+    (the actual "very wide" complaint — a bar full of small buttons and one
+    long empty-looking scrubber). */
   flex-shrink: 0;
   padding: 5px 8px;
   background: var(--panel);
