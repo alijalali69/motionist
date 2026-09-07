@@ -5,7 +5,7 @@ import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type
 import { TEXT_ENTRANCE_NAMES, TEXT_EXIT_NAMES, LATIN_TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS, BG_TEXTURE_NAMES, BG_COLOR_NAMES, BG_GRADE_NAMES, BG_MOTION_NAMES } from "../../src/presets";
 import type { BgStyle } from "../../src/types";
 import {
-  loadProject, saveProject, generateThumbnail, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
+  loadProject, saveProject, generateThumbnail, duplicatePage, ingestPsd, uploadLogo, uploadAsset, startRenderJob, getRenderJobStatus, cancelRenderJob,
   browseFolder, type RenderQuality,
   listFonts, deleteProjectFiles, type IngestResult, type FontEntry,
   listMotionPresets, saveMotionPreset, deleteMotionPreset, type MotionPresetEntry,
@@ -1436,6 +1436,28 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     }
   };
 
+  // Duplicate ONE page — same layers/motion, dropped right after the
+  // original and selected. The server round-trip (duplicatePage) is the
+  // part that has to happen first: it physically copies this page's own
+  // asset folder to a new one and hands back a page already pointed at
+  // that copy, so the two pages never end up sharing files — matters for
+  // real, since delPage above deletes a page's whole folder outright.
+  const dupPage = async (i: number) => {
+    const page = project?.pages[i];
+    if (!page || !project) return;
+    setBusy("Duplicating page…");
+    setErr(null);
+    try {
+      const copy = await duplicatePage(project.projectId, page.id);
+      update((p) => { p.pages.splice(i + 1, 0, copy); });
+      setSel(i + 1);
+    } catch (e: any) {
+      setErr(String(e.message || e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Draggable/resizable canvas handles: global bg/logo/title + every
   // text/shape/photo layer on the CURRENT page. Rebuilt whenever the
   // project, selected page, or altHeld changes. A photo layer's move/resize
@@ -2200,6 +2222,8 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               }}>
               <TemplateIcon />
             </button>
+            <button className="btn small" title="Duplicate this page — same layers/motion, own copy of its images"
+              onClick={() => { dupPage(hoverPageCard.index); setHoverPageCard(null); }}>⧉</button>
             <button className="btn small" title="Delete page"
               onClick={() => { delPage(hoverPageCard.index); setHoverPageCard(null); }}>✕</button>
           </div>

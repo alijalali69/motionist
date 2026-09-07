@@ -40,6 +40,19 @@ export async function duplicateProject(id: string): Promise<Project> {
   return r.json();
 }
 
+// A full independent copy of ONE page — its own asset folder too (every
+// uploaded photo/video this page's layers reference gets physically
+// duplicated server-side, not just the JSON), so deleting either the
+// original or the copy later never breaks the other's images. Returns the
+// ready-to-insert page (already carrying its own new id) — the caller
+// splices it into project.pages and saves, same as inserting a page
+// template (see onInsertTemplate in App.tsx).
+export async function duplicatePage(projectId: string, pageId: string): Promise<Project["pages"][number]> {
+  const r = await fetch(`/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(pageId)}/duplicate`, { method: "POST" });
+  if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || "duplicate failed");
+  return r.json();
+}
+
 export async function loadProject(id: string): Promise<Project | null> {
   const r = await fetch(`/api/projects/${encodeURIComponent(id)}`);
   if (!r.ok) return null;

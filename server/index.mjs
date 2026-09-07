@@ -524,16 +524,27 @@ app.delete("/api/projects/:id", (req, res) => {
   res.json({ ok: true });
 });
 
-// --- Duplicate a project: a full independent copy, own assets included ------
 // Every asset path stored anywhere in a project (bg/title/logo/audio, each
 // page's layers, ingested PSD/SVG page art) is always written by this same
 // server as the literal string "projects/<projectId>/<subdir>/<file>" — see
 // saveMedia's `rel` and /api/ingest's exportDir above, and tools/compose.mjs
 // on the Python-extraction side. That means a plain string-replace of the
-// id prefix, after physically copying the whole asset folder, re-points
+// id prefix, after physically copying the relevant asset folder, re-points
 // every reference at the new copy correctly with no per-field asset logic
 // needed — a page's layers array, its bgStyle, everything just falls out of
-// one recursive walk.
+// one recursive walk. Shared by both project- and page-level duplication
+// below (same trick, different prefix/scope).
+function rewritePathPrefix(v, oldPrefix, newPrefix) {
+  if (Array.isArray(v)) { v.forEach((x) => rewritePathPrefix(x, oldPrefix, newPrefix)); return; }
+  if (v && typeof v === "object") {
+    for (const k of Object.keys(v)) {
+      if (typeof v[k] === "string" && v[k].startsWith(oldPrefix)) v[k] = newPrefix + v[k].slice(oldPrefix.length);
+      else if (v[k] && typeof v[k] === "object") rewritePathPrefix(v[k], oldPrefix, newPrefix);
+    }
+  }
+}
+
+// --- Duplicate a project: a full independent copy, own assets included ------
 app.post("/api/projects/:id/duplicate", (req, res) => {
   try {
     const oldId = req.params.id;
@@ -552,21 +563,47 @@ app.post("/api/projects/:id/duplicate", (req, res) => {
     project.createdAt = now;
     project.updatedAt = now;
 
-    const oldPrefix = `projects/${oldId}/`;
-    const newPrefix = `projects/${newId}/`;
-    const walk = (v) => {
-      if (Array.isArray(v)) { v.forEach(walk); return; }
-      if (v && typeof v === "object") {
-        for (const k of Object.keys(v)) {
-          if (typeof v[k] === "string" && v[k].startsWith(oldPrefix)) v[k] = newPrefix + v[k].slice(oldPrefix.length);
-          else if (v[k] && typeof v[k] === "object") walk(v[k]);
-        }
-      }
-    };
-    walk(project);
+    rewritePathPrefix(project, `projects/${oldId}/`, `projects/${newId}/`);
 
     writeProject(project);
     res.json(project);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+// --- Duplicate ONE page within a project: same idea, scoped to that page's
+// own asset folder (projects/<projectId>/<pageId>/) instead of the whole
+// project's. Has to physically copy the files and mint a new page id
+// server-side (not left to the client, unlike template-insert's page id —
+// see onInsertTemplate in App.tsx — since that path has no per-project
+// files to copy in the first place); the client just splices the returned
+// page into project.pages and saves normally. Doing this via the plain
+// project-JSON prefix-rewrite instead of leaving the two pages sharing one
+// folder matters for real: this app's own page delete removes its whole
+// asset folder (see delPage in App.tsx) — two pages pointing at the same
+// folder would mean deleting either one silently breaks the other's images.
+app.post("/api/projects/:id/pages/:pageId/duplicate", (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const oldPageId = req.params.pageId;
+    const project = readProject(projectId);
+    if (!project) return res.status(404).json({ error: "project not found" });
+    const page = project.pages?.find((p) => p.id === oldPageId);
+    if (!page) return res.status(404).json({ error: "page not found" });
+
+    const newPageId = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const srcDir = path.join(PUBLIC, "projects", projectId, oldPageId);
+    const destDir = path.join(PUBLIC, "projects", projectId, newPageId);
+    if (fs.existsSync(srcDir)) fs.cpSync(srcDir, destDir, { recursive: true });
+
+    const copy = structuredClone(page);
+    copy.id = newPageId;
+    if (copy.name) copy.name = `${copy.name} copy`;
+
+    rewritePathPrefix(copy, `projects/${projectId}/${oldPageId}/`, `projects/${projectId}/${newPageId}/`);
+
+    res.json(copy);
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
