@@ -10,40 +10,141 @@
 // to capture at export time. Same reasoning as glitchIn/liquidIn/etc. in
 // PageScene.tsx, whose glitchNoise() this file reuses directly.
 import React from "react";
+import { useVideoConfig } from "remotion";
+import { noise3D } from "@remotion/noise";
 import { glitchNoise, BG_COLOR_DEFAULTS, type BgTextureName, type BgColorName, type BgGradeName, type BgMotionName } from "./presets";
 import type { BgStyle } from "./types";
 
+// Real per-pixel noise, not a repeating dot lattice. Two different
+// generators, picked per job:
+//  - hash3(): a plain sin-hash (same trick glitchNoise() above already uses,
+//    just extended to 3 inputs) — genuinely independent from one pixel to
+//    the next, which is what fine grain/tooth actually looks like.
+//  - noise3D() from @remotion/noise: a real simplex field, deliberately
+//    SMOOTH from one sample to the next — right for paper's large-scale
+//    fiber clumps, wrong for fine grain (sampling it at a high enough
+//    frequency to fake independence instead surfaces its underlying skewed
+//    triangular lattice as visible diagonal streaking — hit this for real
+//    before switching fine detail over to hash3()).
+// Both are deterministic (same seed+coords always gives the same value),
+// which a Remotion render needs: sampled fresh every frame with no
+// persisted state, every frame — and every re-render of the same frame,
+// e.g. seeking in the Player, or a parallel-chunked CLI render — has to
+// land on identical pixels.
+//
+// Drawn onto a small offscreen-resolution <canvas> and CSS-stretched to
+// fill the frame: computing true per-pixel noise at full composition
+// resolution (2M+ pixels on a 1080x1920 reel) every few frames would be
+// real work for no visible gain, and the low resolution IS the grain's own
+// size besides — real film grain isn't one photo pixel wide either.
+function hash3(x: number, y: number, z: number, seed: number): number {
+  const v = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + seed * 93.989) * 43758.5453;
+  return v - Math.floor(v); // [0, 1)
+}
+
+function noiseCanvasSize(compW: number, compH: number, divisor: number, min: number, max: number) {
+  // min/max bound the WIDTH only — h is then derived from the real aspect
+  // ratio so a tall 9:16 reel doesn't get its grain squashed by clamping h
+  // against the same ceiling as w (a portrait canvas needs h > w).
+  const w = Math.max(min, Math.min(max, Math.round(compW / divisor)));
+  const h = Math.max(1, Math.round((compH / compW) * w));
+  return { w, h };
+}
+
+const NoiseCanvas: React.FC<{
+  seed: number;
+  z: number;
+  resW: number;
+  resH: number;
+  kind: "grain" | "paperFiber";
+  tintColor?: string;
+}> = ({ seed, z, resW, resH, kind, tintColor }) => {
+  const ref = React.useRef<HTMLCanvasElement>(null);
+  React.useLayoutEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    canvas.width = resW;
+    canvas.height = resH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const img = ctx.createImageData(resW, resH);
+    const data = img.data;
+    // Paper's fiber texture layers a slow, large-scale field (clumps/
+    // watermark-like mottling, real simplex) with a fast, fine one (the
+    // paper's own "tooth", hash white noise) — one alone looks like either
+    // a blurry cloud or flat static, neither of which reads as a physical
+    // sheet the way both together do.
+    //
+    // The +0.5-ish offsets on the simplex sample aren't decorative: classic
+    // Perlin/simplex noise is exactly 0 at every integer lattice coordinate
+    // on every axis by construction, and x/y/z here are otherwise all whole
+    // numbers (loop indices, and a whole-number z) — sampled raw, EVERY
+    // pixel lands exactly on a lattice point and the whole canvas comes out
+    // a flat, noise-free gray (hit this for real: min===max===128 over the
+    // entire buffer). Nudging each axis off-integer is the fix; hash3()
+    // doesn't need it — it has no lattice to land on.
+    const [tr, tg, tb] = tintColor ? hexToRgb(tintColor) : [120, 100, 60];
+    for (let y = 0; y < resH; y++) {
+      for (let x = 0; x < resW; x++) {
+        const i = (y * resW + x) * 4;
+        if (kind === "grain") {
+          const r = hash3(x, y, z, seed);
+          const v = Math.max(0, Math.min(255, Math.round(128 + (r - 0.5) * 200)));
+          data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+        } else {
+          const clump = noise3D(seed, x * 0.05 + 0.213, y * 0.05 + 0.859, z + 0.417) * 0.5 + 0.5;
+          const tooth = hash3(x, y, z, seed + 100);
+          const lum = clump * 0.6 + tooth * 0.4;
+          data[i] = tr; data[i + 1] = tg; data[i + 2] = tb;
+          data[i + 3] = Math.round(lum * 255);
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }, [seed, z, resW, resH, kind, tintColor]);
+  return <canvas ref={ref} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />;
+};
+
+function hexToRgb(hex: string): [number, number, number] {
+  const m = hex.replace("#", "");
+  const n = parseInt(m.length === 3 ? m.split("").map((c) => c + c).join("") : m, 16);
+  if (Number.isNaN(n)) return [120, 100, 60];
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
 const TextureLayer: React.FC<{ name: BgTextureName; intensity: number; colorA?: string; frame: number }> = ({ name, intensity, colorA, frame }) => {
+  const { width: compW, height: compH } = useVideoConfig();
   if (name === "none" || !intensity) return null;
   switch (name) {
     case "filmGrain": {
-      // A new pseudo-random offset every 4 frames (stepped, not smoothly
-      // interpolated) — a flickering grain read, not a slow crawl.
+      // A fresh noise field every 4 frames (stepped, not smoothly
+      // interpolated) — a flickering grain read, matching how real
+      // emulsion grain "boils" from frame to frame, not a slow crawl.
       const step = Math.floor(frame / 4);
-      const dx = (glitchNoise(step, 101) - 0.5) * 6;
-      const dy = (glitchNoise(step, 102) - 0.5) * 6;
+      const { w, h } = noiseCanvasSize(compW, compH, 5, 90, 260);
       return (
-        <div style={{
-          position: "absolute", inset: "-50%", width: "200%", height: "200%",
-          opacity: intensity, mixBlendMode: "overlay", pointerEvents: "none",
-          backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.9) 0.6px, transparent 0.6px)",
-          backgroundSize: "3px 3px",
-          transform: `translate(${dx}%, ${dy}%)`,
-        }} />
+        <div style={{ position: "absolute", inset: 0, opacity: intensity, mixBlendMode: "overlay", pointerEvents: "none" }}>
+          <NoiseCanvas seed={7.13} z={step} resW={w} resH={h} kind="grain" />
+        </div>
       );
     }
-    case "paperGrain":
+    case "paperGrain": {
+      // Static — real paper doesn't animate, so z is a fixed constant, not
+      // frame-driven (computed once per mount, unlike filmGrain above).
+      const { w, h } = noiseCanvasSize(compW, compH, 3, 140, 420);
       return (
         <>
-          <div style={{
-            position: "absolute", inset: 0, opacity: intensity, mixBlendMode: "multiply", pointerEvents: "none",
-            backgroundImage: "radial-gradient(rgba(120,100,60,0.5) 0.5px, transparent 0.5px), radial-gradient(rgba(120,100,60,0.3) 0.5px, transparent 0.5px)",
-            backgroundSize: "4px 4px, 7px 7px", backgroundPosition: "0 0, 2px 3px",
-          }} />
+          <div style={{ position: "absolute", inset: 0, opacity: intensity, mixBlendMode: "multiply", pointerEvents: "none" }}>
+            {/* Fixed warm paper tone, not colorA — colorA is this backdrop's
+                accent color (used by halftone/riso's ink dots), a different
+                knob than "what shade is the paper itself." */}
+            <NoiseCanvas seed={41.7} z={0} resW={w} resH={h} kind="paperFiber" />
+          </div>
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: intensity,
             background: "radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(90,70,30,0.25) 100%)" }} />
         </>
       );
+    }
     case "halftone": {
       const px = (frame * 0.3) % 9;
       const py = (frame * 0.6) % 18;

@@ -15,6 +15,7 @@
     "@remotion/cli": "4.0.516",
     "@remotion/gif": "^4.0.516",
     "@remotion/lottie": "^4.0.516",
+    "@remotion/noise": "^4.0.516",
     "@remotion/player": "^4.0.516",
     "@remotion/transitions": "^4.0.516",
     "cors": "^2.8.5",
