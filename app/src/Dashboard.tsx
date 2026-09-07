@@ -448,7 +448,12 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
           </div>
           <p className="dash-sub">Motion with freedom &middot; your reel projects</p>
         </div>
-        <div className="row" style={{ gap: 8 }}>
+        {projects && projects.length > 0 ? (
+          <input type="text" value={search} placeholder="Search projects…"
+            className="dash-search"
+            onChange={(e) => setSearch(e.target.value)} />
+        ) : <div />}
+        <div className="row dash-header-actions" style={{ gap: 8 }}>
           <input ref={importFileRef} className="hidden-file" type="file" accept=".json,.motionist.json"
             onChange={(e) => e.target.files?.[0] && onImportFile(e.target.files[0])} />
           <button className="btn" disabled={importing} onClick={() => importFileRef.current?.click()}
@@ -530,12 +535,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
 
       {projects && projects.length > 0 && (
         <>
-        <div className="row between" style={{ marginTop: 32, alignItems: "center" }}>
-          <div className="section-label" style={{ margin: 0 }}>Your projects</div>
-          <input type="text" value={search} placeholder="Search projects…"
-            className="dash-search"
-            onChange={(e) => setSearch(e.target.value)} />
-        </div>
+        <div className="section-label" style={{ marginTop: 32 }}>Your projects</div>
         {filteredProjects && filteredProjects.length === 0 ? (
           <p className="sub" style={{ padding: "16px 0" }}>No projects match "{search.trim()}".</p>
         ) : (

@@ -632,12 +632,19 @@ a.dl { color: var(--accent2); }
   margin: 0 auto;
 }
 
+/* Grid, not flex — a 3rd item (the search box) in a flex row with
+   justify-content:space-between doesn't land truly centered, just
+   "wherever the flex algorithm puts it" once the outer two items are
+   different widths (brand block vs. the button row here always are).
+   1fr/auto/1fr guarantees the middle column is centered regardless. */
 .dash-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: flex-end;
-  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 40px;
 }
+.dash-header-actions { justify-self: end; }
 .brand-lockup { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
 .brand-icon { height: 30px; width: auto; display: block; }
 .dash-title { font-size: 26px; margin: 0; letter-spacing: 0.2px; }
@@ -649,14 +656,14 @@ a.dl { color: var(--accent2); }
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--muted); font-weight: 700; margin: 0 0 14px;
 }
-/* Sits next to .section-label in a .row.between — base input[type=text] is
-   width:100%, which here would mean "fill every pixel .row.between isn't
-   spending on the label," ballooning to most of the dashboard's width (hit
-   this for real — a plain .dash-search class LOSES that specificity fight
-   against the element+attribute base selector; needs the element in the
-   selector too, and to still win the tie by source order, which being
-   further down the file already gives it). */
-input.dash-search { width: 220px; flex: none; }
+/* Sits in the header's own centered grid column now (moved up from next to
+   the "Your projects" label) — base input[type=text] is width:100%, which
+   here would mean "fill this whole grid column," so still needs an
+   explicit width regardless of where it lives. Needs the element in the
+   selector (not just the class) to beat the base rule's specificity, and
+   to still win the tie by source order, which being further down the file
+   already gives it. */
+input.dash-search { width: 280px; flex: none; }
 
 /* "Start a new project" — device-preset cards, XD welcome-screen style: a
    shape in the preset's own aspect ratio, name, dimensions. Picking one
