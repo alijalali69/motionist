@@ -568,6 +568,11 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const [showAddPageMenu, setShowAddPageMenu] = React.useState(false);
   // Account menu — placeholder items only, see the topbar's acctwrap below.
   const [showAcctMenu, setShowAcctMenu] = React.useState(false);
+  // Keyboard shortcuts cheatsheet — real shortcuts already existed (undo/
+  // redo, space, delete, arrow-nudge, etc.) with zero way to discover them
+  // short of already knowing to try. Toggled by the topbar's "?" button, or
+  // the "?" key itself once you do know (see the global keydown effect).
+  const [showShortcuts, setShowShortcuts] = React.useState(false);
   const [showSafeZone, setShowSafeZone] = React.useState(false);
   const [showInstagramUI, setShowInstagramUI] = React.useState(false);
   // Visibility toggle only — like showSafeZone/showInstagramUI above, this
@@ -937,10 +942,26 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         playerRef.current?.toggle();
         return;
       }
+      // "?" opens the shortcuts cheatsheet (same key GitHub/Figma/Notion
+      // use) — real key check, not e.code, so it works regardless of
+      // keyboard layout (Shift+/ produces "?" as the actual character on
+      // a US layout, but e.key already reflects whatever the layout
+      // actually produced).
+      if (e.key === "?") {
+        e.preventDefault();
+        setShowShortcuts((v) => !v);
+        return;
+      }
       // Multi-select (canvas-only — see canvasHandles' onSelect wiring).
-      // Escape clears it; Delete/Backspace removes every selected layer.
-      // Guarded by the same `typing` check above, so Backspace still edits
-      // text normally in a focused field instead of deleting layers.
+      // Escape clears it — or closes the cheatsheet first, if that's what's
+      // open; Delete/Backspace removes every selected layer. Guarded by the
+      // same `typing` check above, so Backspace still edits text normally
+      // in a focused field instead of deleting layers.
+      if (e.key === "Escape" && showShortcuts) {
+        e.preventDefault();
+        setShowShortcuts(false);
+        return;
+      }
       if (e.key === "Escape" && selectedLayerIndices.size > 0) {
         e.preventDefault();
         setSelectedLayerIndices(new Set());
@@ -954,12 +975,12 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-    // Re-attached whenever `project`/`sel`/the selection changes so every
-    // branch here always acts on current state, not whatever was current
-    // when the listener was first attached (playerRef itself is a stable
-    // ref, so the spacebar branch doesn't actually need this — but undo/
-    // redo and the multi-select branches do).
-  }, [project, sel, selectedLayerIndices]);
+    // Re-attached whenever `project`/`sel`/the selection/the cheatsheet's
+    // own open state changes so every branch here always acts on current
+    // state, not whatever was current when the listener was first attached
+    // (playerRef itself is a stable ref, so the spacebar branch doesn't
+    // actually need this — but undo/redo and the other branches do).
+  }, [project, sel, selectedLayerIndices, showShortcuts]);
 
   const update = (fn: (p: Project) => void) => {
     if (project) {
@@ -1806,6 +1827,8 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               )}
             </div>
           )}
+          <button className="btn small icon" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"
+            onClick={() => setShowShortcuts(true)}>?</button>
           {/* Account slot — a visual placeholder for when login ships, not
               wired to anything real yet. Reserving the spot now (top-right,
               same place every app like this puts it) means it isn't a
@@ -2405,6 +2428,48 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           )}
         </div>
       </div>
+
+      {/* Keyboard shortcuts cheatsheet — every one of these already worked
+          before this modal existed; the only thing missing was any way to
+          find out. Opened by the topbar's "?" button or the "?" key itself
+          (see the global keydown effect above) — a real shortcut for the
+          shortcuts list, same convention GitHub/Figma/Notion use. */}
+      {showShortcuts && (
+        <div className="modal-backdrop" onClick={() => setShowShortcuts(false)}>
+          <div className="modal" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>Keyboard shortcuts</h2>
+            {[
+              { group: "Playback", rows: [["Space", "Play / pause"]] },
+              { group: "Edit", rows: [["Ctrl/Cmd + Z", "Undo"], ["Ctrl/Cmd + Shift + Z (or Ctrl + Y)", "Redo"]] },
+              { group: "Canvas selection", rows: [
+                ["Click a layer", "Select it (replaces the current selection)"],
+                ["Shift / Ctrl / Cmd + click", "Add or remove that layer from the selection"],
+                ["Click empty canvas, or Esc", "Clear the selection"],
+                ["Delete / Backspace", "Delete every selected layer"],
+              ] },
+              { group: "Nudge a selected layer", rows: [
+                ["Arrow keys", "Move 1px"],
+                ["Shift + Arrow keys", "Move 10px"],
+              ] },
+              { group: "Photo / video layers", rows: [["Hold Alt + drag", "Pan the image inside its frame instead of moving the frame"]] },
+              { group: "Canvas zoom", rows: [["Ctrl + scroll, over the preview", "Zoom in / out"]] },
+            ].map(({ group, rows }) => (
+              <div key={group} style={{ marginTop: 14 }}>
+                <div className="subhead" style={{ marginBottom: 6 }}>{group}</div>
+                {rows.map(([keys, desc]) => (
+                  <div key={keys} className="row between" style={{ gap: 12, padding: "4px 0" }}>
+                    <span className="sub" style={{ margin: 0 }}>{desc}</span>
+                    <span className="tag" style={{ flexShrink: 0, whiteSpace: "nowrap" }}>{keys}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div className="row" style={{ gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setShowShortcuts(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Save current page as a template — a small named-save form, same
           "inline field, not window.prompt" spirit as motion presets'
