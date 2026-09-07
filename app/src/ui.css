@@ -35,20 +35,44 @@
     mute…) wrap onto a second line INSIDE the card once they don't fit,
     instead of spilling out past its border — was a hard no-wrap row, which
     is exactly what let the guides buttons visibly poke out of the box. */
-  gap: 10px 8px;
+  gap: 8px 6px;
   width: 100%;
   max-width: 640px; /* was 560px — just past where the guides toggle's own
     +V/+H/Clear guides trio started tipping the row into overflow at the
     common case (portrait project, guides on, nothing else conditional) */
   flex-shrink: 0;
-  padding: 8px 10px;
+  padding: 5px 8px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
-.player-controls .btn.small { flex: none; padding: 4px 10px; font-size: 14px; }
-.pc-time { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.pc-seek { flex: 1; accent-color: var(--accent); }
+/* Was 4px/10px padding at 14px font — visibly heavier than every other
+   .btn.small in the app (base: 4px/8px, 12px). Play/Fullscreen/zoom% don't
+   need to be the biggest buttons on screen; matched down to base size. */
+.player-controls .btn.small { flex: none; padding: 3px 8px; font-size: 12px; }
+.pc-time { font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Custom-styled thin track + small thumb — a bare <input type=range> renders
+   at the browser's own default size (a noticeably chunky ~16-20px thumb on
+   a thick track), which was most of this row's visual "weight." -webkit/
+   -moz prefixes both needed; there's no unprefixed standard for slider
+   parts yet. */
+.pc-seek {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 12px;
+  background: transparent;
+  accent-color: var(--accent); /* harmless fallback on engines that ignore the pseudo-elements below */
+}
+.pc-seek::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: var(--line); }
+.pc-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--accent); cursor: pointer;
+  margin-top: -4px; /* centers the thumb on the 3px track (11px thumb - 3px track) / 2 */
+}
+.pc-seek::-moz-range-track { height: 3px; border-radius: 2px; background: var(--line); }
+.pc-seek::-moz-range-thumb { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); border: none; cursor: pointer; }
 
 /* Overlay-guide toolbar — ruler guides + safe-zone + Instagram UI mockup,
    sitting ABOVE the artboard (own row, own card) instead of crowding into
@@ -59,14 +83,17 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
-  padding: 6px 10px;
+  padding: 5px 8px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
-.canvas-toolbar .btn.small { flex: none; padding: 4px 10px; font-size: 14px; }
+/* Same fix as .player-controls .btn.small above — matched down to the
+   base .btn.small size so the two stacked bars (this one above the
+   artboard, transport below it) read as one visual weight, not two. */
+.canvas-toolbar .btn.small { flex: none; padding: 3px 8px; font-size: 12px; }
 .canvas-toolbar-divider { width: 1px; align-self: stretch; background: var(--line); margin: 0 2px; }
 
 body {
