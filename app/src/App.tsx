@@ -13,6 +13,7 @@ import {
   listPageTemplates, loadPageTemplate, savePageTemplate, deletePageTemplate, type PageTemplateSummary,
 } from "./api";
 import { BUILT_IN_PRESETS } from "./builtinPresets";
+import { useTour } from "./Tour";
 import { Dashboard } from "./Dashboard";
 import { PageThumb } from "../../src/PageThumb";
 import { CanvasHandles, type Handle } from "./CanvasHandles";
@@ -622,6 +623,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   // short of already knowing to try. Toggled by the topbar's "?" button, or
   // the "?" key itself once you do know (see the global keydown effect).
   const [showShortcuts, setShowShortcuts] = React.useState(false);
+  const { start: startTour } = useTour();
   const [showSafeZone, setShowSafeZone] = React.useState(false);
   const [showInstagramUI, setShowInstagramUI] = React.useState(false);
   // Visibility toggle only — like showSafeZone/showInstagramUI above, this
@@ -1826,7 +1828,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             </button>
           ) : (
             <div className="render-menu-wrap">
-              <button className="btn primary small" disabled={!project}
+              <button className="btn primary small" data-tour="render-button" disabled={!project}
                 onClick={() => setShowRenderMenu((v) => !v)}>
                 Render ▾
               </button>
@@ -1913,7 +1915,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         </button>
         <div className="rail-div" />
         <button type="button" className={"rail-btn" + (activeRightDock === "layers" ? " active" : "")}
-          title="Layers" onClick={() => toggleRightDock("layers")}>
+          data-tour="layers-dock-btn" title="Layers" onClick={() => toggleRightDock("layers")}>
           <RailLayersIcon /><span>Layers</span>
         </button>
       </nav>
@@ -2178,6 +2180,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
           </div>
           <div
             ref={playerWrapRef}
+            data-tour="editor-canvas"
             style={{
               position: "relative",
               // Matches the storyboard's own >2 threshold above — otherwise
@@ -2463,7 +2466,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               onClick={() => { delPage(hoverPageCard.index); setHoverPageCard(null); }}>✕</button>
           </div>
         )}
-        <div className="addpage">
+        <div className="addpage" data-tour="addpage">
           <button type="button" title="Add a blank page" onClick={onAddBlankPage}>+</button>
           <div className="addpagediv" />
           <button type="button" title="More ways to add a page" onClick={() => setShowAddPageMenu((v) => !v)}>▾</button>
@@ -2519,7 +2522,11 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
                 ))}
               </div>
             ))}
-            <div className="row" style={{ gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+            <div className="row between" style={{ marginTop: 16 }}>
+              <button className="btn" title="Back to the Dashboard, then replays the guided tour"
+                onClick={() => { setShowShortcuts(false); onBack(); startTour(); }}>
+                🎓 Replay tutorial
+              </button>
               <button className="btn" onClick={() => setShowShortcuts(false)}>Close</button>
             </div>
           </div>
@@ -4278,7 +4285,7 @@ const PageInspector: React.FC<{
               cancelling (Esc, or clicking it again) both toggle textToolArmed,
               same "click again to turn it off" convention as everywhere else
               in the app that shows an active state. */}
-          <div className="row" style={{ gap: 6, marginTop: 10, marginBottom: 8 }}>
+          <div className="row" data-tour="add-layer-tools" style={{ gap: 6, marginTop: 10, marginBottom: 8 }}>
             <button className={"btn small" + (textToolArmed ? " active" : "")} style={{ flex: 1 }}
               title={textToolArmed ? "Click again to cancel (or press Esc)" : "Click, or drag on the canvas to draw a text box"}
               aria-pressed={textToolArmed} onClick={onToggleTextTool}>

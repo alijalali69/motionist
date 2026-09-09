@@ -1232,3 +1232,42 @@ input.topbar-proj-name::placeholder { color: var(--muted); font-weight: 600; }
   white-space: nowrap; z-index: 1;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
+
+/* --- Guided tour (Tour.tsx) — a spotlight ring + tooltip anchored to a
+   real element, not a static slideshow. .tour-dim is up to 4 separate
+   bands surrounding the target (simpler than an SVG mask, same visual
+   result) instead of one full-screen overlay with a hole cut out. */
+/* Below .modal-backdrop (50) on purpose — a real app modal that opens
+   mid-tour (the "New project" name dialog, right after the size-preset
+   step) must stay usable, layered above the tour, not hidden behind it. */
+.tour-root { position: fixed; inset: 0; z-index: 44; pointer-events: none; }
+.tour-dim {
+  position: fixed;
+  background: rgba(8, 9, 11, 0.72);
+  transition: all 0.15s ease;
+}
+.tour-ring {
+  position: fixed;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  box-shadow: 0 0 0 3px rgba(62, 166, 255, 0.25);
+  transition: all 0.15s ease;
+}
+.tour-tooltip {
+  pointer-events: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.tour-tooltip h3 { margin: 4px 0 6px; font-size: 15px; }
+.tour-tooltip p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.tour-step-count {
+  font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--accent); text-transform: uppercase;
+}
+.tour-actions {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 14px;
+}

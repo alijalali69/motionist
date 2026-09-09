@@ -7,6 +7,7 @@ import {
   listSizePresets, saveSizePreset, deleteSizePreset, type SizePresetEntry,
 } from "./api";
 import { NumField } from "./NumField";
+import { useTour } from "./Tour";
 
 const FONT_STYLES = [
   "Regular", "Bold", "Italic", "Bold Italic",
@@ -267,6 +268,7 @@ function timeAgo(iso?: string): string {
 }
 
 export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }) => {
+  const { start: startTour } = useTour();
   const [projects, setProjects] = React.useState<ProjectSummary[] | null>(null);
   // Search — a flat grid is fine at a handful of projects, not once there
   // are 15-20 of them. Plain client-side name filter; the full list is
@@ -440,7 +442,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
 
   return (
     <div className="dash">
-      <div className="dash-header">
+      <div className="dash-header" data-tour="dash-header">
         <div>
           <div className="brand-lockup">
             <img src="/brand/motionist-icon.svg" alt="" className="brand-icon" />
@@ -462,6 +464,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
           </button>
           <button className="btn" onClick={() => setManagingFonts(true)}>🔤 Fonts</button>
           <button className="btn" onClick={() => setManagingBrandColors(true)}>🎨 Colors</button>
+          <button className="btn" title="Replay the guided tour" onClick={startTour}>🎓 Tour</button>
         </div>
       </div>
 
@@ -471,7 +474,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
       {managingBrandColors && <BrandColorManager onClose={() => setManagingBrandColors(false)} />}
 
       <div className="section-label">Start a new project</div>
-      <div className="size-preset-row">
+      <div className="size-preset-row" data-tour="size-preset-row">
         {SIZE_PRESETS.map((s, i) => (
           <button key={s.short} className="size-preset-card"
             onClick={() => startCreate(s.w, s.h, i)}>
