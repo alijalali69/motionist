@@ -2959,6 +2959,43 @@ const AlignBoxIconV: React.FC<{ align: "top" | "middle" | "bottom" }> = ({ align
   );
 };
 
+// Snaps a layer's box to the canvas edges/center (like Illustrator's
+// align-to-artboard) — a one-off action, not a stored state, so no button
+// stays "pressed". Originally text-only; factored out so photo and shape
+// layers can use the exact same control (they'd had no align-to-canvas
+// tool at all — a real gap a user hit for real: "after uploading a
+// picture we have no alignment tools for pictures").
+const BoxAlignRow: React.FC<{
+  canvas: [number, number];
+  width: number;
+  height: number;
+  onChange: (fn: (l: LayerT) => void) => void;
+}> = ({ canvas, width, height, onChange }) => (
+  <div className="mini" style={{ marginTop: 10 }}>
+    <label title="Snaps this box to the frame — not the same as any in-box alignment">Box align</label>
+    <div className="row" style={{ gap: 6 }}>
+      {(["left", "center", "right"] as const).map((a) => (
+        <button key={a} className="btn small icon"
+          title={`Align box to the ${a} of the frame`} aria-label={`Align box to the ${a} of the frame`}
+          onClick={() => onChange((l) => {
+            l.left = a === "left" ? 0 : a === "right" ? canvas[0] - width : Math.round((canvas[0] - width) / 2);
+          })}>
+          <AlignBoxIcon align={a} />
+        </button>
+      ))}
+      {(["top", "middle", "bottom"] as const).map((a) => (
+        <button key={a} className="btn small icon"
+          title={`Align box to the ${a} of the frame`} aria-label={`Align box to the ${a} of the frame`}
+          onClick={() => onChange((l) => {
+            l.top = a === "top" ? 0 : a === "bottom" ? canvas[1] - height : Math.round((canvas[1] - height) / 2);
+          })}>
+          <AlignBoxIconV align={a} />
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
 // RTL is just the LTR glyph mirrored — same bars/arrow, flipped, so the pair
 // reads as one flow-direction control rather than two unrelated icons.
 const DirectionIcon: React.FC<{ dir: "ltr" | "rtl" }> = ({ dir }) => (
@@ -3627,6 +3664,7 @@ const ElementMotion: React.FC<{
               {AMBIENTS.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
+          <BoxAlignRow canvas={canvas} width={layer.width} height={layer.height} onChange={onChange} />
         </div>
       )}
 
@@ -3749,6 +3787,7 @@ const ElementMotion: React.FC<{
               {AMBIENTS.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
+          <BoxAlignRow canvas={canvas} width={layer.width} height={layer.height} onChange={onChange} />
         </div>
         );
       })()}
@@ -3849,34 +3888,7 @@ const ElementMotion: React.FC<{
               </div>
             </div>
           </div>
-          {/* Box align: snaps the text box itself to the frame (like
-              Illustrator's align-to-artboard) — a one-off action, not a
-              stored state, so no button stays "pressed". Own full-width row
-              (not squeezed into a third grid column) so its 6 icons get the
-              same breathing room as Text align/Direction above. */}
-          <div className="mini" style={{ marginTop: 10 }}>
-            <label title="Snaps this text box to the frame — not the text alignment above">Box align</label>
-            <div className="row" style={{ gap: 6 }}>
-              {(["left", "center", "right"] as const).map((a) => (
-                <button key={a} className="btn small icon"
-                  title={`Align box to the ${a} of the frame`} aria-label={`Align text box to the ${a} of the frame`}
-                  onClick={() => onChange((l) => {
-                    l.left = a === "left" ? 0 : a === "right" ? canvas[0] - l.width : Math.round((canvas[0] - l.width) / 2);
-                  })}>
-                  <AlignBoxIcon align={a} />
-                </button>
-              ))}
-              {(["top", "middle", "bottom"] as const).map((a) => (
-                <button key={a} className="btn small icon"
-                  title={`Align box to the ${a} of the frame`} aria-label={`Align text box to the ${a} of the frame`}
-                  onClick={() => onChange((l) => {
-                    l.top = a === "top" ? 0 : a === "bottom" ? canvas[1] - l.height : Math.round((canvas[1] - l.height) / 2);
-                  })}>
-                  <AlignBoxIconV align={a} />
-                </button>
-              ))}
-            </div>
-          </div>
+          <BoxAlignRow canvas={canvas} width={layer.width} height={layer.height} onChange={onChange} />
           <div className="mini" style={{ marginTop: 10 }}>
             <label title="A continuous loop for as long as this layer is visible — independent of its In/Out effect below">Motion (while visible)</label>
             <select value={layer.photoMotion ?? "none"}
