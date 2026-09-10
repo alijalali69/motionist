@@ -9,6 +9,7 @@ import { clockWipe } from "@remotion/transitions/clock-wipe";
 import { iris } from "@remotion/transitions/iris";
 import { none } from "@remotion/transitions/none";
 import { PageScene } from "./PageScene";
+import { MotionFilterDefs } from "./MotionFx";
 import { Template } from "./Template";
 import { Loader } from "./Loader";
 import { AssetSlot } from "./Logo";
@@ -32,14 +33,8 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean; transparen
   transparent = false,
 }) => {
   const { pages } = project;
-  // Slowly oscillating noise frequency for liquidIn/Out's SVG filter (see
-  // the hidden <svg> below) — a real "flow" over time, not a static warp.
-  // A shared filter, not one per layer: the WARP TEXTURE (how the noise
-  // itself evolves) is the same everywhere; how much a given layer shows
-  // of it is a separate per-layer opacity crossfade (LiquidOverlay in
-  // PageScene.tsx), not this filter's own strength.
+  // Drives liquidIn/Out's SVG-filter noise (see MotionFilterDefs below).
   const frame = useCurrentFrame();
-  const liquidBaseFreq = 0.018 + Math.sin(frame * 0.045) * 0.007;
 
   // Per-page subtitle text -> caption windows; SRT captions override when present.
   const starts = pageStarts(project);
@@ -59,8 +54,8 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean; transparen
   // whole reel, independent of any per-layer video's own embedded sound.
   // Fade in/out is expressed as a per-frame volume callback (not a flat
   // number) because Remotion needs a real value at every captured frame,
-  // same reasoning as liquidBaseFreq above — no CSS/Web Audio fade exists
-  // at render time.
+  // same reasoning as MotionFilterDefs' frame-driven noise below — no
+  // CSS/Web Audio fade exists at render time.
   const audio = project.audio;
   const totalFrames = pages.length ? starts[pages.length - 1] + pages[pages.length - 1].durationInFrames : 0;
   const fadeInFrames = Math.round((audio?.fadeInSec ?? 0) * project.fps);
@@ -78,36 +73,11 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean; transparen
 
   return (
     <AbsoluteFill style={{ backgroundColor: transparent ? "transparent" : (project.bgColor ?? "#e8e4dd") }}>
-      {/* Hidden SVG filter defs, once for the whole reel — glitchIn/Out's RGB
-          channel split (see GlitchOverlay in PageScene.tsx) needs a real
-          feColorMatrix to isolate a single color channel on arbitrary
-          content (photo/video/text alike); no CSS-only trick does that.
-          Defined once here (not per-PageScene) so a page-transition
-          crossfade, which can briefly mount two PageScenes at once, never
-          collides on the id. width/height 0 — the filters themselves are
-          referenced via url(#id), this element paints nothing of its own. */}
-      <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
-        <defs>
-          <filter id="glitchRedChannel" colorInterpolationFilters="sRGB">
-            <feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" />
-          </filter>
-          <filter id="glitchCyanChannel" colorInterpolationFilters="sRGB">
-            <feColorMatrix type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0" />
-          </filter>
-          {/* liquidIn/Out's organic warp — feTurbulence generates the noise,
-              feDisplacementMap uses it to physically shift pixels, on
-              WHATEVER content sits under the filter (no transform can fake
-              this). baseFrequency comes straight from `frame` above — a
-              plain React-controlled attribute re-rendered every frame like
-              everything else in this file, not a CSS/SMIL loop (Remotion's
-              headless render captures one frame at a time; a live loop
-              has no reliable state to capture at export time). */}
-          <filter id="liquidWarp" x="-20%" y="-20%" width="140%" height="140%">
-            <feTurbulence type="fractalNoise" baseFrequency={`${liquidBaseFreq} ${liquidBaseFreq * 2.2}`} numOctaves={2} seed={4} result="liquidNoise" />
-            <feDisplacementMap in="SourceGraphic" in2="liquidNoise" scale={22} xChannelSelector="R" yChannelSelector="G" />
-          </filter>
-        </defs>
-      </svg>
+      {/* glitchIn/Out's and liquidIn/Out's SVG filters, mounted once for
+          the whole reel (not per-PageScene: a page-transition crossfade can
+          briefly mount two PageScenes at once, and duplicate filter ids
+          would collide). Shared with the Effects gallery via MotionFx.tsx. */}
+      <MotionFilterDefs frame={frame} />
       {/* Global background-music track. Muted is a real toggle (matches
           ContentLayer.videoMuted's convention) — kept out of the tree
           entirely when muted, same as when there's no file yet. */}

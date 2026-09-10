@@ -1271,3 +1271,168 @@ input.topbar-proj-name::placeholder { color: var(--muted); font-weight: 600; }
   display: flex; align-items: center; justify-content: space-between;
   margin-top: 14px;
 }
+
+/* --- Effects gallery ---------------------------------------------------
+   Full-screen browse surface for the whole motion library (see
+   app/src/EffectsGallery.tsx). Each .fxg-stage is a fixed square viewport
+   onto a 1080×1080 window of a real page — the inner div is at true page
+   coordinates and scaled down as a whole, so effects move real page
+   distances rather than tile-relative guesses. overflow:hidden on the
+   stage is what makes it a viewport: effects that start off-frame
+   (slideRight's 90px, dropIn's 160px) have to be clipped by the frame
+   edge here exactly as they are by the video's own edge. */
+.fxg {
+  position: fixed;
+  inset: 0;
+  z-index: 60; /* above the app, below .modal-backdrop (50 is the app's own
+    modals, but this is a whole page rather than a dialog over one) */
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.fxg-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px 12px;
+  flex-shrink: 0;
+}
+.fxg-titleblock h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+.fxg-titleblock p { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; }
+
+.fxg-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 0 24px 14px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.fxg-seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.fxg-segbtn {
+  appearance: none;
+  border: 0;
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.fxg-segbtn + .fxg-segbtn { border-left: 1px solid var(--line); }
+.fxg-segbtn:hover { background: var(--panel2); color: var(--text); }
+.fxg-segbtn.on { background: var(--accent); color: #06121d; font-weight: 600; }
+.fxg-ctl {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.fxg-ctl input[type="range"] { width: 120px; }
+/* The app-wide defaults assume narrow side panels: `.btn` is width:100% and
+   `select, input[type=text]` is width:100% too. Both are right there and
+   wrong in this toolbar, which is one wide horizontal row. Overridden with
+   matching-or-higher specificity (`input.fxg-search`, not `.fxg-search` —
+   a bare class loses to the generic element+attribute selector). */
+.fxg .btn { width: auto; }
+.fxg-ctl { margin: 0; }
+.fxg-ctl select { width: auto; min-width: 118px; }
+input.fxg-search { width: 200px; margin-left: auto; }
+
+.fxg-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 24px 60px;
+}
+.fxg-group + .fxg-group { margin-top: 26px; }
+.fxg-grouphead {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.fxg-grouphead span { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.fxg-grid {
+  display: grid;
+  /* Fixed 176px tracks, not minmax(...,1fr): the stage inside each tile is
+     a fixed-size viewport (its inner page is scaled by TILE/WINDOW in
+     EffectsGallery.tsx), so a stretching column would leave the stage
+     narrower than the card it sits in. */
+  grid-template-columns: repeat(auto-fill, 176px);
+  justify-content: start;
+  gap: 14px;
+}
+.fxg-tile {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  padding: 0 0 8px;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.fxg-tile:hover { border-color: var(--accent); }
+.fxg-stage {
+  position: relative;
+  overflow: hidden; /* the frame edge — see the block comment above */
+  background: #0a0c0f;
+  border-bottom: 1px solid var(--line);
+}
+.fxg-name {
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 7px;
+  padding: 0 6px;
+  overflow-wrap: anywhere;
+}
+.fxg-fields {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--muted);
+  margin-top: 2px;
+  padding: 0 6px;
+  overflow-wrap: anywhere;
+}
+.fxg-empty { color: var(--muted); font-size: 13px; }
+
+.fxg-zoom {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 8, 10, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+.fxg-zoomcard {
+  display: flex;
+  gap: 22px;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.6);
+}
+.fxg-zoomcard .fxg-stage { border: 1px solid var(--line); border-radius: 8px; flex-shrink: 0; }
+.fxg-zoommeta h3 { margin: 0 0 6px; font-size: 17px; }
+.fxg-zoommeta p { margin: 0 0 16px; font-family: var(--mono); font-size: 11px; color: var(--muted); max-width: 220px; }

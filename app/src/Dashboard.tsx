@@ -8,6 +8,7 @@ import {
 } from "./api";
 import { NumField } from "./NumField";
 import { useTour } from "./Tour";
+import { EffectsGallery } from "./EffectsGallery";
 
 const FONT_STYLES = [
   "Regular", "Bold", "Italic", "Bold Italic",
@@ -294,6 +295,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
   const [renameBusy, setRenameBusy] = React.useState(false);
   const [managingFonts, setManagingFonts] = React.useState(false);
   const [managingBrandColors, setManagingBrandColors] = React.useState(false);
+  const [browsingEffects, setBrowsingEffects] = React.useState(false);
   const [sizeIdx, setSizeIdx] = React.useState(0); // index into SIZE_PRESETS, or -1 for custom (customW/customH)
   const [customW, setCustomW] = React.useState(1080);
   const [customH, setCustomH] = React.useState(1920);
@@ -440,6 +442,11 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
     }
   };
 
+  // Full-screen, not a modal over the dashboard — it's a browse surface for
+  // ~90 simultaneously-animating tiles, and leaving the dashboard mounted
+  // underneath would keep its own project thumbnails rendering behind it.
+  if (browsingEffects) return <EffectsGallery onClose={() => setBrowsingEffects(false)} />;
+
   return (
     <div className="dash">
       <div className="dash-header" data-tour="dash-header">
@@ -464,6 +471,8 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
           </button>
           <button className="btn" onClick={() => setManagingFonts(true)}>🔤 Fonts</button>
           <button className="btn" onClick={() => setManagingBrandColors(true)}>🎨 Colors</button>
+          <button className="btn" title="Browse the whole motion library, every effect playing live"
+            onClick={() => setBrowsingEffects(true)}>✨ Effects</button>
           <button className="btn" title="Replay the guided tour" onClick={startTour}>🎓 Tour</button>
         </div>
       </div>
