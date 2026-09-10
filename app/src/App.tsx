@@ -14,6 +14,7 @@ import {
 } from "./api";
 import { BUILT_IN_PRESETS } from "./builtinPresets";
 import { useTour } from "./Tour";
+import { EffectPicker } from "./EffectPicker";
 import { Dashboard } from "./Dashboard";
 import { PageThumb } from "../../src/PageThumb";
 import { CanvasHandles, type Handle } from "./CanvasHandles";
@@ -2672,15 +2673,9 @@ const AssetControls: React.FC<{
         <div className="mini">
           <label>In effect</label>
           <div className="row" style={{ gap: 5 }}>
-            <select value={slot.entrance ?? "none"} style={{ flex: "1.3 1 0" }}
-              onChange={(e) => onChange((s) => { s.entrance = e.target.value === "none" ? undefined : e.target.value as any; })}>
-              <option value="none">none</option>
-              {ENTRANCE_CATEGORIES.map((cat) => (
-                <optgroup key={cat.label} label={cat.label}>
-                  {cat.names.map((n) => <option key={n} value={n}>{n}</option>)}
-                </optgroup>
-              ))}
-            </select>
+            <EffectPicker value={slot.entrance ?? "none"} kind="in" sample="photo"
+              categories={ENTRANCE_CATEGORIES}
+              onChange={(v) => onChange((s) => { s.entrance = v === "none" ? undefined : v as any; })} />
             <select value={slot.entranceEasing ?? ""} style={{ flex: "1 1 0" }}
               disabled={!slot.entrance || slot.entrance === "none"}
               title="This effect's own easing — auto = a curve chosen to fit it"
@@ -2704,15 +2699,9 @@ const AssetControls: React.FC<{
         <div className="mini" style={{ marginTop: 8 }}>
           <label>Out effect</label>
           <div className="row" style={{ gap: 5 }}>
-            <select value={slot.exit ?? "none"} style={{ flex: "1.3 1 0" }}
-              onChange={(e) => onChange((s) => { s.exit = e.target.value === "none" ? undefined : e.target.value as any; })}>
-              <option value="none">none</option>
-              {EXIT_CATEGORIES.map((cat) => (
-                <optgroup key={cat.label} label={cat.label}>
-                  {cat.names.map((n) => <option key={n} value={n}>{n}</option>)}
-                </optgroup>
-              ))}
-            </select>
+            <EffectPicker value={slot.exit ?? "none"} kind="out" sample="photo"
+              categories={EXIT_CATEGORIES}
+              onChange={(v) => onChange((s) => { s.exit = v === "none" ? undefined : v as any; })} />
             <select value={slot.exitEasing ?? ""} style={{ flex: "1 1 0" }}
               disabled={!slot.exit || slot.exit === "none"}
               title="This effect's own easing — auto = a curve chosen to fit it"
@@ -3235,6 +3224,10 @@ const FxSlots: React.FC<{
   label: string;
   hint?: string; // tooltip on the label — detail that doesn't need to sit in the visible text
   categories: { label: string; names: string[] }[];
+  kind: "in" | "out";
+  // What the preview tiles animate — matches the layer being edited, so a
+  // wipe on a photo layer previews on a photo, not on stand-in text.
+  sample: "text" | "photo" | "shape";
   values: [string, string | undefined, string | undefined];
   easings: [string | undefined, string | undefined, string | undefined];
   onChangeSlot: (index: 0 | 1 | 2, value: string) => void;
@@ -3242,7 +3235,7 @@ const FxSlots: React.FC<{
   onAdd: () => void;
   onRemove: (index: 1 | 2) => void;
   disabled?: boolean;
-}> = ({ label, hint, categories, values, easings, onChangeSlot, onChangeEasing, onAdd, onRemove, disabled }) => {
+}> = ({ label, hint, categories, kind, sample, values, easings, onChangeSlot, onChangeEasing, onAdd, onRemove, disabled }) => {
   const shown = values[2] !== undefined ? 3 : values[1] !== undefined ? 2 : 1;
   return (
     <div className="mini fx-slots">
@@ -3254,17 +3247,9 @@ const FxSlots: React.FC<{
             {/* `disabled` means "can't combine more effects yet" (e.g. OUT's
                 FX1 is still "none") — it must never lock FX1 itself, or
                 there'd be no way to ever set it away from "none" at all. */}
-            <select value={values[i]} disabled={i > 0 && disabled} style={{ flex: "1.3 1 0" }}
-              onChange={(e) => onChangeSlot(i, e.target.value)}>
-              {/* "none" sits outside every group — an escape hatch, not a
-                  motion family member — so it's the one bare <option>. */}
-              <option value="none">none</option>
-              {categories.map((cat) => (
-                <optgroup key={cat.label} label={cat.label}>
-                  {cat.names.map((o) => <option key={o} value={o}>{o}</option>)}
-                </optgroup>
-              ))}
-            </select>
+            <EffectPicker value={values[i] ?? "none"} disabled={i > 0 && disabled}
+              kind={kind} sample={sample} categories={categories}
+              onChange={(v) => onChangeSlot(i, v)} />
             <select value={easings[i] ?? ""} disabled={disabled || values[i] === "none"} style={{ flex: "1 1 0" }}
               title="This slot's own easing — auto = a curve chosen to fit its effect"
               onChange={(e) => onChangeEasing(i, e.target.value === "" ? undefined : e.target.value)}>
@@ -3522,6 +3507,8 @@ const ElementMotion: React.FC<{
   // see the isLetterPop render-side gate in PageScene.tsx, which double-
   // checks the same thing so a stray saved "letterPopIn" on rtl text can
   // never actually render split).
+  // Preview tiles animate the same kind of content this layer actually is.
+  const fxSample: "text" | "photo" | "shape" = isTextLayer ? "text" : isShapeLayer ? "shape" : "photo";
   const inCategories = isTextLayer
     ? [
         ...ENTRANCE_CATEGORIES,
@@ -4001,6 +3988,7 @@ const ElementMotion: React.FC<{
 
         <FxSlots
           label="In effect" hint="Combine up to 3 — each with its own easing"
+          kind="in" sample={fxSample}
           categories={inCategories}
           values={[layer.entrance, layer.entrance2, layer.entrance3]}
           easings={[layer.entranceEasing, layer.entranceEasing2, layer.entranceEasing3]}
@@ -4026,6 +4014,7 @@ const ElementMotion: React.FC<{
         />
         <FxSlots
           label="Out effect" hint="Combine up to 3 — each with its own easing"
+          kind="out" sample={fxSample}
           categories={outCategories}
           values={[layer.exit ?? "none", layer.exit2, layer.exit3]}
           easings={[layer.exitEasing, layer.exitEasing2, layer.exitEasing3]}

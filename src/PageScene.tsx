@@ -27,7 +27,8 @@ import {
 // LayerMotion the same way.
 import {
   ShineOverlay, ScanlineOverlay, GlitchOverlay, DataMoshOverlay, LiquidOverlay,
-  BurstOverlay, StrokeDrawOverlay, scrambledText, StaggerText, LetterPopText,
+  BurstOverlay, StrokeDrawOverlay, ChromaOverlay, StaticOverlay,
+  scrambledText, StaggerText, LetterPopText,
 } from "./MotionFx";
 import type { Page, ContentLayer, BgStyle } from "./types";
 import { Backdrop } from "./Backdrop";
@@ -182,7 +183,7 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
     transform: motionTransform(m),
     transformOrigin: "center center",
     clipPath: m.clipPath,
-    boxShadow: shadowStyle(m.shadow, m.glow),
+    boxShadow: shadowStyle(m.shadow),
     overflow: "visible", // text isn't a mask — don't silently clip slightly-oversized content
     display: "flex",
     alignItems: "center",
@@ -231,8 +232,10 @@ const TextLayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = (
         {m.shine !== undefined && <ShineOverlay shine={m.shine} />}
         {m.scanline !== undefined && <ScanlineOverlay scanline={m.scanline} frame={frame} />}
         {m.glitch !== undefined && <GlitchOverlay amount={m.glitch} frame={frame}>{textNode}</GlitchOverlay>}
+        {m.chroma !== undefined && <ChromaOverlay amount={m.chroma}>{textNode}</ChromaOverlay>}
         {m.glitchBlocks !== undefined && <DataMoshOverlay amount={m.glitchBlocks} frame={frame}>{textNode}</DataMoshOverlay>}
         {m.liquid !== undefined && <LiquidOverlay amount={m.liquid}>{textNode}</LiquidOverlay>}
+        {m.staticNoise !== undefined && <StaticOverlay amount={m.staticNoise} frame={frame} />}
         {m.burst !== undefined && <BurstOverlay amount={m.burst} frame={frame} />}
         {m.stroke !== undefined && <StrokeDrawOverlay amount={m.stroke} />}
       </div>
@@ -368,7 +371,7 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
         transform: motionTransform(m),
         transformOrigin: "center center",
         clipPath: m.clipPath, // reveal/hide mask (wipe, circle) — undefined = no mask
-        boxShadow: shadowStyle(m.shadow, m.glow),
+        boxShadow: shadowStyle(m.shadow),
         borderRadius: m.morph !== undefined ? blobRadius(m.morph, frame) : undefined,
         overflow: "hidden", // the box IS the mask — anything inside gets cropped to its shape
       }}
@@ -377,8 +380,10 @@ const LayerView: React.FC<{ layer: ContentLayer; pageDuration: number }> = ({
       {m.shine !== undefined && <ShineOverlay shine={m.shine} />}
       {m.scanline !== undefined && <ScanlineOverlay scanline={m.scanline} frame={frame} />}
       {m.glitch !== undefined && <GlitchOverlay amount={m.glitch} frame={frame}>{zoomedMedia}</GlitchOverlay>}
+      {m.chroma !== undefined && <ChromaOverlay amount={m.chroma}>{zoomedMedia}</ChromaOverlay>}
       {m.glitchBlocks !== undefined && <DataMoshOverlay amount={m.glitchBlocks} frame={frame}>{zoomedMedia}</DataMoshOverlay>}
       {m.liquid !== undefined && <LiquidOverlay amount={m.liquid}>{zoomedMedia}</LiquidOverlay>}
+      {m.staticNoise !== undefined && <StaticOverlay amount={m.staticNoise} frame={frame} />}
       {m.burst !== undefined && <BurstOverlay amount={m.burst} frame={frame} />}
       {m.stroke !== undefined && <StrokeDrawOverlay amount={m.stroke} />}
     </div>

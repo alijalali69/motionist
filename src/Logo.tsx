@@ -9,6 +9,10 @@ import {
   motionTransform, motionFilter, shadowStyle, blobRadius,
   type LayerMotion,
 } from "./presets";
+import {
+  ShineOverlay, ScanlineOverlay, GlitchOverlay, DataMoshOverlay, LiquidOverlay,
+  BurstOverlay, StrokeDrawOverlay, ChromaOverlay, StaticOverlay,
+} from "./MotionFx";
 
 // Same entrance/exit resolution PageScene.tsx's combinedEntranceMotion/
 // combinedExitMotion do for a content layer, but for ONE slot instead of up
@@ -112,12 +116,27 @@ export const AssetSlot: React.FC<{ slot: LogoConfig | null; defaultFit?: "contai
           transform: motionTransform(m),
           transformOrigin: "center center",
           clipPath: m.clipPath,
-          boxShadow: shadowStyle(m.shadow, m.glow),
+          boxShadow: shadowStyle(m.shadow),
           borderRadius: m.morph !== undefined ? blobRadius(m.morph, frame) : undefined,
           overflow: m.morph !== undefined ? "hidden" : undefined,
         }}
       >
         {inner}
+        {/* The same overlay list a content layer gets in PageScene.tsx.
+            These were missing here, so every overlay-driven effect
+            (glitchIn, dataMoshIn, liquidIn, staticIn, vhsIn, rgbSplitIn,
+            shineIn, burstIn, strokeIn) silently did nothing at all when
+            picked on the Logo / Title / BG slots — the picker offered the
+            full vocabulary and roughly a fifth of it was inert. */}
+        {m.shine !== undefined && <ShineOverlay shine={m.shine} />}
+        {m.scanline !== undefined && <ScanlineOverlay scanline={m.scanline} frame={frame} />}
+        {m.glitch !== undefined && <GlitchOverlay amount={m.glitch} frame={frame}>{inner}</GlitchOverlay>}
+        {m.chroma !== undefined && <ChromaOverlay amount={m.chroma}>{inner}</ChromaOverlay>}
+        {m.glitchBlocks !== undefined && <DataMoshOverlay amount={m.glitchBlocks} frame={frame}>{inner}</DataMoshOverlay>}
+        {m.liquid !== undefined && <LiquidOverlay amount={m.liquid}>{inner}</LiquidOverlay>}
+        {m.staticNoise !== undefined && <StaticOverlay amount={m.staticNoise} frame={frame} />}
+        {m.burst !== undefined && <BurstOverlay amount={m.burst} frame={frame} />}
+        {m.stroke !== undefined && <StrokeDrawOverlay amount={m.stroke} />}
       </div>
     </AbsoluteFill>
   );

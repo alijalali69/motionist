@@ -74,9 +74,6 @@ export type EntranceName =
   // Lands and flattens sideways before settling, real cartoon weight —
   // needs LayerMotion.scaleX/scaleY independent of the uniform `scale`.
   | "squashStretchIn"
-  // A breathing glow — see LayerMotion.glow, rendered as an extra boxShadow
-  // layered alongside cardFlipIn's cast-shadow one.
-  | "glowPulseIn"
   // Scanline + jitter overlay, no image asset needed — see LayerMotion.scanline.
   | "vhsIn"
   // A hue/saturation pulse on arrival, like a color-grade flash — a plain
@@ -95,11 +92,6 @@ export type EntranceName =
   // Organic SVG warp (feTurbulence + feDisplacementMap) crossfading in —
   // see LayerMotion.liquid and LiquidOverlay.
   | "liquidIn"
-  // Tumbles through a multi-quarter rotateY turn with a scale dip at each
-  // face-crossing (near-zero width at the 90°/180° marks, selling an
-  // edge-on moment) — no new field, just a richer curve over the existing
-  // rotateY/scale than flipIn/cardFlipIn's single smooth turn.
-  | "cubeIn"
   // Border-radius wobbles into an organic blob as it clips the layer's own
   // content, settling back to a plain rectangle — see LayerMotion.morph.
   // Cheap approximation of true shape-to-shape morphing (which needs a
@@ -112,6 +104,21 @@ export type EntranceName =
   // enters — see LayerMotion.stroke. Generic (any layer's bounding box),
   // not the exact geometry of a shape's own corner radius/stroke.
   | "strokeIn"
+  // Steady chromatic aberration that converges to zero — the CLEAN channel
+  // split, as distinct from glitchIn's bursty corruption: the red and cyan
+  // ghosts are present every frame and simply slide back together, instead
+  // of firing at random frames. See LayerMotion.chroma and ChromaOverlay.
+  | "rgbSplitIn"
+  // TV static dissolving away to reveal the layer — a real feTurbulence
+  // noise field, reseeded per frame so it churns. See LayerMotion.staticNoise.
+  | "staticIn"
+  // CRT power-on: a thin bright horizontal line that snaps open vertically
+  // then settles. Pure scaleX/scaleY choreography, no new field.
+  | "crtOnIn"
+  // Bad-signal flicker — the layer stutters in and out a few times before
+  // locking on. A deterministic square-ish wave over progress, so no frame
+  // input and no new field are needed.
+  | "signalDropIn"
   // Text-only: pops in character by character with a spring, LATIN TEXT
   // ONLY — see the direction === "ltr" gate in App.tsx's picker and the
   // isLetterPop branch in PageScene.tsx. Splitting individual letters into
@@ -129,9 +136,10 @@ export const ENTRANCE_NAMES: EntranceName[] = [
   "cardFlipIn", "shineIn", "typewriter",
   "slideTopLeft", "slideTopRight", "slideBottomLeft", "slideBottomRight",
   "rollIn", "jackInBox", "swingIn", "heartbeatIn", "diamondReveal",
-  "lightspeedIn", "squashStretchIn", "glowPulseIn", "vhsIn", "duotoneIn",
-  "glitchIn", "dataMoshIn", "liquidIn", "cubeIn",
+  "lightspeedIn", "squashStretchIn", "vhsIn", "duotoneIn",
+  "glitchIn", "dataMoshIn", "liquidIn",
   "morphIn", "burstIn", "strokeIn",
+  "rgbSplitIn", "staticIn", "crtOnIn", "signalDropIn",
 ];
 
 // Text-only entrances — offered in a separate list so image/photo layers
@@ -160,9 +168,9 @@ export const ENTRANCE_CATEGORIES: { label: string; names: EntranceName[] }[] = [
   { label: "Slide", names: ["slideRight", "slideLeft", "slideUp", "slideDown", "slideTopLeft", "slideTopRight", "slideBottomLeft", "slideBottomRight"] },
   { label: "Scale", names: ["pop", "zoomIn", "zoomOut", "growIn", "jackInBox", "heartbeatIn"] },
   { label: "Drop & float", names: ["dropIn", "riseIn", "floatIn"] },
-  { label: "Rotate & flip", names: ["rotateIn", "flipIn", "cardFlipIn", "rollIn", "swingIn", "cubeIn"] },
+  { label: "Rotate & flip", names: ["rotateIn", "flipIn", "cardFlipIn", "rollIn", "swingIn"] },
   { label: "Wipe & reveal", names: ["wipeLeftToRight", "wipeRightToLeft", "wipeTopToBottom", "wipeBottomToTop", "circleReveal", "diamondReveal", "typewriter", "strokeIn"] },
-  { label: "Glitch & texture", names: ["lightspeedIn", "squashStretchIn", "glowPulseIn", "vhsIn", "duotoneIn", "glitchIn", "dataMoshIn", "liquidIn", "morphIn", "burstIn"] },
+  { label: "Glitch & texture", names: ["glitchIn", "rgbSplitIn", "dataMoshIn", "staticIn", "vhsIn", "crtOnIn", "signalDropIn", "liquidIn", "duotoneIn", "morphIn", "lightspeedIn", "squashStretchIn", "burstIn"] },
 ];
 
 export type AmbientName =
@@ -219,16 +227,20 @@ export type ExitName =
   | "diamondHide"
   | "lightspeedOut"
   | "squashStretchOut"
-  | "glowPulseOut"
   | "vhsOut"
   | "duotoneOut"
   | "glitchOut"
   | "dataMoshOut"
   | "liquidOut"
-  | "cubeOut"
   | "morphOut"
   | "burstOut"
   | "strokeOut"
+  | "rgbSplitOut"
+  | "staticOut"
+  // CRT power-off — the mirror of crtOnIn: collapses to a bright horizontal
+  // line, then to nothing.
+  | "crtOffOut"
+  | "signalDropOut"
   // Text-only — mirrors scrambleIn, reverses direction (see
   // TEXT_EXIT_NAMES and the isScrambleOut branch in PageScene.tsx).
   | "scrambleOut";
@@ -240,9 +252,10 @@ export const EXIT_NAMES: ExitName[] = [
   "cardFlipOut", "shineOut", "typewriterOut",
   "slideOutTopLeft", "slideOutTopRight", "slideOutBottomLeft", "slideOutBottomRight",
   "rollOut", "jackOutBox", "swingOut", "heartbeatOut", "diamondHide",
-  "lightspeedOut", "squashStretchOut", "glowPulseOut", "vhsOut", "duotoneOut",
-  "glitchOut", "dataMoshOut", "liquidOut", "cubeOut",
+  "lightspeedOut", "squashStretchOut", "vhsOut", "duotoneOut",
+  "glitchOut", "dataMoshOut", "liquidOut",
   "morphOut", "burstOut", "strokeOut",
+  "rgbSplitOut", "staticOut", "crtOffOut", "signalDropOut",
 ];
 
 // Same grouping as ENTRANCE_CATEGORIES, mirrored for exits — see the comment
@@ -252,9 +265,9 @@ export const EXIT_CATEGORIES: { label: string; names: ExitName[] }[] = [
   { label: "Slide", names: ["slideOutLeft", "slideOutRight", "slideOutUp", "slideOutDown", "slideOutTopLeft", "slideOutTopRight", "slideOutBottomLeft", "slideOutBottomRight"] },
   { label: "Scale", names: ["popOut", "zoomOut", "shrinkOut", "jackOutBox", "heartbeatOut"] },
   { label: "Drop & rise", names: ["dropOut", "riseOut"] },
-  { label: "Rotate & flip", names: ["rotateOut", "flipOut", "cardFlipOut", "rollOut", "swingOut", "cubeOut"] },
+  { label: "Rotate & flip", names: ["rotateOut", "flipOut", "cardFlipOut", "rollOut", "swingOut"] },
   { label: "Wipe & hide", names: ["wipeOutLeftToRight", "wipeOutRightToLeft", "wipeOutTopToBottom", "wipeOutBottomToTop", "circleHide", "diamondHide", "typewriterOut", "strokeOut"] },
-  { label: "Glitch & texture", names: ["lightspeedOut", "squashStretchOut", "glowPulseOut", "vhsOut", "duotoneOut", "glitchOut", "dataMoshOut", "liquidOut", "morphOut", "burstOut"] },
+  { label: "Glitch & texture", names: ["glitchOut", "rgbSplitOut", "dataMoshOut", "staticOut", "vhsOut", "crtOffOut", "signalDropOut", "liquidOut", "duotoneOut", "morphOut", "lightspeedOut", "squashStretchOut", "burstOut"] },
 ];
 
 // Page-to-page transitions. `name` is stored on the page; `label` shows in the UI.
@@ -295,7 +308,6 @@ export type LayerMotion = {
   // behaves exactly as if these two fields didn't exist.
   scaleX?: number;
   scaleY?: number;
-  glow?: number; // 0..1 breathing box-shadow intensity — glowPulseIn/Out
   scanline?: number; // 0..1 VHS scanline+jitter overlay opacity — vhsIn/Out
   tint?: number; // 0..1 hue/saturation sweep intensity — duotoneIn/Out
   glitch?: number; // 0..1 RGB-split burst envelope — glitchIn/Out
@@ -304,6 +316,8 @@ export type LayerMotion = {
   morph?: number; // 0..1 blob border-radius wobble intensity — morphIn/Out
   burst?: number; // 0..1 progress driving a confetti release near the end — burstIn/Out
   stroke?: number; // 0..1 outline draw-on progress — strokeIn/Out
+  chroma?: number; // 0..1 steady RGB channel-split distance — rgbSplitIn/Out
+  staticNoise?: number; // 0..1 TV-static overlay opacity — staticIn/Out
 };
 
 const BASE: LayerMotion = { opacity: 1, tx: 0, ty: 0, scale: 1, blur: 0, rotate: 0, rotateY: 0 };
@@ -335,7 +349,6 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
   let clipPath: string | undefined;
   let shadow: number | undefined;
   let shine: number | undefined;
-  let glow: number | undefined;
   let scanline: number | undefined;
   let tint: number | undefined;
   let glitch: number | undefined;
@@ -344,6 +357,8 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
   let morph: number | undefined;
   let burst: number | undefined;
   let stroke: number | undefined;
+  let chroma: number | undefined;
+  let staticNoise: number | undefined;
   for (const m of motions) {
     opacity = Math.min(opacity, m.opacity);
     tx += m.tx; ty += m.ty;
@@ -362,11 +377,10 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
     scaleY *= m.scaleY ?? m.scale;
     if (m.scaleX !== undefined || m.scaleY !== undefined) sawScaleXY = true;
     if (!clipPath && m.clipPath) clipPath = m.clipPath;
-    // Shadow/glow/scanline/tint intensity: MAX, not sum — two combined
-    // effects both driving the same overlay should read as one overlay at
-    // its strongest point, not a doubled-up value that could exceed 1.
+    // Overlay intensities: MAX, not sum — two combined effects both driving
+    // the same overlay should read as one overlay at its strongest point,
+    // not a doubled-up value that could exceed 1.
     if (m.shadow !== undefined) shadow = Math.max(shadow ?? 0, m.shadow);
-    if (m.glow !== undefined) glow = Math.max(glow ?? 0, m.glow);
     if (m.scanline !== undefined) scanline = Math.max(scanline ?? 0, m.scanline);
     if (m.tint !== undefined) tint = Math.max(tint ?? 0, m.tint);
     if (m.glitch !== undefined) glitch = Math.max(glitch ?? 0, m.glitch);
@@ -375,6 +389,8 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
     if (m.morph !== undefined) morph = Math.max(morph ?? 0, m.morph);
     if (m.burst !== undefined) burst = Math.max(burst ?? 0, m.burst);
     if (m.stroke !== undefined) stroke = Math.max(stroke ?? 0, m.stroke);
+    if (m.chroma !== undefined) chroma = Math.max(chroma ?? 0, m.chroma);
+    if (m.staticNoise !== undefined) staticNoise = Math.max(staticNoise ?? 0, m.staticNoise);
     // Shine sweep, like clipPath: only one sweep makes sense on a layer at
     // once, first one set wins.
     if (shine === undefined && m.shine !== undefined) shine = m.shine;
@@ -387,7 +403,8 @@ export function combineMotions(motions: LayerMotion[]): LayerMotion {
     // would carry redundant scaleX/scaleY: scale copies for no reason.
     scaleX: sawScaleXY ? scaleX : undefined,
     scaleY: sawScaleXY ? scaleY : undefined,
-    glow, scanline, tint, glitch, glitchBlocks, liquid, morph, burst, stroke,
+    scanline, tint, glitch, glitchBlocks, liquid, morph, burst, stroke,
+    chroma, staticNoise,
   };
 }
 
@@ -410,15 +427,11 @@ export function motionFilter(m: LayerMotion): string | undefined {
   if (m.tint) parts.push(`hue-rotate(${m.tint * 45}deg) saturate(${1 + m.tint * 0.6})`);
   return parts.length ? parts.join(" ") : undefined;
 }
-// cardFlipIn/Out's "landing" shadow and glowPulseIn/Out's breathing glow —
-// both are just box-shadow at different colors/spreads, so one layer's
-// box-shadow can carry both at once (CSS box-shadow accepts a
-// comma-separated list).
-export function shadowStyle(shadow: number | undefined, glow: number | undefined): string | undefined {
-  const parts: string[] = [];
-  if (shadow) parts.push(`0 ${18 * shadow}px ${40 * shadow}px rgba(0,0,0,${0.45 * shadow})`);
-  if (glow) parts.push(`0 0 ${40 * glow}px ${10 * glow}px rgba(255,255,255,${0.8 * glow})`);
-  return parts.length ? parts.join(", ") : undefined;
+// cardFlipIn/Out's "landing" cast shadow. Took a second `glow` argument
+// until glowPulseIn/Out was cut — that effect was the only caller of it.
+export function shadowStyle(shadow: number | undefined): string | undefined {
+  if (!shadow) return undefined;
+  return `0 ${18 * shadow}px ${40 * shadow}px rgba(0,0,0,${0.45 * shadow})`;
 }
 // morphIn/Out's blob wobble (LayerMotion.morph) — just a CSS border-radius,
 // applied on the same div that clips its own content.
@@ -546,7 +559,6 @@ const DEFAULT_ENTRANCE_EASING: Partial<Record<EntranceName, EasingName>> = {
   diamondReveal: "easeInOut",
   lightspeedIn: "easeOutCubic",
   squashStretchIn: "linear", // the squash-stretch shape is already baked into the multi-stop curve itself
-  glowPulseIn: "easeInOut",
   vhsIn: "easeInOut",
   duotoneIn: "linear", // sine-shaped already, doesn't want another curve stacked on top
   // Linear — the burst pattern itself (see glitchNoise in PageScene.tsx) is
@@ -558,10 +570,16 @@ const DEFAULT_ENTRANCE_EASING: Partial<Record<EntranceName, EasingName>> = {
   // Linear, same reasoning as typewriter — a decrypt reveal ticking at a
   // constant rate reads right; an eased curve would bunch the resolves up.
   scrambleIn: "linear",
-  cubeIn: "linear", // the tumble shape is already baked into the multi-stop curve itself
   morphIn: "easeOutCubic",
   burstIn: "easeOutCubic",
   strokeIn: "easeInOut",
+  // Linear for the whole glitch family, same reasoning as glitchIn above —
+  // the corruption pattern IS the shape; an eased envelope on top only
+  // muddies when it is allowed to fire.
+  rgbSplitIn: "linear",
+  staticIn: "linear",
+  signalDropIn: "linear", // the stutter pattern is the shape
+  crtOnIn: "linear",      // the snap-open curve is already multi-stop
   letterPopIn: "linear", // each letter's own spring provides the actual character, this just paces the stagger
 };
 
@@ -604,17 +622,19 @@ const DEFAULT_EXIT_EASING: Partial<Record<ExitName, EasingName>> = {
   diamondHide: "easeInOut",
   lightspeedOut: "easeInCubic",
   squashStretchOut: "linear",
-  glowPulseOut: "easeIn",
   vhsOut: "easeInOut",
   duotoneOut: "linear",
   glitchOut: "linear",
   dataMoshOut: "linear",
   liquidOut: "easeInOut",
   scrambleOut: "linear",
-  cubeOut: "linear",
   morphOut: "easeInCubic",
   burstOut: "easeInCubic",
   strokeOut: "easeInOut",
+  rgbSplitOut: "linear",
+  staticOut: "linear",
+  signalDropOut: "linear",
+  crtOffOut: "linear",
 };
 
 export function resolvedExitEasing(name: ExitName, override: EasingName | undefined): EasingName {
@@ -659,6 +679,36 @@ export function exitProgress(
     extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: easingFn(easing),
   });
 }
+
+// Envelope for a texture overlay on an ENTRANCE: 0 -> full at `peak` -> 0
+// again by the time the layer has finished arriving.
+//
+// This exists because of a real bug worth naming: every overlay entrance
+// (glitchIn, dataMoshIn, liquidIn, vhsIn, morphIn, strokeIn) used to return
+// its intensity as a plain `p`, which is 1 at p === 1 — so the moment the
+// entrance "finished", the layer sat at maximum glitch / full warp /
+// permanent scanlines / a never-un-blobbing border-radius, forever, for the
+// entire rest of the page. The entrance visibly never ended.
+//
+// The distinction the plain `p` missed: a transform effect (slide, zoom,
+// flip) legitimately ENDS at its final value, because that value IS the
+// layer at rest. A texture overlay has no such resting value other than
+// zero — it's something that happens TO a layer while it arrives, not a
+// permanent restyle of it. duotoneIn was the one that already had this
+// right (Math.sin(p * Math.PI)); this generalizes that shape and lets the
+// peak sit earlier than the midpoint, which reads better for corruption
+// effects — worst at the start, resolving as the layer settles.
+function arrivalPulse(p: number, peak = 0.45): number {
+  if (p <= 0 || p >= 1) return 0;
+  return p < peak ? p / peak : (1 - p) / (1 - peak);
+}
+
+// How far into an entrance/exit shineIn/shineOut's highlight finishes its
+// sweep. Well short of 1 on purpose: a specular flick is a fast event
+// inside a slower move, not something paced to it. Past this the effect
+// returns no `shine` at all, so the overlay unmounts rather than sitting
+// there parked off-screen.
+const SHINE_SWEEP_END = 0.55;
 
 // p = spring progress 0..1 for this layer's entrance.
 export function entranceMotion(name: EntranceName, p: number): LayerMotion {
@@ -714,8 +764,16 @@ export function entranceMotion(name: EntranceName, p: number): LayerMotion {
       return { ...BASE, opacity: p, rotateY: (1 - p) * -110, scale: interpolate(p, [0, 1], [0.92, 1]), shadow: p };
     // A fade-in with a diagonal highlight sweeping across in sync — see
     // LayerMotion.shine, rendered as an overlay gradient in PageScene.
+    // The sweep runs FASTER than the entrance and is finished (overlay gone
+    // entirely, not merely parked off-screen) by SHINE_SWEEP_END. It used to
+    // be a plain `shine: p`, stretched across the whole arrival, and with a
+    // highlight band 90% as wide as the layer itself — which together read
+    // as "the layer is washed white for most of its entrance", not as a
+    // specular flick. See SHINE_BAND in MotionFx.tsx for the band width.
     case "shineIn":
-      return { ...BASE, opacity: p, shine: p };
+      return p >= SHINE_SWEEP_END
+        ? { ...BASE, opacity: p }
+        : { ...BASE, opacity: p, shine: p / SHINE_SWEEP_END };
     // Same clip-path mechanism as wipeLeftToRight, just stepped instead of
     // smooth — a handful of discrete jumps reads as "typed out" rather than
     // wiped. Never splits the actual text into characters (that would break
@@ -771,41 +829,72 @@ export function entranceMotion(name: EntranceName, p: number): LayerMotion {
         scaleY: interpolate(p, [0, 0.55, 0.62, 0.7, 0.78, 1], [1, 1, 0.68, 1.18, 0.94, 1]),
       };
     // A breathing glow that builds in with the fade — see LayerMotion.glow.
-    case "glowPulseIn":
-      return { ...BASE, opacity: p, glow: p };
     // Scanline + jitter overlay fading in alongside the layer — the jitter
     // texture itself is computed from the current frame in PageScene (this
     // function only ever sees progress, not frame, so it can't be the one
     // driving a deterministic per-frame jitter).
     case "vhsIn":
-      return { ...BASE, opacity: p, scanline: p };
+      return { ...BASE, opacity: p, scanline: arrivalPulse(p, 0.35) };
     // A hue/saturation flash that peaks mid-arrival and clears by the time
     // it's settled — a sine of progress, not a permanent recolor.
     case "duotoneIn":
       return { ...BASE, opacity: p, tint: Math.sin(p * Math.PI) };
     // Burst envelope ramps up with arrival — see LayerMotion.glitch and
     // GlitchOverlay in PageScene.tsx for the actual RGB-split rendering.
+    // All three peak early and are fully clear by arrival (see arrivalPulse)
+    // — corruption that resolves INTO the layer, rather than the layer
+    // arriving and then staying corrupted for the rest of the page.
     case "glitchIn":
-      return { ...BASE, opacity: p, glitch: p };
+      return { ...BASE, opacity: p, glitch: arrivalPulse(p, 0.3) };
     case "dataMoshIn":
-      return { ...BASE, opacity: p, glitchBlocks: p };
+      return { ...BASE, opacity: p, glitchBlocks: arrivalPulse(p, 0.3) };
     case "liquidIn":
-      return { ...BASE, opacity: p, liquid: p };
-    // Three quarter-turns with a scale dip baked in right at each 90°/180°
-    // crossing (edge-on read) — the multi-stop curve IS the choreography,
-    // same trick heartbeatIn/squashStretchIn use.
-    case "cubeIn":
-      return {
-        ...BASE, opacity: p,
-        rotateY: interpolate(p, [0, 1], [-270, 0]),
-        scale: interpolate(p, [0, 0.30, 0.34, 0.63, 0.67, 1], [1, 1, 0.2, 0.2, 1, 1]),
-      };
+      return { ...BASE, opacity: p, liquid: arrivalPulse(p, 0.4) };
     case "morphIn":
-      return { ...BASE, opacity: p, morph: p };
+      return { ...BASE, opacity: p, morph: arrivalPulse(p, 0.4) };
+    // `burst: p` is right here (unlike the overlays above): BurstOverlay
+    // deliberately only fires in the last 30% of the value's range, so the
+    // confetti releases AT arrival and its own particle opacity is already
+    // (1 - t), i.e. zero by p === 1. The only thing to fix was that the
+    // field stayed defined at rest, leaving ten zero-opacity particle divs
+    // mounted on the layer forever.
     case "burstIn":
-      return { ...BASE, opacity: p, burst: p };
+      return p >= 1 ? { ...BASE, opacity: p } : { ...BASE, opacity: p, burst: p };
+    // Traces itself on over the first two thirds, then the outline fades
+    // back out — an entrance announces arrival, it doesn't permanently add
+    // a white box around the layer (which is what a plain `stroke: p` left
+    // behind on every layer that used this).
     case "strokeIn":
-      return { ...BASE, opacity: p, stroke: p };
+      return { ...BASE, opacity: p, stroke: p < 0.66 ? p / 0.66 : (1 - p) / 0.34 };
+    // Steady channel split converging to zero. Deliberately NOT arrivalPulse
+    // — unlike glitchIn, this one's whole character is that it's present the
+    // entire way in and simply resolves, so `1 - p` (max at the start, gone
+    // at rest) is the correct envelope. It still ends at zero, which was the
+    // actual bug in the others.
+    case "rgbSplitIn":
+      return { ...BASE, opacity: p, chroma: 1 - p };
+    // Static dissolving off the top of the layer. Holds near-solid for the
+    // first third (the layer is still mostly hidden behind it) then clears.
+    case "staticIn":
+      return { ...BASE, opacity: p, staticNoise: interpolate(p, [0, 0.35, 1], [1, 0.85, 0]) };
+    // CRT power-on: a thin bright line stretched full width, which snaps
+    // open vertically and overshoots slightly before settling. scaleX leads
+    // scaleY on purpose — the width arrives first, exactly like a tube
+    // warming up.
+    case "crtOnIn":
+      return {
+        ...BASE,
+        opacity: interpolate(p, [0, 0.12, 1], [0, 1, 1]),
+        scaleX: interpolate(p, [0, 0.18, 0.4, 1], [0.2, 1.06, 1, 1]),
+        scaleY: interpolate(p, [0, 0.18, 0.45, 0.7, 1], [0.004, 0.02, 1.12, 0.96, 1]),
+      };
+    // Bad signal: three hard on/off stutters that get progressively longer
+    // until it locks. A step function of progress, not a fade — a smooth
+    // ramp would read as a plain fade, the point here is the hard cuts.
+    case "signalDropIn": {
+      const lit = p > 0.12 && p < 0.2 ? 0 : p > 0.34 && p < 0.4 ? 0 : p > 0.58 && p < 0.62 ? 0 : 1;
+      return { ...BASE, opacity: p < 0.06 ? 0 : lit * Math.min(1, 0.55 + p * 0.6) };
+    }
     // Same no-op shape as wordReveal/lineReveal/scrambleIn — the real work
     // (per-character spans, each with its own spring) happens entirely in
     // TextLayerView's isLetterPop branch, not here.
@@ -862,8 +951,12 @@ export function exitMotion(name: ExitName, q: number): LayerMotion {
     // Mirror of cardFlipIn: shadow lifts away as it turns and fades.
     case "cardFlipOut":
       return { ...BASE, opacity: 1 - q, rotateY: q * 110, scale: interpolate(q, [0, 1], [1, 0.92]), shadow: 1 - q };
+    // Mirror of shineIn — a quick flick as it leaves, not a slow wash over
+    // the whole exit.
     case "shineOut":
-      return { ...BASE, opacity: 1 - q, shine: q };
+      return q >= SHINE_SWEEP_END
+        ? { ...BASE, opacity: 1 - q }
+        : { ...BASE, opacity: 1 - q, shine: q / SHINE_SWEEP_END };
     case "typewriterOut": {
       const steps = 16;
       const stepped = Math.floor(q * steps) / steps;
@@ -898,10 +991,12 @@ export function exitMotion(name: ExitName, q: number): LayerMotion {
         scaleX: interpolate(q, [0, 0.15, 0.3, 1], [1, 1.25, 0.85, 0.4]),
         scaleY: interpolate(q, [0, 0.15, 0.3, 1], [1, 0.75, 1.15, 0.4]),
       };
-    case "glowPulseOut":
-      return { ...BASE, opacity: 1 - q, glow: 1 - q };
+    // `q`, not `1 - q`: the mirror of vhsIn's own bug. With `1 - q` the
+    // scanlines were at FULL strength at q === 0 — the exact frame the exit
+    // begins, with the layer still fully visible — so they popped on
+    // instantly instead of building as it left.
     case "vhsOut":
-      return { ...BASE, opacity: 1 - q, scanline: 1 - q };
+      return { ...BASE, opacity: 1 - q, scanline: q };
     case "duotoneOut":
       return { ...BASE, opacity: 1 - q, tint: Math.sin(q * Math.PI) };
     // Burst envelope intensifies right as it's fading — corruption syncs
@@ -912,18 +1007,34 @@ export function exitMotion(name: ExitName, q: number): LayerMotion {
       return { ...BASE, opacity: 1 - q, glitchBlocks: q };
     case "liquidOut":
       return { ...BASE, opacity: 1 - q, liquid: q };
-    case "cubeOut":
-      return {
-        ...BASE, opacity: 1 - q,
-        rotateY: interpolate(q, [0, 1], [0, 270]),
-        scale: interpolate(q, [0, 0.33, 0.37, 0.70, 0.74, 1], [1, 1, 0.2, 0.2, 1, 1]),
-      };
     case "morphOut":
       return { ...BASE, opacity: 1 - q, morph: q };
+    case "rgbSplitOut":
+      return { ...BASE, opacity: 1 - q, chroma: q };
+    case "staticOut":
+      return { ...BASE, opacity: 1 - q, staticNoise: interpolate(q, [0, 0.65, 1], [0, 0.85, 1]) };
+    // CRT power-off, the mirror of crtOnIn: collapses to a bright horizontal
+    // line, holds on it for a beat, then goes. Opacity stays at 1 until the
+    // very end so the line itself is actually visible rather than fading out
+    // underneath the collapse.
+    case "crtOffOut":
+      return {
+        ...BASE,
+        opacity: interpolate(q, [0, 0.85, 1], [1, 1, 0]),
+        scaleX: interpolate(q, [0, 0.45, 0.8, 1], [1, 1, 1, 0.2]),
+        scaleY: interpolate(q, [0, 0.45, 0.6, 1], [1, 0.02, 0.004, 0.004]),
+      };
+    case "signalDropOut": {
+      const lit = q > 0.2 && q < 0.28 ? 0 : q > 0.5 && q < 0.6 ? 0 : q > 0.78 ? 0 : 1;
+      return { ...BASE, opacity: lit * (1 - q * 0.4) };
+    }
     case "burstOut":
       return { ...BASE, opacity: 1 - q, burst: q };
+    // Also `q`, same reason as vhsOut above — and now consistent with
+    // strokeIn ending at zero, so there is no outline sitting on the layer
+    // at rest for this to un-draw from in the first place.
     case "strokeOut":
-      return { ...BASE, opacity: 1 - q, stroke: 1 - q };
+      return { ...BASE, opacity: 1 - q, stroke: q };
     default:
       return BASE;
   }

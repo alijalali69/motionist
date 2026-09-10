@@ -20,17 +20,78 @@ import { glitchNoise } from "./presets";
 // 0..1 sweep position) — an overlay on top of the content, not a filter on
 // it, so it works the same over text, photos, or video. `screen` blend
 // brightens what's underneath instead of just painting a flat white stripe.
+//
+// Band width, measured rather than eyeballed: the gradient stops are
+// percentages of a background sized to 300% of the layer, so a stop range
+// of N% covers 3N% of the LAYER. The original 35%->65% stops therefore
+// painted a highlight 90% as wide as the layer — which is not a specular
+// flick, it's the whole layer washing white and staying that way for most
+// of the sweep (the reported "the shine stays on the text"). 44%->56% is
+// 36% of the layer: a stripe you can actually see travel across it.
+const SHINE_BAND = { from: 44, mid: 50, to: 56 };
 export const ShineOverlay: React.FC<{ shine: number }> = ({ shine }) => (
   <div
     style={{
       position: "absolute", inset: 0, pointerEvents: "none",
-      backgroundImage: "linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.55) 50%, transparent 65%)",
+      backgroundImage: `linear-gradient(115deg, transparent ${SHINE_BAND.from}%, rgba(255,255,255,0.75) ${SHINE_BAND.mid}%, transparent ${SHINE_BAND.to}%)`,
       backgroundSize: "300% 300%",
       backgroundPositionX: `${-100 + shine * 300}%`,
       mixBlendMode: "screen",
     }}
   />
 );
+
+// rgbSplitIn/Out's steady chromatic aberration (LayerMotion.chroma, 0..1
+// split distance). Two ghost copies of the layer's own content, each
+// isolated to one color channel by the same shared filters GlitchOverlay
+// uses, pulled apart horizontally. The difference from GlitchOverlay is the
+// whole point of having both: this one renders EVERY frame with no random
+// gate and no clipped slices, so it reads as a lens/registration error that
+// resolves, where glitchIn reads as intermittent digital corruption.
+export const ChromaOverlay: React.FC<{ amount: number; children: React.ReactNode }> = ({ amount, children }) => {
+  if (!amount) return null;
+  const dx = amount * 14;
+  const ghost = (offset: number, filterId: string): React.CSSProperties => ({
+    position: "absolute", inset: 0, pointerEvents: "none", mixBlendMode: "screen",
+    transform: `translateX(${offset}px)`,
+    filter: `url(#glitch${filterId}Channel)`,
+  });
+  return (
+    <>
+      <div style={ghost(-dx, "Red")}>{children}</div>
+      <div style={ghost(dx, "Cyan")}>{children}</div>
+    </>
+  );
+};
+
+// staticIn/Out's TV static (LayerMotion.staticNoise, 0..1 opacity). Real
+// generated noise via feTurbulence, not a tiled image asset — and reseeded
+// from `frame` so it actually churns instead of sitting still. The seed has
+// to come through a prop like this (rather than a CSS animation) for the
+// same determinism reason as every other overlay in this file: Remotion's
+// export captures one frame at a time.
+export const StaticOverlay: React.FC<{ amount: number; frame: number }> = ({ amount, frame }) => {
+  if (!amount) return null;
+  return (
+    <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", opacity: amount, mixBlendMode: "screen" }}
+      aria-hidden="true">
+      {/* colorInterpolationFilters="sRGB" matters here: the default
+          linearRGB pushes the noise's midtones down, and a first attempt
+          that also painted the speckle a flat mid-grey came out almost
+          invisible once `screen` blended it over real content (screen
+          barely moves anything with a dark source). Compared three
+          formulations side by side on a real photo before settling on
+          this one: paint the speckle WHITE and take its alpha from the
+          noise's own luminance, which screen-blends to a bright, legible
+          static field. */}
+      <filter id={`tvStatic${frame % 8}`} x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves={2} seed={frame % 64} />
+        <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0.7 0.7 0.7 0 -0.55" />
+      </filter>
+      <rect width="100%" height="100%" filter={`url(#tvStatic${frame % 8})`} />
+    </svg>
+  );
+};
 
 
 // vhsIn/Out's scanline + jitter overlay (LayerMotion.scanline, 0..1
