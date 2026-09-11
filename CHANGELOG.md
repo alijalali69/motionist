@@ -203,4 +203,44 @@ detail — `3596a3e`, `d583cfd`, `feee445`, `21e81cb`, `b335914`, `38b0e24`):
 
 ---
 
+## v3.1.0 — 2026-09-11
+
+**Effects**
+- Effects gallery — a new "Effects" button on the Dashboard plays every
+  entrance, exit and ambient motion at once, side by side, each with its
+  name. Switch the sample between text, photo and shape, change easing and
+  duration, filter by name, click any tile for a bigger view. It runs the
+  exact same motion code as a real render, overlays included — not an
+  approximation.
+- Live effect picker — each In/Out effect dropdown is now a small chip
+  showing the chosen effect playing, which opens a grid of tiles that all
+  play at once. Takes less panel room than the dropdown it replaced.
+- Four new glitch-family effects, each with an in and an out: rgbSplit
+  (a clean chromatic aberration that converges), static (TV static that
+  dissolves away), crtOn / crtOff (collapses to a bright scanline, then
+  snaps open), signalDrop (a bad-signal stutter that locks on).
+- Removed glowPulse and cube (in and out).
+
+**Fixes**
+- glitchIn, dataMoshIn, liquidIn, vhsIn, morphIn and strokeIn never
+  finished: the layer arrived and then stayed glitched / warped /
+  scanlined / blobbed / outlined for the rest of the page. They now clear
+  completely by the time the layer lands. vhsOut and strokeOut had the
+  mirror-image bug, jumping to full strength the moment the exit began.
+- shineIn / shineOut: the highlight was 90% as wide as the layer and
+  lasted the whole entrance, so it read as the layer washing white. It's
+  now a narrow stripe that sweeps across and is gone before the layer
+  settles.
+- Overlay effects (glitch, static, liquid, shine and the rest) did nothing
+  at all on the global Logo / Title / BG slots. They render there now.
+
+**Also**
+- Guided tour — a spotlight-and-tooltip walkthrough of the real UI on
+  first launch, replayable from the Dashboard's "Tour" button or from the
+  "?" shortcuts sheet.
+- Box align (left / center / right, top / middle / bottom) for photo and
+  shape layers, not just text.
+
+---
+
 <!-- Add new entries above this line as versions ship. -->
