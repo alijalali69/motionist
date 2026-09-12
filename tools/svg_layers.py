@@ -19,6 +19,10 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 from svgelements import SVG as SVGEl
+try:
+    from svgelements import Image as SVGImage
+except ImportError:  # older svgelements — the image fallback below just won't engage
+    SVGImage = ()
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -102,6 +106,45 @@ def build_sub_svg(root, group, viewbox):
     return ET.tostring(svg, encoding="unicode")
 
 
+def image_bbox(e):
+    """Bbox for a placed <image>, derived from its own width/height attributes.
+
+    svgelements can only report a raster's real extent when it manages to LOAD
+    the file, which needs PIL and a resolvable href — never true for us, since
+    layers are measured from an in-memory SVG string and the image is usually a
+    data: URI anyway. So Image.bbox() comes back as a zero-size point at the
+    element's origin (measured: bbox=(20,20,20,20) for a 100x100 image), the
+    union below inherits that, and the whole layer exports cropped to a 1x1
+    speck. Every SVG layer that was a placed photo imported invisible.
+
+    The width/height attributes are right there on the element, so use those and
+    push the four corners through the element's own transform (which is where
+    Illustrator puts the placement and scale).
+    """
+    try:
+        w = float(e.width)
+        h = float(e.height)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    if not (w > 0 and h > 0):
+        return None
+    try:
+        x = float(getattr(e, "x", 0) or 0)
+        y = float(getattr(e, "y", 0) or 0)
+    except (TypeError, ValueError):
+        x = y = 0.0
+    corners = [(x, y), (x + w, y), (x, y + h), (x + w, y + h)]
+    m = getattr(e, "transform", None)
+    if m is not None:
+        try:
+            corners = [(m.a * cx + m.c * cy + m.e, m.b * cx + m.d * cy + m.f) for cx, cy in corners]
+        except AttributeError:
+            pass
+    xs = [c[0] for c in corners]
+    ys = [c[1] for c in corners]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
 def bbox_of_svg_string(s):
     """Union bbox (in root user units) of all drawable elements in an SVG string."""
     try:
@@ -115,6 +158,10 @@ def bbox_of_svg_string(s):
             bb = e.bbox()
         except Exception:
             bb = None
+        # A zero-size box means the element couldn't measure itself, not that
+        # it's actually empty — that's exactly what a placed <image> reports.
+        if (bb is None or bb[2] - bb[0] <= 0 or bb[3] - bb[1] <= 0) and SVGImage and isinstance(e, SVGImage):
+            bb = image_bbox(e) or bb
         if not bb:
             continue
         xmin = min(xmin, bb[0]); ymin = min(ymin, bb[1])

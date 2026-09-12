@@ -67,6 +67,12 @@ function measureTextBox(opts: {
   letterSpacing?: number;
   uppercase?: boolean;
   direction?: "rtl" | "ltr";
+  // When set, measure as WRAPPED text at this width instead of on one line.
+  // Fitting a long headline to its natural single-line size produced a
+  // 2194px-wide box on a 1080px canvas in testing — correct arithmetic,
+  // useless result. The caller clamps to the canvas width and re-measures
+  // through here to get the real wrapped height.
+  maxWidth?: number;
 }): { width: number; height: number } {
   if (!measureEl) {
     measureEl = document.createElement("div");
@@ -77,6 +83,15 @@ function measureTextBox(opts: {
     document.body.appendChild(measureEl);
   }
   const el = measureEl;
+  if (opts.maxWidth) {
+    el.style.whiteSpace = "pre-wrap";
+    el.style.display = "block";
+    el.style.width = `${opts.maxWidth}px`;
+  } else {
+    el.style.whiteSpace = "pre";
+    el.style.display = "inline-block";
+    el.style.width = "auto";
+  }
   el.style.fontFamily = opts.fontFamily || "Tahoma, Arial, sans-serif";
   el.style.fontSize = `${opts.fontSize ?? 48}px`;
   el.style.lineHeight = String(opts.lineHeight ?? 1.5);
@@ -1676,6 +1691,9 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     page?.layers.forEach((l, li) => {
       const isPhoto = l.role === "photo";
       if (l.assetKind !== "text" && l.assetKind !== "shape" && !isPhoto) return;
+      // No handle for a hidden layer: it isn't drawn, so a handle sitting
+      // over empty canvas would just be a way to drag the wrong thing.
+      if (l.hidden) return;
       // A shape carrying a photo mask is pannable exactly like a real photo
       // layer (see photoPanTargets below) — its move/resize handle needs to
       // yield to PhotoPanHandles on Alt-hold too. Checking only `isPhoto`
@@ -1696,12 +1714,6 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         // is held instead of fighting over one gesture.
         panPassthrough: isPannable && altHeld,
         pannable: isPannable,
-        // A text layer's box is always kept exactly the size of its own
-        // rendered text (see the measure-and-resize effect in
-        // ElementMotion) — the resize grip would just offer a drag that
-        // gets silently overwritten the moment anything about the text
-        // changes, so it's hidden instead of dangling there unresizable.
-        resizable: l.assetKind !== "text",
         selected: selectedLayerIndex === l.index || selectedLayerIndices.has(l.index),
         onSelect: (mods) => {
           const toggle = mods.shiftKey || mods.ctrlKey || mods.metaKey;
@@ -2994,6 +3006,16 @@ const BoxAlignRow: React.FC<{
 
 // RTL is just the LTR glyph mirrored — same bars/arrow, flipped, so the pair
 // reads as one flow-direction control rather than two unrelated icons.
+// Open eye / struck-through eye, for the per-layer visibility toggle.
+const EyeIcon: React.FC<{ off: boolean }> = ({ off }) => (
+  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+    <path d="M1.5 7.5 C3.3 4.4 5.3 3 7.5 3 S11.7 4.4 13.5 7.5 C11.7 10.6 9.7 12 7.5 12 S3.3 10.6 1.5 7.5 Z"
+      fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    <circle cx="7.5" cy="7.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    {off && <line x1="2.5" y1="12.5" x2="12.5" y2="2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />}
+  </svg>
+);
+
 const DirectionIcon: React.FC<{ dir: "ltr" | "rtl" }> = ({ dir }) => (
   <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true"
     style={dir === "rtl" ? { transform: "scaleX(-1)" } : undefined}>
@@ -3462,41 +3484,6 @@ const ElementMotion: React.FC<{
   const isPhotoSlot = layer.role === "photo";
   const isTextLayer = layer.assetKind === "text";
   const isShapeLayer = layer.assetKind === "shape";
-  // A text layer's box is ALWAYS exactly the size of its own rendered
-  // text — no manual resize (the canvas resize grip is hidden for text,
-  // see canvasHandles' `resizable` flag in the Editor). Re-measures
-  // whenever anything that actually affects the text's rendered SIZE
-  // changes; text-align/box-align/color/etc. don't change size so aren't
-  // in the dependency list.
-  React.useEffect(() => {
-    if (!isTextLayer) return;
-    let cancelled = false;
-    (async () => {
-      // A just-picked custom font may still be loading — measuring
-      // against its fallback would size the box wrong for a moment and
-      // never self-correct once the real font actually finishes (nothing
-      // else re-triggers this effect on its own). document.fonts is one
-      // browser-wide registry, already shared with whatever the live
-      // Player preview loaded via its own useLayerFont — no separate
-      // font-loading logic needed here, just wait on the same registry.
-      try { await document.fonts.ready; } catch { /* best-effort */ }
-      if (cancelled) return;
-      const { width, height } = measureTextBox({
-        text: layer.text,
-        fontFamily: layer.fontFamily,
-        fontSize: layer.fontSize,
-        lineHeight: layer.lineHeight,
-        letterSpacing: layer.letterSpacing,
-        uppercase: layer.uppercase,
-        direction: layer.direction,
-      });
-      if (width !== layer.width || height !== layer.height) {
-        onChange((l) => { l.width = width; l.height = height; });
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTextLayer, layer.text, layer.fontFamily, layer.fontSize, layer.lineHeight, layer.letterSpacing, layer.uppercase, layer.direction, layer.fontFile]);
   // Simple (4 number fields) vs Keyframes (one draggable row per FX) — a
   // pure display choice, not stored data; always starts on Simple, same as
   // this whole component remounting (key={l.index}) on every layer switch.
@@ -3564,6 +3551,13 @@ const ElementMotion: React.FC<{
           )}
         </span>
         <div className="row" style={{ gap: 4 }} onClick={(e) => e.stopPropagation()}>
+          <button className={"btn small icon" + (layer.hidden ? " active" : "")}
+            title={layer.hidden ? "Hidden — click to show (hidden layers are left out of the render too)" : "Visible — click to hide"}
+            aria-label={layer.hidden ? "Show this layer" : "Hide this layer"}
+            aria-pressed={!!layer.hidden}
+            onClick={() => onChange((l) => { l.hidden = l.hidden ? undefined : true; })}>
+            <EyeIcon off={!!layer.hidden} />
+          </button>
           <button className="btn small" title="Bring forward (on top of the layer above)"
             disabled={!canMoveUp} onClick={() => onMove?.(1)}>↑</button>
           <button className="btn small" title="Send backward (behind the layer below)"
@@ -3883,6 +3877,41 @@ const ElementMotion: React.FC<{
             </div>
           </div>
           <BoxAlignRow canvas={canvas} width={layer.width} height={layer.height} onChange={onChange} />
+          {/* A text box is freely resizable like any other layer, so it can
+              end up bigger than its text (which is also how you get text to
+              WRAP into a column — the renderer uses pre-wrap). This is the
+              way back: snap the box to the text's own natural size. */}
+          <div className="mini" style={{ marginTop: 8 }}>
+            <button className="btn small" style={{ width: "100%" }}
+              title="Shrink the box to fit the text's own natural size (a wrapped column will unwrap back to one line)"
+              onClick={async () => {
+                // A just-picked custom font may still be loading; measuring
+                // against the fallback would size the box wrong and never
+                // self-correct, since nothing re-measures on its own now.
+                try { await document.fonts.ready; } catch { /* best-effort */ }
+                const base = {
+                  text: layer.text,
+                  fontFamily: layer.fontFamily,
+                  fontSize: layer.fontSize,
+                  lineHeight: layer.lineHeight,
+                  letterSpacing: layer.letterSpacing,
+                  uppercase: layer.uppercase,
+                  direction: layer.direction,
+                };
+                let { width, height } = measureTextBox(base);
+                // Never hand back a box wider than the frame it lives in —
+                // a long line's natural width can be several times the
+                // canvas. Past that, wrap at the canvas width and take the
+                // real wrapped height.
+                if (width > canvas[0]) {
+                  width = canvas[0];
+                  height = measureTextBox({ ...base, maxWidth: width }).height;
+                }
+                onChange((l) => { l.width = width; l.height = height; });
+              }}>
+              Fit box to text
+            </button>
+          </div>
           <div className="mini" style={{ marginTop: 10 }}>
             <label title="A continuous loop for as long as this layer is visible — independent of its In/Out effect below">Motion (while visible)</label>
             <select value={layer.photoMotion ?? "none"}

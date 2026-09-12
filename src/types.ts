@@ -31,6 +31,11 @@ export type ContentLayer = {
   index: number;
   file: string;
   role: string;
+  // Hidden layers are skipped everywhere they'd be drawn — the editor preview
+  // AND the exported MP4, deliberately (Photoshop's rule: hidden is hidden,
+  // not "hidden while I work"). Absent = visible, so every project saved
+  // before this existed keeps rendering exactly as it did.
+  hidden?: boolean;
   name?: string; // real layer name from the source PSD/SVG (for display only)
   left: number;
   top: number;

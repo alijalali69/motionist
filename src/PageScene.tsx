@@ -419,6 +419,10 @@ export const PageScene: React.FC<{ page: Page; background?: string; bgStyle?: Bg
           layer's own center, which is what keeps depth=1 identical to the
           old shared-wrapper behavior. */}
       {page.layers.map((layer) => {
+        // Hidden layers are dropped from the tree entirely, not just made
+        // transparent — an invisible layer shouldn't still be decoding a
+        // video or running a glitch overlay every frame.
+        if (layer.hidden) return null;
         const depth = layer.parallaxDepth ?? 1;
         const scaled = depth === 1 ? a : {
           tx: a.tx * depth,
