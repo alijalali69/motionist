@@ -710,8 +710,15 @@ function arrivalPulse(p: number, peak = 0.45): number {
 // there parked off-screen.
 const SHINE_SWEEP_END = 0.55;
 
+// Per-layer context an effect may need beyond raw progress. Only typewriter
+// uses it today: typing follows READING order, so on a right-to-left layer
+// it has to reveal from the right. Everything else is direction-agnostic —
+// the named wipes (wipeLeftToRight and friends) stay literal on purpose,
+// since they say in their own names which way they go.
+export type MotionContext = { rtl?: boolean };
+
 // p = spring progress 0..1 for this layer's entrance.
-export function entranceMotion(name: EntranceName, p: number): LayerMotion {
+export function entranceMotion(name: EntranceName, p: number, ctx: MotionContext = {}): LayerMotion {
   switch (name) {
     case "none":
       return BASE;
@@ -782,7 +789,16 @@ export function entranceMotion(name: EntranceName, p: number): LayerMotion {
     case "typewriter": {
       const steps = 16;
       const stepped = Math.floor(p * steps) / steps;
-      return { ...BASE, clipPath: `inset(0 ${(1 - stepped) * 100}% 0 0)` };
+      // Eat the inset from whichever side the text STARTS on: right inset
+      // shrinking uncovers left-to-right, left inset shrinking uncovers
+      // right-to-left. Without this, Farsi/Arabic text typed itself out
+      // backwards — the reveal ran against the reading direction.
+      return {
+        ...BASE,
+        clipPath: ctx.rtl
+          ? `inset(0 0 0 ${(1 - stepped) * 100}%)`
+          : `inset(0 ${(1 - stepped) * 100}% 0 0)`,
+      };
     }
     // Diagonal slides — same tx/ty the orthogonal slides use, both axes at once.
     case "slideTopLeft":
@@ -906,7 +922,7 @@ export function entranceMotion(name: EntranceName, p: number): LayerMotion {
 }
 
 // q = exit progress 0..1 (0 = fully in / at rest, 1 = fully gone).
-export function exitMotion(name: ExitName, q: number): LayerMotion {
+export function exitMotion(name: ExitName, q: number, ctx: MotionContext = {}): LayerMotion {
   switch (name) {
     case "none":
       return BASE;
@@ -960,7 +976,13 @@ export function exitMotion(name: ExitName, q: number): LayerMotion {
     case "typewriterOut": {
       const steps = 16;
       const stepped = Math.floor(q * steps) / steps;
-      return { ...BASE, clipPath: `inset(0 0 0 ${stepped * 100}%)` };
+      // Mirrors typewriter above: un-types from the same side it typed from.
+      return {
+        ...BASE,
+        clipPath: ctx.rtl
+          ? `inset(0 ${stepped * 100}% 0 0)`
+          : `inset(0 0 0 ${stepped * 100}%)`,
+      };
     }
     case "slideOutTopLeft":
       return { ...BASE, opacity: 1 - q, tx: -q * 90, ty: -q * 90 };

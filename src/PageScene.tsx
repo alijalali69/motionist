@@ -50,8 +50,12 @@ function combinedEntranceMotion(layer: ContentLayer, frame: number, fps: number)
   ] as [EntranceName | undefined, EasingName | undefined, number, number][])
     .filter((s): s is [EntranceName, EasingName | undefined, number, number] => !!s[0] && s[0] !== "none");
   if (slots.length === 0) return entranceMotion("none", 1);
+  // Reading direction only means something for TEXT. A photo or shape has
+  // no reading order, so it keeps the literal left-to-right behaviour it
+  // always had rather than inheriting the Farsi-first default.
+  const ctx = { rtl: layer.assetKind === "text" && (layer.direction ?? "rtl") === "rtl" };
   const motions = slots.map(([name, ease, delay, dur]) =>
-    entranceMotion(name, entranceProgress(name, ease, frame, fps, delay, dur))
+    entranceMotion(name, entranceProgress(name, ease, frame, fps, delay, dur), ctx)
   );
   return combineMotions(motions);
 }
@@ -84,8 +88,9 @@ function combinedExitMotion(layer: ContentLayer, frame: number, pageDuration: nu
   ] as [ExitName | undefined, EasingName | undefined, number, number][])
     .filter((s): s is [ExitName, EasingName | undefined, number, number] => !!s[0] && s[0] !== "none");
   if (slots.length === 0) return entranceMotion("none", 1);
+  const ctx = { rtl: layer.assetKind === "text" && (layer.direction ?? "rtl") === "rtl" };
   const motions = slots.map(([name, ease, outStart, outDuration]) =>
-    exitMotion(name, exitProgress(name, ease, frame, outStart, outDuration))
+    exitMotion(name, exitProgress(name, ease, frame, outStart, outDuration), ctx)
   );
   return combineMotions(motions);
 }

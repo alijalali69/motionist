@@ -269,4 +269,16 @@ detail — `3596a3e`, `d583cfd`, `feee445`, `21e81cb`, `b335914`, `38b0e24`):
 
 ---
 
+## v3.1.2 — 2026-09-12
+
+**Fixes**
+- The typewriter effect typed backwards on Farsi/Arabic text. It always
+  revealed left-to-right regardless of the layer's direction, so on an
+  RTL layer it ran against the reading order. It now types from the side
+  the text starts on. The named wipes (wipeLeftToRight and friends) are
+  unchanged on purpose — they say which way they go. Photo and shape
+  layers keep left-to-right; they have no reading direction to follow.
+
+---
+
 <!-- Add new entries above this line as versions ship. -->
