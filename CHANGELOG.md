@@ -243,4 +243,30 @@ detail — `3596a3e`, `d583cfd`, `feee445`, `21e81cb`, `b335914`, `38b0e24`):
 
 ---
 
+## v3.1.1 — 2026-09-12
+
+**Fixes**
+- Text boxes are resizable again. v3.1.0 locked a text layer's box to its
+  own rendered text, which also made wrapping impossible. The resize grip
+  is back, editing the text no longer overwrites the size you set, and a
+  new "Fit box to text" button in the Content panel snaps the box back to
+  the text whenever you want it snug. Fitting clamps to the canvas width
+  and wraps rather than producing a box wider than the frame.
+  Side effect worth knowing: narrowing a text box now wraps the text into
+  a column, which wasn't possible before.
+- SVG import: a placed image inside an Illustrator layer imported as a
+  1x1 speck. The importer trusted svgelements' bbox for `<image>`
+  elements, which is a zero-size point whenever the raster can't be
+  loaded — always, in our case. Now derived from the element's own
+  width/height and transform.
+  Note: images must be EMBEDDED in the SVG, not linked. A linked image is
+  just a filename and cannot render anywhere. In Illustrator: Window →
+  Links → panel menu → Embed Image(s).
+
+**Added**
+- Hide/show per layer — an eye toggle in each layer's header row. Hidden
+  layers are left out of the exported video too, not just the editor.
+
+---
+
 <!-- Add new entries above this line as versions ship. -->
