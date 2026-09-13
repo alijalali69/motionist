@@ -1808,8 +1808,8 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
             onBack();
           }}
           title="Back to Dashboard">
-          <img src="/brand/motionist-icon.svg" alt="" className="topbar-icon" />
-          <b>Motionist</b>
+          <img src="/brand/kadr-icon.svg" alt="" className="topbar-icon" />
+          <b>Kadr</b>
         </button>
         <div className="topbar-divider" />
         <div className="topbar-proj">

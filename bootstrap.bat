@@ -4,10 +4,10 @@ rem have git or even Node.js. Clones the repo into %USERPROFILE%\motionist
 rem itself, so this copy (wherever you downloaded it) can be thrown away
 rem afterward.
 setlocal enabledelayedexpansion
-title Motionist setup
+title Kadr setup
 
 echo ================================================
-echo   Motionist setup
+echo   Kadr setup
 echo   This installs everything needed and starts
 echo   the app. Safe to double-click again later.
 echo ================================================
@@ -52,7 +52,7 @@ python -m pip install --upgrade pip
 python -m pip install psd-tools svgelements aggdraw
 
 echo.
-echo [6/6] Getting Motionist...
+echo [6/6] Getting Kadr...
 where git >nul 2>nul
 if errorlevel 1 (
   echo Git isn't on PATH in this window yet.
@@ -91,7 +91,7 @@ call npm install
 
 echo.
 echo ================================================
-echo   Done. Starting Motionist...
+echo   Done. Starting Kadr...
 echo ================================================
 call start.bat
 exit /b 0

@@ -645,8 +645,7 @@ a.dl { color: var(--accent2); }
   margin-bottom: 40px;
 }
 .dash-header-actions { justify-self: end; }
-.brand-lockup { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
-.brand-icon { height: 30px; width: auto; display: block; }
+.brand-lockup { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .dash-title { font-size: 26px; margin: 0; letter-spacing: 0.2px; }
 .dash-sub { color: var(--muted); font-size: 14px; margin: 0; }
 .dash-header .btn { width: auto; padding: 10px 18px; font-size: 14px; }
@@ -826,6 +825,39 @@ input.dash-search { width: 280px; flex: none; }
   border-radius: 14px;
   padding: 22px;
   box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+/* --- Brand: the کا · د · ر wordmark (Brand.tsx) --------------------------- */
+/* Bundled rather than fetched: the wordmark has to render in its real face
+   on a machine with no internet, and on one where Google Fonts is blocked. */
+@font-face {
+  font-family: "Kadr Vazirmatn";
+  src: url("/brand/fonts/Vazirmatn-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: block;
+}
+.kadr-wm {
+  --cell: 40px;
+  display: inline-flex; direction: rtl; flex: none; vertical-align: middle;
+  gap: calc(var(--cell) * 0.12);
+  /* box-shadow draws the echo trail outside the layout box; this keeps
+     whatever sits to the right from overlapping it. */
+  padding-right: calc(var(--cell) * 0.26);
+}
+.kadr-cell {
+  width: var(--cell); height: var(--cell);
+  display: flex; align-items: center; justify-content: center;
+  border: max(1.5px, calc(var(--cell) * 0.05)) solid var(--accent);
+  border-radius: calc(var(--cell) * 0.19);
+  font-family: "Kadr Vazirmatn", "Segoe UI", Tahoma, sans-serif;
+  font-weight: 700; font-size: calc(var(--cell) * 0.52); line-height: 1;
+  color: var(--text);
+}
+.kadr-cell.lit {
+  background: var(--accent); color: #06121d;
+  box-shadow:
+    calc(var(--cell) * 0.155) 0 0 calc(var(--cell) * -0.035) rgba(62, 166, 255, 0.42),
+    calc(var(--cell) * 0.31) 0 0 calc(var(--cell) * -0.07) rgba(62, 166, 255, 0.18);
 }
 
 /* --- Topbar — brand/back, project name + autosave, undo/redo, Render --- */

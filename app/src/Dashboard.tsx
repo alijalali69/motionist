@@ -9,6 +9,7 @@ import {
 import { NumField } from "./NumField";
 import { useTour } from "./Tour";
 import { EffectsGallery } from "./EffectsGallery";
+import { KadrWordmark } from "./Brand";
 
 const FONT_STYLES = [
   "Regular", "Bold", "Italic", "Bold Italic",
@@ -400,7 +401,7 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
   };
 
   // Import — the other half of Export (see exportProjectUrl on each card's
-  // hover pill): reads the picked .motionist.json back off disk client-
+  // hover pill): reads the picked .kadr.json back off disk client-
   // side, the server does the real work (physically writing its assets
   // into a brand-new project id). Same "stays on the Dashboard, doesn't
   // open it" spirit as duplicate above.
@@ -452,10 +453,10 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
       <div className="dash-header" data-tour="dash-header">
         <div>
           <div className="brand-lockup">
-            <img src="/brand/motionist-icon.svg" alt="" className="brand-icon" />
-            <h1 className="dash-title">Motionist</h1>
+            <KadrWordmark size={34} />
+            <h1 className="dash-title">Kadr</h1>
           </div>
-          <p className="dash-sub">Motion with freedom &middot; your reel projects</p>
+          <p className="dash-sub">Your reel projects</p>
         </div>
         {projects && projects.length > 0 ? (
           <input type="text" value={search} placeholder="Search projects…"
@@ -463,10 +464,10 @@ export const Dashboard: React.FC<{ onOpen: (id: string) => void }> = ({ onOpen }
             onChange={(e) => setSearch(e.target.value)} />
         ) : <div />}
         <div className="row dash-header-actions" style={{ gap: 8 }}>
-          <input ref={importFileRef} className="hidden-file" type="file" accept=".json,.motionist.json"
+          <input ref={importFileRef} className="hidden-file" type="file" accept=".json,.kadr.json,.motionist.json"
             onChange={(e) => e.target.files?.[0] && onImportFile(e.target.files[0])} />
           <button className="btn" disabled={importing} onClick={() => importFileRef.current?.click()}
-            title="Import a project exported from this or another Motionist install">
+            title="Import a project exported from this or another Kadr (or Motionist) install">
             {importing ? "Importing…" : "📥 Import"}
           </button>
           <button className="btn" onClick={() => setManagingFonts(true)}>🔤 Fonts</button>

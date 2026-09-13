@@ -25,7 +25,7 @@ const STEPS: Step[] = [
   {
     id: "welcome",
     selector: '[data-tour="dash-header"]',
-    title: "Welcome to Motionist",
+    title: "Welcome to Kadr",
     body: "This turns a layered design — a Photoshop poster, an Illustrator SVG, a plain photo, or nothing at all — into an animated vertical reel. Quick tour of how it works.",
   },
   {

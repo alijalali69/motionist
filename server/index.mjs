@@ -1,4 +1,4 @@
-// Motionist local server. Bridges the browser app to the Python PSD extractor,
+// Kadr local server. Bridges the browser app to the Python PSD extractor,
 // the filesystem (per-project storage, uploads), and the Remotion renderer.
 import express from "express";
 import cors from "cors";
@@ -645,7 +645,7 @@ app.get("/api/projects/:id/export", (req, res) => {
     }
     const bundle = { motionistExport: 1, project, files };
     const safeName = (project.name || project.projectId).replace(/[^a-z0-9]/gi, "_");
-    res.setHeader("Content-Disposition", `attachment; filename="${safeName}.motionist.json"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}.kadr.json"`);
     res.setHeader("Content-Type", "application/json");
     res.send(JSON.stringify(bundle));
   } catch (e) {
@@ -657,7 +657,7 @@ app.post("/api/projects/import", (req, res) => {
   try {
     const bundle = req.body;
     if (!bundle || bundle.motionistExport !== 1 || !bundle.project) {
-      return res.status(400).json({ error: "not a valid Motionist export file" });
+      return res.status(400).json({ error: "not a valid Kadr export file" });
     }
     const oldId = bundle.project.projectId;
     const newId = newProjectId();
@@ -1237,4 +1237,4 @@ function warnAboutRunningJobs() {
 process.on("SIGINT", () => { warnAboutRunningJobs(); process.exit(0); });
 process.on("SIGTERM", () => { warnAboutRunningJobs(); process.exit(0); });
 
-app.listen(PORT, () => console.log(`Motionist server on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`Kadr server on http://localhost:${PORT}`));

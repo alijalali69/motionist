@@ -1,4 +1,4 @@
-# Motionist
+# Kadr
 
 Turn a layered design — a Photoshop poster, an Illustrator SVG, a plain
 photo, or just a blank page — into an animated vertical (1080×1920) Instagram
@@ -7,13 +7,13 @@ Reel / YouTube Short. Runs entirely on your own machine, built on
 
 ## What it is
 
-Motionist is a local dashboard app for a studio or freelancer who already
+Kadr (کادر, Persian for "frame" — formerly Motionist) is a local dashboard app for a studio or freelancer who already
 designs in Photoshop/Illustrator and wants those designs turned into short
 animated videos without hand-keyframing every layer in After Effects, and
 without uploading a client's unreleased artwork to somebody else's cloud
 template tool.
 
-You bring the design. Motionist splits it into layers, animates each one
+You bring the design. Kadr splits it into layers, animates each one
 with a motion preset (fade/slide/glitch/liquid/burst and 60+ others, in and
 out), strings pages into a reel with transitions between them, and renders
 straight to MP4 — previewed live the whole time so nothing is a guess.
@@ -52,7 +52,7 @@ reveal-by-word, and direction-per-layer aren't an afterthought).
 Download **[bootstrap.bat](https://raw.githubusercontent.com/alijalali69/motionist/main/bootstrap.bat)**
 (right-click the link → *Save link as…*) and double-click it. It installs
 Node.js, Git, Python, and ffmpeg (via `winget`), installs the Python
-packages Motionist needs, clones this repo to `%USERPROFILE%\motionist`,
+packages Kadr needs, clones this repo to `%USERPROFILE%\motionist`,
 runs `npm install`, and starts the app at `http://localhost:5173`. Safe to
 re-run any time — it'll update instead of re-cloning.
 
@@ -93,7 +93,7 @@ python3 -m pip install psd-tools svgelements aggdraw
   in one window; closing the window stops both.
 - **`stop.bat`** — kills whatever's on ports 3001/5173, if one ever gets
   stuck.
-- **`setup_autostart.bat`** (run once) — starts Motionist automatically
+- **`setup_autostart.bat`** (run once) — starts Kadr automatically
   every time you log into Windows, silently, no window.
 
 ## Inside DaVinci Resolve
@@ -107,15 +107,15 @@ panels under *Workspace → Workflow Integrations*:
   a timeline.
 - **Motionist Timeline Text** — pick a clip on your current timeline
   (reads existing text straight out of a Fusion Text+/Text3D node if it has
-  one), animate it with a Motionist preset, and the rendered transparent
+  one), animate it with a Kadr preset, and the rendered transparent
   overlay is dropped back onto the timeline at the exact same frame — no
   export/import round trip.
 
 Details: [resolve-plugin/README.md](resolve-plugin/README.md).
 
-## Motionist vs. the usual options
+## Kadr vs. the usual options
 
-| | **Motionist** | Canva / CapCut / Kapwing / VEED | After Effects |
+| | **Kadr** | Canva / CapCut / Kapwing / VEED | After Effects |
 |---|---|---|---|
 | Animates | **your own** PSD/SVG layers | a template you drop content into | your own layers |
 | Where it runs | your machine | their cloud | your machine |
@@ -127,7 +127,7 @@ Details: [resolve-plugin/README.md](resolve-plugin/README.md).
 | Learning curve | pick presets, no keyframing required (real keyframes optional) | lowest | steep |
 
 The honest trade-off: a template tool is faster for a single generic post,
-and After Effects goes further if you're willing to hand-keyframe. Motionist
+and After Effects goes further if you're willing to hand-keyframe. Kadr
 sits in between — real animation of your *own* design files, at
 template-tool speed, without sending anything to a server.
 

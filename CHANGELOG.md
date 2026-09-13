@@ -281,4 +281,21 @@ detail — `3596a3e`, `d583cfd`, `feee445`, `21e81cb`, `b335914`, `38b0e24`):
 
 ---
 
+## v3.3.0 — 2026-09-13
+
+**Motionist is now Kadr** (کادر — Persian for "frame")
+- New name, new mark. کادر splits into the three clusters Persian itself
+  breaks it into — کا · د · ر — and each gets its own frame, the first one
+  lit with the echo trail of a frame that just moved. Three frames for the
+  three things you set on a layer (Content · Effects · Keys); what comes
+  out is motion. New browser-tab icon to match.
+- Project exports now save as `.kadr.json`. Older `.motionist.json`
+  files still import.
+- Nothing moves for a cloned copy: projects stay in this folder as before,
+  and the GitHub repo keeps its `motionist` name, so existing clones keep
+  pulling as usual. The DaVinci Resolve panels keep their Motionist names
+  for now.
+
+---
+
 <!-- Add new entries above this line as versions ship. -->

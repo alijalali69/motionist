@@ -1,7 +1,7 @@
 {
   "name": "motionist",
-  "version": "3.1.2",
-  "description": "Turn a layered PSD/SVG design into an animated vertical reel, locally (Remotion).",
+  "version": "3.3.0",
+  "description": "Kadr — turn a layered PSD/SVG design into an animated vertical reel, locally (Remotion).",
   "license": "UNLICENSED",
   "repository": {
     "type": "git",

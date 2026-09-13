@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<title>Kadr</title>
+<!-- The playhead mark at app-icon size: one lit frame with the echo trail
+     it leaves behind. The frame travels right-to-left, in Persian reading
+     order, so the trail sits to its right. No letterform on purpose —
+     sharp renders this file to build/icon.ico with system fonts only, and
+     a slightly-wrong Persian letter in a taskbar is worse than none. The
+     کا · د · ر lettering lives in the wordmark (app/src/Brand.tsx), where
+     the real Vazirmatn is loaded. -->
+<defs>
+  <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#1e2530"/>
+    <stop offset="1" stop-color="#0e1116"/>
+  </linearGradient>
+</defs>
+<rect x="4" y="4" width="248" height="248" rx="56" fill="url(#tile)" stroke="#39414c" stroke-width="4"/>
+<rect x="130" y="88" width="80" height="80" rx="18" fill="#3ea6ff" fill-opacity="0.18"/>
+<rect x="96" y="82" width="92" height="92" rx="20" fill="#3ea6ff" fill-opacity="0.42"/>
+<rect x="62" y="76" width="104" height="104" rx="22" fill="#3ea6ff"/>
+</svg>
