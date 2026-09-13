@@ -14,7 +14,7 @@ import { Template } from "./Template";
 import { Loader } from "./Loader";
 import { AssetSlot } from "./Logo";
 import { Subtitles } from "./Subtitles";
-import { pageStarts, type Project, type Caption } from "./types";
+import { pageStarts, transitionFrames, type Project, type Caption } from "./types";
 
 function presentationFor(type: string, w: number, h: number) {
   if (type === "none") return none();
@@ -113,7 +113,7 @@ export const Reel: React.FC<{ project: Project; debugZones?: boolean; transparen
               key={`trans-${page.id}`}
               presentation={presentationFor(page.transition.type, project.width, project.height)}
               timing={linearTiming({
-                durationInFrames: page.transition.durationInFrames,
+                durationInFrames: transitionFrames(project, i),
               })}
             />,
           ];

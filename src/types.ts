@@ -282,12 +282,38 @@ export type Project = {
   pages: Page[];
 };
 
+// How long the transition from page i into page i+1 actually plays, in
+// frames. Everything that needs a transition's length goes through here —
+// the Reel's own TransitionSeries, reelDuration and pageStarts — so the
+// player, the timeline and the export can never disagree.
+//
+// The stored length isn't trusted as-is. Every page ever created got a
+// 1-frame placeholder (0 crashed Remotion, and there was no control to
+// change it), which is why picking "fade" looked exactly like a cut. A
+// real transition still carrying that placeholder plays for
+// DEFAULT_TRANSITION_SEC instead, which fixes existing projects without
+// rewriting their files. A cut is 1 frame whatever is stored, so switching
+// fade → cut → fade keeps the length that was chosen.
+//
+// Clamped to both neighbouring pages: Remotion throws if a transition is
+// longer than the sequence on either side of it — which a page shortened
+// after its transition was set would otherwise do.
+export const DEFAULT_TRANSITION_SEC = 0.5;
+
+export function transitionFrames(project: Project, i: number): number {
+  const page = project.pages[i];
+  const next = project.pages[i + 1];
+  if (!page || !next) return 0; // the last page has nothing to transition into
+  if (page.transition.type === "none") return 1;
+  const stored = page.transition.durationInFrames;
+  const wanted = stored > 1 ? stored : Math.round(DEFAULT_TRANSITION_SEC * project.fps);
+  return Math.max(1, Math.min(wanted, page.durationInFrames, next.durationInFrames));
+}
+
 // Total = sum(page durations) - sum(transition overlaps).
 export function reelDuration(project: Project): number {
   const totalPages = project.pages.reduce((s, p) => s + p.durationInFrames, 0);
-  const totalTrans = project.pages
-    .slice(0, -1)
-    .reduce((s, p) => s + p.transition.durationInFrames, 0);
+  const totalTrans = project.pages.reduce((s, _p, i) => s + transitionFrames(project, i), 0);
   return Math.max(1, totalPages - totalTrans);
 }
 
@@ -298,8 +324,7 @@ export function pageStarts(project: Project): number[] {
   let acc = 0;
   project.pages.forEach((p, i) => {
     starts.push(acc);
-    const trans = i < project.pages.length - 1 ? p.transition.durationInFrames : 0;
-    acc += p.durationInFrames - trans;
+    acc += p.durationInFrames - transitionFrames(project, i);
   });
   return starts;
 }

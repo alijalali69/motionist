@@ -298,4 +298,29 @@ detail — `3596a3e`, `d583cfd`, `feee445`, `21e81cb`, `b335914`, `38b0e24`):
 
 ---
 
+## v3.3.1 — 2026-09-13
+
+**Fixes**
+- Page transitions finally play. Every page was created with a 1-frame
+  transition as a placeholder (0 crashed the player) and there was no
+  control to change it, so choosing "fade" gave a fade 1/30 of a second
+  long — indistinguishable from a cut. A transition still carrying that
+  placeholder now plays for 0.5 s, which fixes existing projects without
+  touching their files, and a new "Transition length" field sets it.
+  Reels that use transitions get slightly shorter: the two pages now
+  genuinely overlap while one hands over to the next.
+- Duplicating a page and then editing the copy moved only its box, not its
+  text. The copy was selected but the preview stayed on the original page,
+  so the box being dragged belonged to one page and the text on screen to
+  another. The preview now follows the selection whenever pages are
+  duplicated, deleted, reordered or added from a template.
+- A duplicate made right after an edit copied the page from before that
+  edit, because the copy is built from the saved file. Duplicating now
+  saves first.
+- Jumping to a page landed on the frame it shares with the page before, so
+  that page's text showed up behind the one being edited. It now lands on
+  the first frame that belongs to the page alone.
+
+---
+
 <!-- Add new entries above this line as versions ship. -->

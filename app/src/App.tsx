@@ -1,7 +1,7 @@
 import React from "react";
 import { Player, Thumbnail, type PlayerRef } from "@remotion/player";
 import { Reel } from "../../src/Reel";
-import { reelDuration, pageStarts, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
+import { reelDuration, pageStarts, transitionFrames, type Project, type LogoConfig, type Box, type LoaderStyle } from "../../src/types";
 import { TEXT_ENTRANCE_NAMES, TEXT_EXIT_NAMES, LATIN_TEXT_ENTRANCE_NAMES, AMBIENT_NAMES, ENTRANCE_CATEGORIES, EXIT_CATEGORIES, EASING_NAMES, TRANSITIONS, BG_TEXTURE_NAMES, BG_COLOR_NAMES, BG_GRADE_NAMES, BG_MOTION_NAMES } from "../../src/presets";
 import type { BgStyle } from "../../src/types";
 import {
@@ -908,15 +908,43 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   const HISTORY_LIMIT = 50;
   const COALESCE_MS = 500;
 
-  // Click a page -> show its inspector AND jump the player to that page's start.
+  // The first frame that shows ONLY page i. pageStarts marks where page i
+  // begins, but that is also where the transition out of the page before it
+  // begins, and during a transition both pages draw at once. Even a plain
+  // cut overlaps for one frame, which put a second copy of the previous
+  // page's text right on top of whatever was being edited.
+  const pageViewFrame = (proj: Project, i: number) => {
+    const start = pageStarts(proj)[i] ?? 0;
+    const into = i > 0 ? transitionFrames(proj, i - 1) : 0;
+    const lastOwnFrame = start + Math.max(0, (proj.pages[i]?.durationInFrames ?? 1) - 1);
+    return Math.min(start + into, lastOwnFrame);
+  };
+
+  // Click a page -> show its inspector AND jump the player to that page.
   const selectPage = (i: number) => {
     setSel(i);
     if (project) {
-      const starts = pageStarts(project);
       playerRef.current?.pause();
-      playerRef.current?.seekTo(starts[i] ?? 0);
+      playerRef.current?.seekTo(pageViewFrame(project, i));
     }
   };
+
+  // Adding, removing or moving pages changes which page `sel` points at
+  // without anyone clicking a page card, so selectPage's seek above never
+  // runs. The player then keeps showing whatever page sat under its
+  // playhead while the inspector and canvas handles edit the selected one:
+  // duplicate a page, drag its text, and only the copy's box moves — over
+  // the original page's text, which of course stays put. Those handlers
+  // raise this flag instead, and the seek happens here, once the new page
+  // list has rendered — the Player has the new reel length by then, so a
+  // seek past the old length isn't clamped.
+  const syncPlayerToSelRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!syncPlayerToSelRef.current || !project) return;
+    syncPlayerToSelRef.current = false;
+    playerRef.current?.pause();
+    playerRef.current?.seekTo(pageViewFrame(project, sel));
+  }, [project, sel]);
 
   React.useEffect(() => {
     setProject(null);
@@ -1392,6 +1420,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
         p.pages.push(page);
       });
       setShowTemplatePicker(false);
+      syncPlayerToSelRef.current = true;
       setSel(project.pages.length); // the just-inserted page is now the last one
     } catch (e: any) {
       setTemplateErr(String(e.message || e));
@@ -1602,6 +1631,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
   // Move-to-any-position — the filmstrip's drag-to-reorder.
   const reorderPages = (from: number, to: number) => {
     if (from === to) return;
+    syncPlayerToSelRef.current = true;
     update((p) => {
       const [moved] = p.pages.splice(from, 1);
       p.pages.splice(to, 0, moved);
@@ -1619,6 +1649,7 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
 
   const delPage = (i: number) => {
     const page = project?.pages[i];
+    syncPlayerToSelRef.current = true;
     update((p) => { p.pages.splice(i, 1); });
     setSel((s) => Math.max(0, s - (i <= s ? 1 : 0)));
     if (page) {
@@ -1643,7 +1674,12 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
     setBusy("Duplicating page…");
     setErr(null);
     try {
+      // Save first. The server builds the copy from the project file on
+      // disk, and autosave only writes 0.9s after the last edit — so a quick
+      // duplicate otherwise copies the page as it was before those edits.
+      await saveProject(project);
       const copy = await duplicatePage(project.projectId, page.id);
+      syncPlayerToSelRef.current = true;
       update((p) => { p.pages.splice(i + 1, 0, copy); });
       setSel(i + 1);
     } catch (e: any) {
@@ -2386,6 +2422,10 @@ const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ projectId
               <PageInspector
                 key={project.pages[sel].id}
                 page={project.pages[sel]}
+                transitionLen={sel < project.pages.length - 1 ? transitionFrames(project, sel) : null}
+                transitionMax={sel < project.pages.length - 1
+                  ? Math.min(project.pages[sel].durationInFrames, project.pages[sel + 1].durationInFrames) : 0}
+                fps={project.fps}
                 canvas={[project.width, project.height]}
                 clip={motionClip}
                 onCopyClip={setMotionClip}
@@ -4186,7 +4226,14 @@ const PageInspector: React.FC<{
   // ElementMotion to expand (collapsing its siblings), same identity
   // newestLayerIndex already uses.
   selectedLayerIndex: number | null;
-}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, swatches, onAddSwatch, onRemoveSwatch, brandColors, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex, selectedLayerIndex }) => {
+  // This page's transition into the next as it will actually play
+  // (transitionFrames in types.ts), or null on the last page, which has
+  // nothing to transition into. transitionMax is the shorter of this page
+  // and the next — Remotion won't let a transition outlast either.
+  transitionLen: number | null;
+  transitionMax: number;
+  fps: number;
+}> = ({ page, canvas, clip, onCopyClip, onChange, onUploadPhoto, onUploadShapePhoto, onRemoveShapePhoto, onToggleTextTool, textToolArmed, onAddPhoto, onAddShape, onDeleteLayer, fonts, onSelectFont, swatches, onAddSwatch, onRemoveSwatch, brandColors, motionPresets, onSaveMotionPreset, onDeleteMotionPreset, newestLayerIndex, selectedLayerIndex, transitionLen, transitionMax, fps }) => {
   // Duration/bg/ambient/transition/subtitle vs. the layer list were one long
   // stacked scroll before — split so each is reachable without scrolling
   // past the other. Defaults to "Elements" — this whole inspector is only
@@ -4279,6 +4326,27 @@ const PageInspector: React.FC<{
           <select value={page.transition.type} onChange={(e) => onChange((pg) => { pg.transition.type = e.target.value as any; })}>
             {TRANSITIONS.map((t) => <option key={t.name} value={t.name}>{t.label}</option>)}
           </select>
+          {transitionLen == null ? (
+            page.transition.type !== "none" && (
+              <p className="hint">This is the last page, so there's nothing to transition into yet. It plays once another page follows.</p>
+            )
+          ) : page.transition.type !== "none" && (
+            <>
+              <label>Transition length (seconds)</label>
+              <NumField min={0.1} max={+(transitionMax / fps).toFixed(2)} step={0.1}
+                value={+(transitionLen / fps).toFixed(2)}
+                onChange={(e) => {
+                  const frames = Math.round(parseFloat(e.target.value) * fps);
+                  // Half-typed values ("", "0", "0.") are ignored rather than
+                  // clamped — clamping would rewrite the field mid-keystroke
+                  // and make "0.3" impossible to type. Stored as at least 2
+                  // frames, because 1 is the old placeholder that
+                  // transitionFrames reads as "never set".
+                  if (!Number.isFinite(frames) || frames < 2) return;
+                  onChange((pg) => { pg.transition.durationInFrames = Math.min(transitionMax, frames); });
+                }} />
+            </>
+          )}
         </>
       )}
 
